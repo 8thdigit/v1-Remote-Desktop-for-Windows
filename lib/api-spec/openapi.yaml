@@ -50,6 +50,34 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/DesklineInvite"}
+  /deskline/call:
+    post:
+      operationId: callDeskline
+      security: [{sessionToken: []}]
+      description: >-
+        An unattended host presses Initiate. Viewers that already know its
+        access code see the request for two minutes and accept it by joining.
+      requestBody:
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/DesklineCall"}
+      responses:
+        "204": {description: Request is visible to viewers that know the code}
+  /deskline/calls:
+    post:
+      operationId: listDesklineCalls
+      description: Which of the viewer's saved access codes have a pending Initiate request.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/DesklineCallQuery"}
+      responses:
+        "200":
+          description: Pending requests among the given codes
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DesklineCallList"}
   /deskline/join:
     post:
       operationId: joinDeskline
@@ -139,6 +167,30 @@ components:
       required: [key]
       properties:
         key: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
+    DesklineCall:
+      type: object
+      properties:
+        name: {type: string, maxLength: 64}
+    DesklineCallQuery:
+      type: object
+      required: [codes]
+      properties:
+        codes:
+          type: array
+          maxItems: 50
+          items: {type: string, pattern: '^[A-F0-9]{12}$'}
+    DesklineCallList:
+      type: object
+      required: [calls]
+      properties:
+        calls:
+          type: array
+          items:
+            type: object
+            required: [code, name]
+            properties:
+              code: {type: string}
+              name: {type: string}
     DesklineInvite:
       type: object
       required: [code, token]

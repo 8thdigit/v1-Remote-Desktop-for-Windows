@@ -75,6 +75,28 @@ export interface DesklineStandingKey {
   key: string;
 }
 
+export interface DesklineCall {
+  /** @maxLength 64 */
+  name?: string;
+}
+
+export interface DesklineCallQuery {
+  /**
+     * @maxItems 50
+     * @items.pattern ^[A-F0-9]{12}$
+     */
+  codes: string[];
+}
+
+export type DesklineCallListCallsItem = {
+  code: string;
+  name: string;
+};
+
+export interface DesklineCallList {
+  calls: DesklineCallListCallsItem[];
+}
+
 export interface DesklineInvite {
   code: string;
   token: string;

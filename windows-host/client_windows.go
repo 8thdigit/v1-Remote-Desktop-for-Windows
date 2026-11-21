@@ -71,7 +71,7 @@ func startHost() error {
 	path := unattendedPath()
 	if path != "" {
 		if config, ok, _ := loadUnattended(path); ok {
-			return runUnattended(path, config)
+			return runUnattended(path, config, false)
 		}
 	}
 	for _, arg := range os.Args[1:] {
@@ -85,7 +85,7 @@ func startHost() error {
 	if err != nil || switchTo == nil {
 		return err
 	}
-	return runUnattended(path, *switchTo)
+	return runUnattended(path, *switchTo, true)
 }
 
 // runClient runs attended support. It returns a config when the user turned

@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { useJoinDeskline } from '@workspace/api-client-react';
+import { listDesklineCalls, useJoinDeskline } from '@workspace/api-client-react';
 import { Link } from 'wouter';
-import { ArrowRight, Check, Copy, Download, Monitor, ShieldCheck, UserRound } from 'lucide-react';
+import { ArrowRight, BellRing, Check, Copy, Download, Monitor, ShieldCheck, Trash2, UserRound } from 'lucide-react';
 import LiveSession from '@/LiveSession';
 
 type Session = { token: string; verification: string; preapproved: boolean };
@@ -16,6 +16,27 @@ function groups(code: string) {
   return [code.slice(0, 4), code.slice(4, 8), code.slice(8, 12)];
 }
 
+const dashed = (code: string) => groups(code).join('-');
+
+// Unattended access codes this browser listens to for Initiate requests. They
+// are password-equivalent, so they are kept only on this browser.
+const SAVED_KEY = 'winss132r.savedPCs';
+
+function loadSaved(): string[] {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(SAVED_KEY) ?? '[]');
+    return Array.isArray(value) ? value.filter((c): c is string => typeof c === 'string' && HEX.test(c)).slice(0, 50) : [];
+  } catch {
+    return [];
+  }
+}
+
+function storeSaved(codes: string[]) {
+  try { localStorage.setItem(SAVED_KEY, JSON.stringify(codes)); } catch { /* private window */ }
+}
+
+type Call = { code: string; name: string };
+
 export default function Home() {
   const join = useJoinDeskline();
   const [session, setSession] = useState<Session | null>(null);
@@ -23,6 +44,9 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [saved, setSaved] = useState<string[]>(loadSaved);
+  const [newSaved, setNewSaved] = useState('');
+  const [calls, setCalls] = useState<Call[]>([]);
   const relay = typeof window !== 'undefined' && window.location.protocol === 'https:' ? window.location.origin : '';
   const installer = `${import.meta.env.BASE_URL}downloads/winss132r-Setup-x64.exe`;
 
@@ -31,6 +55,49 @@ export default function Home() {
       ? 'winss132r — Connected session'
       : 'winss132r — Attended remote support for Windows';
   }, [session]);
+
+  // Poll the relay for Initiate requests from the saved unattended PCs.
+  useEffect(() => {
+    if (session || !relay || saved.length === 0) { setCalls([]); return; }
+    let stopped = false;
+    let timer = 0;
+    async function check() {
+      if (document.visibilityState === 'visible') {
+        try {
+          const result = await listDesklineCalls({ codes: saved });
+          if (!stopped) setCalls(result.calls.filter((c) => saved.includes(c.code)));
+        } catch { /* keep the last result; try again */ }
+      }
+      if (!stopped) timer = window.setTimeout(check, 3000);
+    }
+    void check();
+    return () => { stopped = true; window.clearTimeout(timer); };
+  }, [session, relay, saved]);
+
+  function updateSaved(next: string[]) {
+    setSaved(next);
+    storeSaved(next);
+  }
+
+  async function connect(value: string) {
+    setError(null);
+    setNotice(null);
+    if (!relay) {
+      setError('Open winss132r at its HTTPS address before connecting.');
+      return;
+    }
+    try {
+      const viewer = await join.mutateAsync({ data: { code: value } });
+      setSession({ token: viewer.token, verification: viewer.verification, preapproved: viewer.preapproved });
+      setCode('');
+      setCalls([]);
+    } catch (reason) {
+      const status = typeof reason === 'object' && reason !== null && 'status' in reason ? reason.status : undefined;
+      setError(status === 429 ? 'The relay is busy. Wait a minute, then try again.' :
+        status === 404 || status === 400 ? 'That code was not accepted. Check it against the Windows PC or ask for a fresh code.' :
+          'Could not reach the relay. Check your connection and try again.');
+    }
+  }
 
   async function copyRelay() {
     try {
@@ -44,26 +111,11 @@ export default function Home() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    setError(null);
-    setNotice(null);
-    if (!relay) {
-      setError('Open winss132r at its HTTPS address before connecting.');
-      return;
-    }
     if (!HEX.test(code)) {
       setError('Codes are 12 characters, using only 0-9 and A-F.');
       return;
     }
-    try {
-      const viewer = await join.mutateAsync({ data: { code } });
-      setSession({ token: viewer.token, verification: viewer.verification, preapproved: viewer.preapproved });
-      setCode('');
-    } catch (reason) {
-      const status = typeof reason === 'object' && reason !== null && 'status' in reason ? reason.status : undefined;
-      setError(status === 429 ? 'The relay is busy. Wait a minute, then try again.' :
-        status === 404 || status === 400 ? 'That code was not accepted. Check it against the Windows PC or ask for a fresh code.' :
-          'Could not reach the relay. Check your connection and try again.');
-    }
+    await connect(code);
   }
 
   if (session) {
@@ -179,11 +231,72 @@ export default function Home() {
             </p>
           </form>
 
+          {calls.map((c) => (
+            <div key={c.code} role="alert" data-testid={`call-${c.code}`} className="dl-rise flex flex-wrap items-center gap-3 rounded-2xl border-2 border-primary bg-card p-5">
+              <BellRing className="h-5 w-5 shrink-0 text-primary" />
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold">{c.name || 'An unattended PC'} is asking you to connect</p>
+                <p className="font-mono text-xs text-muted-foreground">Access code {dashed(c.code)}</p>
+              </div>
+              <button
+                type="button"
+                data-testid={`button-accept-${c.code}`}
+                disabled={join.isPending}
+                onClick={() => void connect(c.code)}
+                className="rounded-lg bg-primary px-4 py-2.5 font-semibold text-primary-foreground disabled:opacity-40"
+              >
+                Accept
+              </button>
+            </div>
+          ))}
+
           {notice && (
             <div data-testid="text-notice" className="flex items-start gap-3 rounded-xl border border-foreground/15 bg-accent/60 px-4 py-3 text-sm">
               <Check className="mt-0.5 h-4 w-4 shrink-0" /> <span>{notice}</span>
             </div>
           )}
+
+          <div className="rounded-2xl border bg-card p-6 md:p-7">
+            <h2 className="text-xl font-bold">Unattended PCs on this browser</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Save a PC's unattended access code to get its <strong>Initiate</strong> requests here. Accept one to start the session. Codes are stored only in this browser; treat them like passwords.
+            </p>
+            <form
+              className="mt-4 flex items-stretch overflow-hidden rounded-lg border bg-muted"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!HEX.test(newSaved) || saved.includes(newSaved) || saved.length >= 50) return;
+                updateSaved([...saved, newSaved]);
+                setNewSaved('');
+              }}
+            >
+              <input
+                aria-label="Unattended access code to save"
+                data-testid="input-saved-code"
+                value={newSaved}
+                onChange={(e) => setNewSaved(formatCode(e.target.value))}
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="12-character access code"
+                className="min-w-0 flex-1 bg-transparent px-3 py-2.5 font-mono text-sm outline-none"
+              />
+              <button type="submit" data-testid="button-save-code" disabled={!HEX.test(newSaved)} className="border-l bg-card px-3 text-sm font-medium hover:bg-accent disabled:opacity-40">
+                Save
+              </button>
+            </form>
+            {saved.length > 0 && (
+              <ul className="mt-3 space-y-1.5">
+                {saved.map((c) => (
+                  <li key={c} className="flex items-center justify-between rounded-md bg-muted px-3 py-1.5 font-mono text-sm">
+                    <span>{dashed(c)}</span>
+                    <button type="button" aria-label={`Forget ${dashed(c)}`} onClick={() => updateSaved(saved.filter((x) => x !== c))} className="p-1 text-muted-foreground hover:text-foreground">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
 
           <div className="rounded-2xl border bg-card p-6 md:p-7">
             <h2 className="text-xl font-bold">I'm at the Windows PC</h2>

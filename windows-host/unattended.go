@@ -9,6 +9,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -106,4 +107,20 @@ func disableUnattended(path string) error {
 		return nil
 	}
 	return err
+}
+
+func twoDigits(n int) string {
+	if n < 0 {
+		n = 0
+	}
+	if n < 10 {
+		return "0" + strconv.Itoa(n)
+	}
+	return strconv.Itoa(n)
+}
+
+// connectStatus is the short live status shown in the notification-area
+// tooltip and menu, counting sessions since the app started: "Connect: +01".
+func connectStatus(connections int) string {
+	return "Connect: +" + twoDigits(connections)
 }

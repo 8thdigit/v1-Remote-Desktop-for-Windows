@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"strconv"
 	"syscall"
 	"unsafe"
 )
@@ -16,12 +15,16 @@ var (
 	regSetKeyValue    = advapi32.NewProc("RegSetKeyValueW")
 	regDeleteKeyValue = advapi32.NewProc("RegDeleteKeyValueW")
 	createMutex       = syscall.NewLazyDLL("kernel32.dll").NewProc("CreateMutexW")
-	findWindow        = user.NewProc("FindWindowW")
 	setForeground     = user.NewProc("SetForegroundWindow")
 	messageBox        = user.NewProc("MessageBoxW")
 	createIconInfo    = user.NewProc("CreateIconIndirect")
 	destroyIcon       = user.NewProc("DestroyIcon")
 	createBitmap      = gdi.NewProc("CreateBitmap")
+	createPopupMenu   = user.NewProc("CreatePopupMenu")
+	destroyMenu       = user.NewProc("DestroyMenu")
+	trackPopupMenu    = user.NewProc("TrackPopupMenu")
+	getCursorPos      = user.NewProc("GetCursorPos")
+	postMessage       = user.NewProc("PostMessageW")
 )
 
 const (
@@ -109,98 +112,123 @@ type notifyIconData struct {
 	balloonIcon         uintptr
 }
 
-// runUnattended shows the unattended status window, minimized on the
-// taskbar, plus a notification-area icon. Both turn green while a remote
-// session is live. It never opens an approval prompt or a pop-up during a
-// session. It returns when the user exits or turns unattended access off.
-func runUnattended(configPath string, config unattendedConfig) error {
+// runUnattended runs unattended access from a notification-area icon only:
+// there is no window and no taskbar button. The icon turns green and its
+// tooltip reads "Connect: +NN" while a remote session is live. Clicking the
+// icon opens a small menu with the status, the connection count, Initiate
+// (ask IT to connect), and the stop/exit/turn-off commands. It never opens an
+// approval prompt during a session. It returns when the user exits or turns
+// unattended access off. announce shows a one-time notification that the app
+// now lives in the notification area.
+func runUnattended(configPath string, config unattendedConfig, announce bool) error {
 	mutexName := textPtr(`Local\winss132r-unattended`)
 	if m, _, lastErr := createMutex.Call(0, 0, uintptr(unsafe.Pointer(mutexName))); m != 0 && lastErr == syscall.Errno(183) {
-		// Already running (for example, started at sign-in): show that window.
-		if existing, _, _ := findWindow.Call(uintptr(unsafe.Pointer(textPtr(unattendedClass))), 0); existing != 0 {
-			showWindow.Call(existing, 9)
-			setForeground.Call(existing)
-		}
+		// Already running (for example, started at sign-in).
+		messageBox.Call(0, uintptr(unsafe.Pointer(textPtr("winss132r unattended access is already running.\n\nClick its icon in the notification area to see the status or to initiate a session."))),
+			uintptr(unsafe.Pointer(textPtr("winss132r"))), 0x40) // MB_ICONINFORMATION
 		return nil
 	}
 	const (
-		stopButton    = 301
-		disableButton = 302
-		exitButton    = 303
+		initiateItem = 300
+		stopItem     = 301
+		disableItem  = 302
+		exitItem     = 303
 	)
 	code := formatCode(standingCode(config.Key))
-	small, big := metric(49), metric(11)
+	small := metric(49)
 	type look struct {
-		small, big uintptr
-		title, tip string
+		icon uintptr
+		tip  string
 	}
-	looks := map[string]look{
-		"ready":     {statusIcon(small, 0x2563eb), statusIcon(big, 0x2563eb), "winss132r — Unattended access: ready", "winss132r: ready, no one connected"},
-		"connected": {statusIcon(small, 0x16a34a), statusIcon(big, 0x16a34a), "winss132r — LIVE: IT is connected", "winss132r: IT is CONNECTED to this PC"},
-		"offline":   {statusIcon(small, 0xd97706), statusIcon(big, 0xd97706), "winss132r — Unattended access: relay offline", "winss132r: cannot reach the relay"},
-	}
-	looks["locked"] = look{looks["ready"].small, looks["ready"].big, "winss132r — Unattended access: PC locked", "winss132r: PC locked, not connected"}
+	blue, green, amber := statusIcon(small, 0x2563eb), statusIcon(small, 0x16a34a), statusIcon(small, 0xd97706)
 	defer func() {
-		for name, l := range looks {
-			if name != "locked" {
-				destroyIcon.Call(l.small)
-				destroyIcon.Call(l.big)
-			}
-		}
+		destroyIcon.Call(blue)
+		destroyIcon.Call(green)
+		destroyIcon.Call(amber)
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	updates := make(chan unattendedUpdate, 16)
 	stopSession := make(chan struct{}, 1)
+	initiate := make(chan struct{}, 1)
 	worker := make(chan struct{})
 
 	instance, _, _ := getModule.Call(0)
-	cursor, _, _ := user.NewProc("LoadCursorW").Call(0, 32512)
-	taskbarMessage, _, _ := registerWindowMessage.Call(uintptr(unsafe.Pointer(textPtr("TaskbarButtonCreated"))))
 	trayCreated, _, _ := registerWindowMessage.Call(uintptr(unsafe.Pointer(textPtr("TaskbarCreated"))))
-	overlay := newTaskbarOverlay()
-	defer func() { overlay.close() }()
-	liveDescription := textPtr("IT is connected to this PC")
-	taskbarReady := false
 
-	var statusText, countText, stopCtl uintptr
 	state := "ready"
+	detail := "Connecting to the relay…"
 	connections := 0
 	disabling := false
 	tray := notifyIconData{id: 1, flags: 0x1 | 0x2 | 0x4, callback: trayMessage} // NIF_MESSAGE|NIF_ICON|NIF_TIP
 	tray.size = uint32(unsafe.Sizeof(tray))
+	current := func() look {
+		switch state {
+		case "connected":
+			return look{green, "winss132r — " + connectStatus(connections)}
+		case "calling":
+			return look{blue, "winss132r — Request sent, waiting for IT"}
+		case "offline":
+			return look{amber, "winss132r — Cannot reach the relay"}
+		case "locked":
+			return look{blue, "winss132r — PC locked"}
+		}
+		return look{blue, "winss132r — Ready"}
+	}
 	setTray := func(action uintptr) {
-		l := looks[state]
-		tray.icon = l.small
+		l := current()
+		tray.icon = l.icon
 		tray.tip = [128]uint16{}
 		tip, _ := syscall.UTF16FromString(l.tip)
 		copy(tray.tip[:len(tray.tip)-1], tip)
 		shellNotifyIcon.Call(action, uintptr(unsafe.Pointer(&tray)))
 	}
-	apply := func(window uintptr) {
-		l := looks[state]
-		setText(window, l.title)
-		sendWindow.Call(window, 0x0080, 0, l.small) // WM_SETICON small
-		sendWindow.Call(window, 0x0080, 1, l.big)   // WM_SETICON big
-		if taskbarReady {
-			if state == "connected" {
-				overlay.set(window, l.small, liveDescription)
-			} else {
-				overlay.set(window, 0, nil)
-			}
+
+	showMenu := func(window uintptr) {
+		menu, _, _ := createPopupMenu.Call()
+		if menu == 0 {
+			return
 		}
-		setTray(1) // NIM_MODIFY
-		enable(stopCtl, state == "connected")
-		setText(countText, "Connections since this app started: "+strconv.Itoa(connections))
+		defer destroyMenu.Call(menu)
+		const (
+			mfString    = 0x0
+			mfGrayed    = 0x1
+			mfSeparator = 0x800
+		)
+		item := func(flags, id uintptr, text string) {
+			appendMenu.Call(menu, flags, id, uintptr(unsafe.Pointer(textPtr(text))))
+		}
+		headline := current().tip
+		if state == "connected" {
+			headline = connectStatus(connections) + " — IT is connected"
+		}
+		item(mfGrayed, 0, headline)
+		item(mfGrayed, 0, detail)
+		item(mfGrayed, 0, "Access code: "+code)
+		item(mfGrayed, 0, "Connections since start: "+twoDigits(connections))
+		item(mfSeparator, 0, "")
+		if state == "ready" {
+			item(mfString, initiateItem, "Initiate — ask IT to connect")
+		} else {
+			item(mfGrayed, initiateItem, "Initiate — ask IT to connect")
+		}
+		if state == "connected" {
+			item(mfString, stopItem, "Stop current session")
+		} else {
+			item(mfGrayed, stopItem, "Stop current session")
+		}
+		item(mfSeparator, 0, "")
+		item(mfString, disableItem, "Turn off unattended access…")
+		item(mfString, exitItem, "Exit")
+		var at struct{ x, y int32 }
+		getCursorPos.Call(uintptr(unsafe.Pointer(&at)))
+		setForeground.Call(window)                                                           // Required so the menu closes when the user clicks elsewhere.
+		trackPopupMenu.Call(menu, 0x0008|0x0020, uintptr(at.x), uintptr(at.y), 0, window, 0) // TPM_RIGHTALIGN|TPM_BOTTOMALIGN
+		postMessage.Call(window, 0, 0, 0)                                                    // WM_NULL
 	}
 
 	proc := syscall.NewCallback(func(window, msg, wParam, lParam uintptr) uintptr {
-		if taskbarMessage != 0 && msg == taskbarMessage {
-			taskbarReady = true
-			apply(window)
-			return 0
-		}
 		if trayCreated != 0 && msg == trayCreated { // Explorer restarted.
 			setTray(0)
 			return 0
@@ -209,34 +237,36 @@ func runUnattended(configPath string, config unattendedConfig) error {
 		case trayMessage:
 			switch lParam & 0xffff {
 			case 0x0202, 0x0205: // WM_LBUTTONUP, WM_RBUTTONUP
-				showWindow.Call(window, 9) // SW_RESTORE
-				setForeground.Call(window)
+				showMenu(window)
 			}
 			return 0
-		case 0x0010: // WM_CLOSE: keep running on the taskbar; Exit quits.
-			showWindow.Call(window, 6)
+		case 0x0010: // WM_CLOSE: keep running in the notification area; Exit quits.
 			return 0
 		case 0x0002: // WM_DESTROY
 			cancel()
 			shellNotifyIcon.Call(2, uintptr(unsafe.Pointer(&tray))) // NIM_DELETE
 			quitMessage.Call(0)
 			return 0
-		case 0x0111: // WM_COMMAND
-			if wParam>>16 != 0 || lParam == 0 {
-				break
-			}
+		case 0x0111: // WM_COMMAND from the menu
 			switch wParam & 0xffff {
-			case stopButton:
+			case initiateItem:
+				if state == "ready" {
+					select {
+					case initiate <- struct{}{}:
+					default:
+					}
+				}
+			case stopItem:
 				select {
 				case stopSession <- struct{}{}:
 				default:
 				}
-			case disableButton:
+			case disableItem:
 				if ask(window, "Turn off unattended access?\n\nIT will no longer be able to connect without your approval, and this access code stops working. Turning it on again creates a new code.") {
 					disabling = true
 					destroyWindow.Call(window)
 				}
-			case exitButton:
+			case exitItem:
 				if ask(window, "Exit winss132r?\n\nAny remote session ends. Unattended access stays on and starts again the next time you sign in.") {
 					destroyWindow.Call(window)
 				}
@@ -252,14 +282,17 @@ func runUnattended(configPath string, config unattendedConfig) error {
 						connections++
 					}
 					state = next.state
-					setText(statusText, next.text)
+					detail = next.text
+					if state == "connected" {
+						detail = connectStatus(connections) + ": IT can view and control this PC. Ctrl+2 or F12 stops."
+					}
 					changed = true
 				default:
 					break drain
 				}
 			}
 			if changed {
-				apply(window)
+				setTray(1) // NIM_MODIFY
 			}
 			return 0
 		}
@@ -267,58 +300,40 @@ func runUnattended(configPath string, config unattendedConfig) error {
 		return result
 	})
 
-	windowError := errors.New("could not open the unattended access window")
+	windowError := errors.New("could not start unattended access in the notification area")
 	className := textPtr(unattendedClass)
-	class := indicatorClass{procedure: proc, instance: instance, icon: looks["ready"].big, cursor: cursor, brush: 16, name: className}
+	class := indicatorClass{procedure: proc, instance: instance, name: className}
 	if atom, _, _ := registerClass.Call(uintptr(unsafe.Pointer(&class))); atom == 0 {
 		return windowError
 	}
-	dpi := uintptr(96)
-	if p := user.NewProc("GetDpiForSystem"); p.Find() == nil {
-		if value, _, _ := p.Call(); value != 0 {
-			dpi = value
-		}
-	}
-	px := func(n uintptr) uintptr { return n * dpi / 96 }
-	window, _, _ := createWindow.Call(0, uintptr(unsafe.Pointer(className)), uintptr(unsafe.Pointer(textPtr(looks["ready"].title))),
-		0x00ca0000, 0x80000000, 0x80000000, px(520), px(330), 0, 0, instance, 0)
+	// A hidden top-level window that is never shown: it only receives the
+	// notification-area icon and menu messages, so there is no taskbar button.
+	window, _, _ := createWindow.Call(0x80, uintptr(unsafe.Pointer(className)), uintptr(unsafe.Pointer(textPtr("winss132r"))), // WS_EX_TOOLWINDOW
+		0, 0, 0, 0, 0, 0, 0, instance, 0)
 	if window == 0 {
 		return windowError
 	}
-	font, _, _ := getStockObject.Call(17)
-	failed := false
-	add := func(kind, text string, style, x, y, width, height, id uintptr) uintptr {
-		child, _, _ := createWindow.Call(0, uintptr(unsafe.Pointer(textPtr(kind))), uintptr(unsafe.Pointer(textPtr(text))),
-			0x50000000|style, px(x), px(y), px(width), px(height), window, id, instance, 0)
-		if child == 0 {
-			failed = true
-		} else {
-			sendWindow.Call(child, 0x0030, font, 1)
-		}
-		return child
-	}
-	add("STATIC", "Unattended access is ON. IT can connect to this PC with the saved code without asking you. This icon turns green while someone is connected.", 0, 20, 16, 470, 44, 0)
-	add("STATIC", "Access code", 0, 20, 70, 150, 22, 0)
-	add("EDIT", code, 0x00800880, 20, 94, 200, 27, 0) // read-only, bordered
-	add("STATIC", "Relay: "+config.Relay, 0, 236, 98, 254, 22, 0)
-	statusText = add("STATIC", "Connecting to the relay…", 0, 20, 136, 470, 44, 0)
-	countText = add("STATIC", "", 0, 20, 184, 470, 22, 0)
-	stopCtl = add("BUTTON", "Stop current session", 0x10000, 20, 222, 160, 32, stopButton)
-	add("BUTTON", "Turn off unattended access", 0x10000, 190, 222, 190, 32, disableButton)
-	add("BUTTON", "Exit", 0x10000, 390, 222, 100, 32, exitButton)
-	timer, _, _ := setWindowTimer.Call(window, 1, 100, 0)
-	if failed || timer == 0 {
+	if timer, _, _ := setWindowTimer.Call(window, 1, 100, 0); timer == 0 {
 		destroyWindow.Call(window)
 		return windowError
 	}
 	tray.window = window
 	setTray(0) // NIM_ADD
-	apply(window)
-	showWindow.Call(window, 7) // SW_SHOWMINNOACTIVE: taskbar button only, no pop-up.
+	if announce {
+		balloon := tray
+		balloon.flags = 0x10 // NIF_INFO
+		info, _ := syscall.UTF16FromString("Unattended access is on. Click this icon for the status, the access code, or Initiate.")
+		copy(balloon.info[:len(balloon.info)-1], info)
+		title, _ := syscall.UTF16FromString("winss132r")
+		copy(balloon.infoTitle[:len(balloon.infoTitle)-1], title)
+		balloon.infoFlags = 0x1 // NIIF_INFO
+		shellNotifyIcon.Call(1, uintptr(unsafe.Pointer(&balloon)))
+	}
 
+	hostName, _ := os.Hostname()
 	go func() {
 		defer close(worker)
-		serveUnattended(ctx, config.Relay, config.Key, stopSession, updates)
+		serveUnattended(ctx, config.Relay, config.Key, hostName, stopSession, initiate, updates)
 	}()
 
 	var msg indicatorMessage
@@ -327,10 +342,8 @@ func runUnattended(configPath string, config unattendedConfig) error {
 		if int32(r) <= 0 {
 			break
 		}
-		if handled, _, _ := isDialogMessage.Call(window, uintptr(unsafe.Pointer(&msg))); handled == 0 {
-			translateMessage.Call(uintptr(unsafe.Pointer(&msg)))
-			dispatchMessage.Call(uintptr(unsafe.Pointer(&msg)))
-		}
+		translateMessage.Call(uintptr(unsafe.Pointer(&msg)))
+		dispatchMessage.Call(uintptr(unsafe.Pointer(&msg)))
 	}
 	cancel()
 	// Drain updates so the worker never blocks while it shuts down.

@@ -39,6 +39,40 @@ export const RegisterDesklineStandingResponse = zod.object({
 })
 
 
+/**
+ * An unattended host presses Initiate. Viewers that already know its access code see the request for two minutes and accept it by joining.
+ */
+export const callDesklineBodyNameMax = 64;
+
+
+
+export const CallDesklineBody = zod.object({
+  "name": zod.string().max(callDesklineBodyNameMax).optional()
+})
+
+export const CallDesklineResponse = zod.void()
+
+
+/**
+ * Which of the viewer's saved access codes have a pending Initiate request.
+ */
+export const listDesklineCallsBodyCodesItemRegExp = new RegExp('^[A-F0-9]{12}$');
+export const listDesklineCallsBodyCodesMax = 50;
+
+
+
+export const ListDesklineCallsBody = zod.object({
+  "codes": zod.array(zod.string().regex(listDesklineCallsBodyCodesItemRegExp)).max(listDesklineCallsBodyCodesMax)
+})
+
+export const ListDesklineCallsResponse = zod.object({
+  "calls": zod.array(zod.object({
+  "code": zod.string(),
+  "name": zod.string()
+}))
+})
+
+
 export const joinDesklineBodyCodeRegExp = new RegExp('^[A-F0-9]{12}$');
 
 

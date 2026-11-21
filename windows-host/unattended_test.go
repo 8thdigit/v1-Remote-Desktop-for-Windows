@@ -51,3 +51,11 @@ func TestUnattendedConfigPersists(t *testing.T) {
 		t.Fatal("config survived disable")
 	}
 }
+
+func TestConnectStatus(t *testing.T) {
+	for n, want := range map[int]string{0: "Connect: +00", 1: "Connect: +01", 9: "Connect: +09", 12: "Connect: +12", 120: "Connect: +120"} {
+		if got := connectStatus(n); got != want {
+			t.Errorf("connectStatus(%d) = %q, want %q", n, got, want)
+		}
+	}
+}
