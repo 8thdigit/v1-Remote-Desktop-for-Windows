@@ -25,6 +25,9 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  DesklineCall,
+  DesklineCallList,
+  DesklineCallQuery,
   DesklineCode,
   DesklineInput,
   DesklineInvite,
@@ -315,6 +318,176 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getRegisterDesklineStandingMutationOptions(options), queryClient);
+    }
+
+export const getCallDesklineUrl = () => {
+
+
+
+
+  return `/api/deskline/call`
+}
+
+/**
+ * An unattended host presses Initiate. Viewers that already know its access code see the request for two minutes and accept it by joining.
+ */
+export const callDeskline = async (desklineCall?: DesklineCall, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<void>(getCallDesklineUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(desklineCall)
+  }
+);}
+
+
+
+
+
+export const getCallDesklineMutationKey = () => ['callDeskline'] as const;
+
+export const getCallDesklineMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof callDeskline>>, TError,CallDesklineMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof callDeskline>>, TError,CallDesklineMutationVariables, TContext> => {
+
+const mutationKey = getCallDesklineMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof callDeskline>>, CallDesklineMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  callDeskline(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CallDesklineMutationResult = NonNullable<Awaited<ReturnType<typeof callDeskline>>>
+    export type CallDesklineMutationBody = BodyType<DesklineCall> | undefined
+    export type CallDesklineMutationError = ErrorType<unknown>
+    export type CallDesklineMutationVariables = {data?: BodyType<DesklineCall>}
+
+    export const useCallDeskline = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof callDeskline>>, TError,CallDesklineMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof callDeskline>>,
+        TError,
+        CallDesklineMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCallDesklineMutationOptions(options), queryClient);
+    }
+
+export const getListDesklineCallsUrl = () => {
+
+
+
+
+  return `/api/deskline/calls`
+}
+
+/**
+ * Which of the viewer's saved access codes have a pending Initiate request, and which of them are online (waiting) or in a session. Codes that are not listed are offline.
+ */
+export const listDesklineCalls = async (desklineCallQuery: DesklineCallQuery, options?: Parameters<typeof customFetch>[1]): Promise<DesklineCallList> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<DesklineCallList>(getListDesklineCallsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(desklineCallQuery)
+  }
+);}
+
+
+
+
+
+export const getListDesklineCallsMutationKey = () => ['listDesklineCalls'] as const;
+
+export const getListDesklineCallsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof listDesklineCalls>>, TError,ListDesklineCallsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof listDesklineCalls>>, TError,ListDesklineCallsMutationVariables, TContext> => {
+
+const mutationKey = getListDesklineCallsMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof listDesklineCalls>>, ListDesklineCallsMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  listDesklineCalls(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ListDesklineCallsMutationResult = NonNullable<Awaited<ReturnType<typeof listDesklineCalls>>>
+    export type ListDesklineCallsMutationBody = BodyType<DesklineCallQuery>
+    export type ListDesklineCallsMutationError = ErrorType<unknown>
+    export type ListDesklineCallsMutationVariables = {data: BodyType<DesklineCallQuery>}
+
+    export const useListDesklineCalls = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof listDesklineCalls>>, TError,ListDesklineCallsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof listDesklineCalls>>,
+        TError,
+        ListDesklineCallsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getListDesklineCallsMutationOptions(options), queryClient);
     }
 
 export const getJoinDesklineUrl = () => {

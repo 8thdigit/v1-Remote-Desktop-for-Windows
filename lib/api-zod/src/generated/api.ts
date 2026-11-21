@@ -27,15 +27,57 @@ export const CreateDesklineInviteResponse = zod.object({
  * Unattended host registration. The access code is derived from the host's saved key; a viewer that joins it is live without approval.
  */
 export const registerDesklineStandingBodyKeyRegExp = new RegExp('^[A-Za-z0-9_-]{43}$');
+export const registerDesklineStandingBodyNameMax = 64;
+
 
 
 export const RegisterDesklineStandingBody = zod.object({
-  "key": zod.string().regex(registerDesklineStandingBodyKeyRegExp)
+  "key": zod.string().regex(registerDesklineStandingBodyKeyRegExp),
+  "name": zod.string().max(registerDesklineStandingBodyNameMax).optional()
 })
 
 export const RegisterDesklineStandingResponse = zod.object({
   "code": zod.string(),
   "token": zod.string()
+})
+
+
+/**
+ * An unattended host presses Initiate. Viewers that already know its access code see the request for two minutes and accept it by joining.
+ */
+export const callDesklineBodyNameMax = 64;
+
+
+
+export const CallDesklineBody = zod.object({
+  "name": zod.string().max(callDesklineBodyNameMax).optional()
+})
+
+export const CallDesklineResponse = zod.void()
+
+
+/**
+ * Which of the viewer's saved access codes have a pending Initiate request, and which of them are online (waiting) or in a session. Codes that are not listed are offline.
+ */
+export const listDesklineCallsBodyCodesItemRegExp = new RegExp('^[A-F0-9]{12}$');
+export const listDesklineCallsBodyCodesMax = 50;
+
+
+
+export const ListDesklineCallsBody = zod.object({
+  "codes": zod.array(zod.string().regex(listDesklineCallsBodyCodesItemRegExp)).max(listDesklineCallsBodyCodesMax)
+})
+
+export const ListDesklineCallsResponse = zod.object({
+  "calls": zod.array(zod.object({
+  "code": zod.string(),
+  "name": zod.string()
+})),
+  "presence": zod.array(zod.object({
+  "code": zod.string(),
+  "name": zod.string(),
+  "state": zod.enum(['online', 'busy'])
+})).optional()
 })
 
 

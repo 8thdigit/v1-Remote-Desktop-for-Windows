@@ -155,15 +155,20 @@ func stream(ctx context.Context, r *relay) error {
 }
 
 type unattendedUpdate struct {
-	state, text string // state is ready, connected, offline or locked
+	state, text string // state is ready, calling, connected, offline or locked
 }
+
+// callTTL matches callTTL in artifacts/api-server/src/lib/deskline.ts.
+const callTTL = 2 * time.Minute
 
 // serveUnattended keeps a pre-approved registration open on the relay and
 // streams to the first viewer that joins with this PC's saved access code.
 // There is no approval prompt and no pop-up window; the UI shows the state on
-// the taskbar and tray icon instead. Ctrl+2, F12 or "Stop current session"
+// the notification-area icon instead. Ctrl+2, F12 or "Stop current session"
 // end a live session; the host then registers again for the next one.
-func serveUnattended(ctx context.Context, origin, key string, stopSession <-chan struct{}, updates chan<- unattendedUpdate) {
+// Initiate asks viewers that saved this PC's code to connect; IT accepts in
+// the browser and the session starts at once.
+func serveUnattended(ctx context.Context, origin, key, name string, stopSession, initiate <-chan struct{}, updates chan<- unattendedUpdate) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	backoff := 2 * time.Second
@@ -177,17 +182,22 @@ func serveUnattended(ctx context.Context, origin, key string, stopSession <-chan
 			return true
 		}
 	}
+	var callUntil time.Time
 	for ctx.Err() == nil {
 		if !onDefaultDesktop() {
+			callUntil = time.Time{}
 			updates <- unattendedUpdate{state: "locked", text: "Windows is locked. Remote access resumes after you sign in."}
 			if !pause(3 * time.Second) {
 				return
 			}
 			continue
 		}
-		served, err := unattendedRound(ctx, origin, key, stopSession, updates)
+		served, err := unattendedRound(ctx, origin, key, name, stopSession, initiate, &callUntil, updates)
 		if ctx.Err() != nil {
 			return
+		}
+		if served || err != nil {
+			callUntil = time.Time{}
 		}
 		if served {
 			text := "Remote session ended. Ready for the next connection."
@@ -215,13 +225,15 @@ func serveUnattended(ctx context.Context, origin, key string, stopSession <-chan
 // unattendedRound registers once and waits up to two minutes for a viewer
 // before returning so the caller can refresh the registration. served reports
 // whether a viewer connected.
-func unattendedRound(parent context.Context, origin, key string, stopSession <-chan struct{}, updates chan<- unattendedUpdate) (served bool, err error) {
+// callUntil is when the current Initiate request lapses; it survives the
+// registration refresh so a request is not lost when the round restarts.
+func unattendedRound(parent context.Context, origin, key, name string, stopSession, initiate <-chan struct{}, callUntil *time.Time, updates chan<- unattendedUpdate) (served bool, err error) {
 	r, err := newRelay(origin)
 	if err != nil {
 		return false, err
 	}
 	var invitation invite
-	if err := r.postJSON(parent, "standing", map[string]string{"key": key}, &invitation); err != nil {
+	if err := r.postJSON(parent, "standing", map[string]string{"key": key, "name": name}, &invitation); err != nil {
 		return false, err
 	}
 	if invitation.Code != standingCode(key) || !tokenFormat.MatchString(invitation.Token) {
@@ -233,7 +245,21 @@ func unattendedRound(parent context.Context, origin, key string, stopSession <-c
 		defer stop()
 		_ = r.post(endCtx, "end", nil, nil)
 	}()
-	updates <- unattendedUpdate{state: "ready", text: "Ready. IT can connect with this PC's access code."}
+	call := func(until time.Time) error {
+		if err := r.postJSON(parent, "call", map[string]string{"name": name}, nil); err != nil {
+			return err
+		}
+		*callUntil = until
+		updates <- unattendedUpdate{state: "calling", text: "Request sent. Waiting for IT to accept in the browser…"}
+		return nil
+	}
+	if time.Now().Before(*callUntil) {
+		if err := call(*callUntil); err != nil {
+			return false, err
+		}
+	} else {
+		updates <- unattendedUpdate{state: "ready", text: "Ready. IT can connect with this PC's access code, or select Initiate."}
+	}
 	refresh := time.Now().Add(2 * time.Minute)
 	wait := time.NewTicker(650 * time.Millisecond)
 	defer wait.Stop()
@@ -244,6 +270,10 @@ func unattendedRound(parent context.Context, origin, key string, stopSession <-c
 		}
 		switch reply.State {
 		case "waiting":
+			if !callUntil.IsZero() && time.Now().After(*callUntil) {
+				*callUntil = time.Time{}
+				updates <- unattendedUpdate{state: "ready", text: "No one accepted the request. Select Initiate to ask again."}
+			}
 		case "live":
 			if !onDefaultDesktop() {
 				return false, nil
@@ -268,7 +298,8 @@ func unattendedRound(parent context.Context, origin, key string, stopSession <-c
 					}
 				}
 			}()
-			updates <- unattendedUpdate{state: "connected", text: "CONNECTED: IT is viewing and can control this PC. Press Ctrl+2 or F12 to stop."}
+			*callUntil = time.Time{}
+			updates <- unattendedUpdate{state: "connected", text: "IT can view and control this PC. Press Ctrl+2 or F12 to stop."}
 			return true, stream(ctx, r)
 		default:
 			return false, errors.New("relay returned an unexpected state")
@@ -278,6 +309,10 @@ func unattendedRound(parent context.Context, origin, key string, stopSession <-c
 			return false, parent.Err()
 		case <-stopSession:
 			// Nothing is live; ignore a stale stop request.
+		case <-initiate:
+			if err := call(time.Now().Add(callTTL)); err != nil {
+				return false, err
+			}
 		case <-wait.C:
 		}
 	}

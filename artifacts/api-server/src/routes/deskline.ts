@@ -1,7 +1,7 @@
 import { Router, raw, type Request, type Response } from "express";
 import {
   JoinDesklineBody, JoinDesklineResponse, CreateDesklineInviteResponse,
-  SendDesklineInputBody, RegisterDesklineStandingBody, RegisterDesklineStandingResponse, TickDesklineResponse, GetDesklineFrameQueryParams,
+  SendDesklineInputBody, RegisterDesklineStandingBody, RegisterDesklineStandingResponse, CallDesklineBody, ListDesklineCallsBody, ListDesklineCallsResponse, TickDesklineResponse, GetDesklineFrameQueryParams,
 } from "@workspace/api-zod";
 import { createDesklineStore } from "../lib/deskline";
 
@@ -21,6 +21,7 @@ function throttle(max: number) {
 const tooManyInvites = throttle(90);
 const tooManyJoins = throttle(240);
 const tooManyStanding = throttle(240);
+const tooManyCallChecks = throttle(1200);
 
 function auth(req: Request, res: Response, role?: "host" | "viewer") {
   const found = store.authenticate(req.get("authorization"), role);
@@ -40,9 +41,23 @@ router.post("/standing", (req, res) => {
   if (tooManyStanding()) { res.status(429).json({error: "Relay busy. Try again in a minute."}); return; }
   const body = RegisterDesklineStandingBody.safeParse(req.body);
   if (!body.success) { res.status(400).json({error: "Invalid unattended access key."}); return; }
-  const standing = store.standing(body.data.key);
+  const standing = store.standing(body.data.key, body.data.name);
   if (!standing) { res.status(409).json({error: "Relay busy, or the code is in use by another session."}); return; }
   res.status(201).json(RegisterDesklineStandingResponse.parse(standing));
+});
+router.post("/call", (req, res) => {
+  const s = auth(req, res, "host");
+  if (!s) return;
+  const body = CallDesklineBody.safeParse(req.body ?? {});
+  if (!body.success) { res.status(400).json({error: "Invalid request."}); return; }
+  if (!store.call(s, body.data.name ?? "")) { res.status(409).json({error: "Only a waiting unattended host can initiate."}); return; }
+  res.sendStatus(204);
+});
+router.post("/calls", (req, res) => {
+  if (tooManyCallChecks()) { res.status(429).json({error: "Too many checks. Try again in a minute."}); return; }
+  const body = ListDesklineCallsBody.safeParse(req.body);
+  if (!body.success) { res.status(400).json({error: "Send up to 50 saved access codes."}); return; }
+  res.json(ListDesklineCallsResponse.parse({calls: store.calls(body.data.codes), presence: store.presence(body.data.codes)}));
 });
 router.post("/join", (req, res) => {
   if (tooManyJoins()) { res.status(429).json({error: "Too many attempts. Try again in a minute."}); return; }

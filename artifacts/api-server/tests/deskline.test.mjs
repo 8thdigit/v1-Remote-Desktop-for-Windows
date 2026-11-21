@@ -97,3 +97,57 @@ test("an unattended host's derived code joins straight to live and only its key 
   assert.equal(attendedViewer.preapproved, false);
   assert.equal(store.authenticate(bearer(attended.token), "host").state, "pending");
 });
+
+test("an unattended host's Initiate request is visible only to viewers that know its code, until accepted or expired", () => {
+  let now = 1_000_000;
+  const store = createDesklineStore(() => now);
+  const key = "C".repeat(43);
+  const host = store.standing(key);
+  const s = store.authenticate(bearer(host.token), "host");
+  const other = store.standing("D".repeat(43));
+  assert.deepEqual(store.calls([host.code, other.code]), []);
+  assert.equal(store.call(s, "FRONT-DESK<script>"), true);
+  assert.deepEqual(store.calls([other.code]), []);
+  assert.deepEqual(store.calls([host.code, other.code]), [{code: host.code, name: "FRONT-DESKscript"}]);
+  // Attended invites cannot initiate.
+  const attended = store.invite();
+  assert.equal(store.call(store.authenticate(bearer(attended.token), "host"), "x"), false);
+  // Accepting is joining: it goes live at once and clears the request.
+  const viewer = store.join(host.code);
+  assert.equal(viewer.preapproved, true);
+  assert.equal(s.state, "live");
+  assert.deepEqual(store.calls([host.code]), []);
+  assert.equal(store.call(s, "again"), false);
+  // A request expires after two minutes.
+  const second = store.standing("E".repeat(43));
+  store.call(store.authenticate(bearer(second.token), "host"), "pc");
+  const heartbeat = (ms) => { for (let t = 0; t < ms; t += 10_000) { now += 10_000; store.authenticate(bearer(second.token), "host"); } };
+  heartbeat(110_000);
+  assert.equal(store.calls([second.code]).length, 1);
+  heartbeat(20_000);
+  assert.deepEqual(store.calls([second.code]), []);
+});
+
+test("presence reports online and busy unattended PCs only to viewers that know the code", () => {
+  let now = 1_000_000;
+  const store = createDesklineStore(() => now);
+  const host = store.standing("F".repeat(43), "RECEPTION-PC<b>");
+  const other = store.standing("G".repeat(43));
+  const missing = standingCode("H".repeat(43));
+  assert.deepEqual(store.presence([host.code, missing]), [{code: host.code, name: "RECEPTION-PCb", state: "online"}]);
+  // Initiate falls back to the registered name.
+  const s = store.authenticate(bearer(host.token), "host");
+  store.call(s, "");
+  assert.deepEqual(store.calls([host.code]), [{code: host.code, name: "RECEPTION-PCb"}]);
+  // A live session is busy, then gone after it ends.
+  store.join(host.code);
+  assert.deepEqual(store.presence([host.code]), [{code: host.code, name: "RECEPTION-PCb", state: "busy"}]);
+  store.end(s);
+  assert.deepEqual(store.presence([host.code]), []);
+  // A host that stops refreshing goes offline.
+  now += 25_000;
+  assert.deepEqual(store.presence([other.code]), []);
+  // Attended invites never show presence.
+  const attended = store.invite();
+  assert.deepEqual(store.presence([attended.code]), []);
+});
