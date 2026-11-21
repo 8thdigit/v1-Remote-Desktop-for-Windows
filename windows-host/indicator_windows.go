@@ -10,6 +10,7 @@ import (
 
 var (
 	registerClass    = user.NewProc("RegisterClassW")
+	unregisterClass  = user.NewProc("UnregisterClassW")
 	createWindow     = user.NewProc("CreateWindowExW")
 	destroyWindow    = user.NewProc("DestroyWindow")
 	defaultWindow    = user.NewProc("DefWindowProcW")
@@ -90,6 +91,7 @@ func showSharingIndicator(ctx context.Context, stop context.CancelFunc, ready ch
 		ready <- indicatorError
 		return
 	}
+	defer func() { unregisterClass.Call(uintptr(unsafe.Pointer(class.name)), instance) }()
 
 	dpiProc := user.NewProc("GetDpiForSystem")
 	dpi := uintptr(96)

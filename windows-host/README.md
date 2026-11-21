@@ -11,16 +11,19 @@ If you installed the older Deskline preview, uninstall it separately from Window
 1. Open the winss132r viewer in a browser at the relay's HTTPS origin.
 2. On the Windows PC, download and run the installer, then open **winss132r**
    from Start. Paste the HTTPS relay address displayed on the viewer page.
-   Choose `y` to remember just the address on your Windows account. On your
-   next launch, press Enter to use it or type `forget` to clear it. A saved
-   address does not authorize access or replace one-time pairing.
-3. Give the one-time code to a trusted helper. The helper enters it in their
+   Select **Save & Close** to remember just the address on your Windows account.
+   Reopen the app to reuse it, or select **Clear saved relay** to remove it.
+   A saved address does not authorize access or replace one-time pairing.
+3. Select **Start session** and give the one-time code to a trusted helper. The helper enters it in their
    browser and reads the six-digit verification number back to you. Enter that
-   number in the Windows host to approve sharing the screen and allowing input.
+   number in the Windows host and select **Approve**, or select **Decline**
+   to end the request. There is no automatic approval.
 4. The helper can enable remote input from the viewer. The Windows user can
    stop the session with **Ctrl+2**, **F12**, or **Stop sharing** on the
-   always-on-top indicator. You can minimize the terminal during sharing;
-   closing the terminal or the indicator ends the session. The helper
+   always-on-top indicator. The setup window minimizes to the taskbar on
+   approval. Shift-right-click its taskbar button to open the Windows system
+   menu with **Stop sharing** and **Close** (or open the window and press
+   Alt+Space). Closing the app or the indicator ends the session. The helper
    can use **End session**. Locking Windows stops the host session.
 
 Shares the primary display only. No file transfer, clipboard sync, audio,

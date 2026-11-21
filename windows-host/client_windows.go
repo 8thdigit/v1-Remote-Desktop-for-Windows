@@ -1,0 +1,325 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"syscall"
+	"unsafe"
+)
+
+var (
+	enableWindow    = user.NewProc("EnableWindow")
+	setWindowText   = user.NewProc("SetWindowTextW")
+	getWindowText   = user.NewProc("GetWindowTextW")
+	isDialogMessage = user.NewProc("IsDialogMessageW")
+	setFocus        = user.NewProc("SetFocus")
+	getSystemMenu   = user.NewProc("GetSystemMenu")
+	appendMenu      = user.NewProc("AppendMenuW")
+	enableMenu      = user.NewProc("EnableMenuItem")
+)
+
+func textPtr(text string) *uint16 {
+	return syscall.StringToUTF16Ptr(strings.ReplaceAll(text, "\x00", ""))
+}
+
+func setText(window uintptr, text string) {
+	setWindowText.Call(window, uintptr(unsafe.Pointer(textPtr(text))))
+}
+
+func editText(window uintptr) string {
+	var buffer [512]uint16
+	getWindowText.Call(window, uintptr(unsafe.Pointer(&buffer[0])), uintptr(len(buffer)))
+	return strings.TrimSpace(syscall.UTF16ToString(buffer[:]))
+}
+
+func enable(window uintptr, enabled bool) {
+	var flag uintptr
+	if enabled {
+		flag = 1
+	}
+	enableWindow.Call(window, flag)
+}
+
+func main() {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	setDPI()
+	if err := runClient(); err != nil {
+		user.NewProc("MessageBoxW").Call(0, uintptr(unsafe.Pointer(textPtr(err.Error()))),
+			uintptr(unsafe.Pointer(textPtr("winss132r"))), 0x10)
+	}
+}
+
+func runClient() error {
+	const (
+		start    = 201
+		save     = 202
+		forget   = 203
+		approve  = 204
+		decline  = 205
+		stopMenu = 0x210
+	)
+	const idleText = "Start a session to get a fresh one-time code. Nothing is shared until you approve."
+	configDir, configErr := os.UserConfigDir()
+	var path, saved string
+	initialStatus := idleText
+	if configErr == nil {
+		path = filepath.Join(configDir, "winss132r", "relay.txt")
+		var err error
+		saved, err = loadRelayAddress(path)
+		if err != nil {
+			initialStatus = "Could not read the saved address. Enter a new one or clear it."
+		}
+	}
+	instance, _, _ := getModule.Call(0)
+	cursor, _, _ := user.NewProc("LoadCursorW").Call(0, 32512)
+	className := textPtr("Winss132rSupportClient")
+	dpi := uintptr(96)
+	if p := user.NewProc("GetDpiForSystem"); p.Find() == nil {
+		if value, _, _ := p.Call(); value != 0 {
+			dpi = value
+		}
+	}
+	px := func(n uintptr) uintptr { return n * dpi / 96 }
+
+	var relayEdit, accessCode, verification, status, startButton, saveButton, forgetButton, approveButton, declineButton, systemMenu uintptr
+	updates := make(chan sessionUpdate, 8)
+	var cancel context.CancelFunc
+	var done chan struct{}
+	var answer chan string
+	state := "idle"
+	closing := false
+	refresh := func() {
+		idle := state == "idle"
+		enable(relayEdit, idle)
+		enable(startButton, idle)
+		enable(saveButton, idle && path != "")
+		enable(forgetButton, idle && path != "")
+		enable(approveButton, state == "pending")
+		enable(verification, state == "pending")
+		enable(declineButton, !idle && state != "stopping")
+		if systemMenu != 0 {
+			var flag uintptr
+			if idle || state == "stopping" {
+				flag = 1
+			}
+			enableMenu.Call(systemMenu, stopMenu, flag)
+		}
+		switch state {
+		case "pending":
+			setText(declineButton, "Decline")
+		case "live":
+			setText(declineButton, "Stop sharing")
+		default:
+			setText(declineButton, "Cancel session")
+		}
+	}
+	stop := func() {
+		if cancel != nil {
+			cancel()
+			state = "stopping"
+			setText(status, "Ending session…")
+			refresh()
+		}
+	}
+	proc := syscall.NewCallback(func(window, msg, wParam, lParam uintptr) uintptr {
+		switch msg {
+		case 0x0112: // WM_SYSCOMMAND
+			if wParam&0xfff0 == stopMenu {
+				stop()
+				return 0
+			}
+		case 0x0010: // WM_CLOSE
+			if done != nil {
+				closing = true
+				stop()
+			} else {
+				destroyWindow.Call(window)
+			}
+			return 0
+		case 0x0002: // WM_DESTROY
+			if cancel != nil {
+				cancel()
+			}
+			quitMessage.Call(0)
+			return 0
+		case 0x0111: // WM_COMMAND
+			if wParam>>16 != 0 || lParam == 0 {
+				break
+			}
+			switch wParam & 0xffff {
+			case start:
+				if state != "idle" {
+					break
+				}
+				r, err := newRelay(editText(relayEdit))
+				if err != nil {
+					setText(status, err.Error())
+					break
+				}
+				ctx, end := context.WithCancel(context.Background())
+				cancel = end
+				finished := make(chan struct{})
+				done = finished
+				lines := make(chan string, 1)
+				answer = lines
+				state = "connecting"
+				setText(status, "Connecting to the HTTPS relay…")
+				refresh()
+				go func() {
+					defer close(finished)
+					err := run(ctx, r, lines, updates)
+					message := "Session ended. Start a new session to get a fresh code."
+					if err != nil && !errors.Is(err, context.Canceled) {
+						message = "Session ended: " + err.Error()
+					}
+					updates <- sessionUpdate{state: "finished", text: message}
+				}()
+			case save:
+				if state == "idle" && path != "" {
+					if err := saveRelayAddress(path, editText(relayEdit)); err != nil {
+						setText(status, "Could not save the relay: "+err.Error())
+					} else {
+						destroyWindow.Call(window)
+					}
+				}
+			case forget:
+				if state == "idle" && path != "" {
+					if err := forgetRelayAddress(path); err != nil {
+						setText(status, "Could not clear the relay: "+err.Error())
+					} else {
+						setText(relayEdit, "")
+						setText(status, "Saved relay cleared. Paste a relay address to start a session.")
+					}
+				}
+			case approve:
+				if state == "pending" {
+					value := editText(verification)
+					if !verifyFormat.MatchString(value) {
+						setText(status, "Enter the six-digit number shown to your helper, then click Approve.")
+						break
+					}
+					state = "approving"
+					setText(verification, "")
+					setText(status, "Checking the verification number…")
+					refresh()
+					answer <- value
+				}
+			case decline:
+				stop()
+			}
+			return 0
+		case 0x0113: // WM_TIMER
+			for {
+				select {
+				case next := <-updates:
+					if next.state == "finished" {
+						<-done
+						cancel, done, answer = nil, nil, nil
+						if closing {
+							destroyWindow.Call(window)
+							return 0
+						}
+						state = "idle"
+						setText(accessCode, "")
+						setText(verification, "")
+					} else if state == "stopping" {
+						continue
+					} else {
+						state = next.state
+						setText(accessCode, next.code)
+					}
+					setText(status, next.text)
+					refresh()
+					if state == "pending" {
+						setFocus.Call(verification)
+					} else if state == "live" {
+						showWindow.Call(window, 6) // Minimize setup; the live indicator is a separate window.
+					}
+				default:
+					return 0
+				}
+			}
+		}
+		result, _, _ := defaultWindow.Call(window, msg, wParam, lParam)
+		return result
+	})
+
+	windowError := errors.New("could not open the Windows support client")
+	class := indicatorClass{procedure: proc, instance: instance, cursor: cursor, brush: 16, name: className}
+	if atom, _, _ := registerClass.Call(uintptr(unsafe.Pointer(&class))); atom == 0 {
+		return windowError
+	}
+	title := textPtr("winss132r — Windows support")
+	window, _, _ := createWindow.Call(0x10000, uintptr(unsafe.Pointer(className)), uintptr(unsafe.Pointer(title)),
+		0x00ca0000, 0x80000000, 0x80000000, px(580), px(420), 0, 0, instance, 0)
+	if window == 0 {
+		return windowError
+	}
+	systemMenu, _, _ = getSystemMenu.Call(window, 0)
+	if systemMenu == 0 {
+		destroyWindow.Call(window)
+		return windowError
+	}
+	menuText := textPtr("Stop sharing")
+	if added, _, _ := appendMenu.Call(systemMenu, 0, stopMenu, uintptr(unsafe.Pointer(menuText))); added == 0 {
+		destroyWindow.Call(window)
+		return windowError
+	}
+	font, _, _ := getStockObject.Call(17)
+	failed := false
+	add := func(kind, text string, style, x, y, width, height, id uintptr) uintptr {
+		name, caption := textPtr(kind), textPtr(text)
+		child, _, _ := createWindow.Call(0, uintptr(unsafe.Pointer(name)), uintptr(unsafe.Pointer(caption)),
+			0x50000000|style, px(x), px(y), px(width), px(height), window, id, instance, 0)
+		if child == 0 {
+			failed = true
+		} else {
+			sendWindow.Call(child, 0x0030, font, 1)
+		}
+		return child
+	}
+	add("STATIC", "Only approve access for a helper you know and trust.", 0, 20, 18, 530, 24, 0)
+	add("STATIC", "HTTPS relay address", 0, 20, 54, 530, 22, 0)
+	relayEdit = add("EDIT", saved, 0x00810080, 20, 78, 530, 26, 0)
+	sendWindow.Call(relayEdit, 0x00c5, 500, 0)
+	startButton = add("BUTTON", "Start session", 0x10000, 20, 116, 126, 32, start)
+	saveButton = add("BUTTON", "Save && Close", 0x10000, 156, 116, 126, 32, save)
+	forgetButton = add("BUTTON", "Clear saved relay", 0x10000, 292, 116, 136, 32, forget)
+	add("STATIC", "One-time access code", 0, 20, 169, 250, 22, 0)
+	accessCode = add("EDIT", "", 0x00810880, 20, 194, 250, 27, 0)
+	add("STATIC", "Helper's 6-digit verification number", 0, 20, 235, 250, 22, 0)
+	verification = add("EDIT", "", 0x00812080, 20, 260, 250, 27, 0)
+	sendWindow.Call(verification, 0x00c5, 6, 0)
+	approveButton = add("BUTTON", "Approve", 0x10000, 280, 257, 120, 32, approve)
+	declineButton = add("BUTTON", "Cancel session", 0x10000, 410, 257, 140, 32, decline)
+	status = add("STATIC", initialStatus, 0, 20, 310, 530, 62, 0)
+	timer, _, _ := setWindowTimer.Call(window, 1, 100, 0)
+	if failed || timer == 0 {
+		destroyWindow.Call(window)
+		return windowError
+	}
+	refresh()
+	showWindow.Call(window, 1)
+	setFocus.Call(relayEdit)
+	var msg indicatorMessage
+	for {
+		r, _, _ := getWindowMessage.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0)
+		if int32(r) <= 0 {
+			break
+		}
+		if handled, _, _ := isDialogMessage.Call(window, uintptr(unsafe.Pointer(&msg))); handled == 0 {
+			translateMessage.Call(uintptr(unsafe.Pointer(&msg)))
+			dispatchMessage.Call(uintptr(unsafe.Pointer(&msg)))
+		}
+	}
+	if cancel != nil {
+		cancel()
+		<-done
+	}
+	return nil
+}

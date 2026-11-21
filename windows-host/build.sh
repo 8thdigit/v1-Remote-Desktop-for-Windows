@@ -23,7 +23,7 @@ if [[ $# -ne 0 ]]; then
   target="$tmp/winss132r-Setup-x64.exe"
   signing=(-DRELEASE_SIGNER="$2")
 fi
-CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o "$host" .
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags='-s -w -H=windowsgui' -o "$host" .
 if (( ${#signing[@]} )); then
   "$2" "$host"
 fi
