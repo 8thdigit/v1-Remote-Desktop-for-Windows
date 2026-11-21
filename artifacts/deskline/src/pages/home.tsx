@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useJoinDeskline } from '@workspace/api-client-react';
+import { Link } from 'wouter';
 import { ArrowRight, Check, Copy, Download, Monitor, ShieldCheck, UserRound } from 'lucide-react';
 import LiveSession from '@/LiveSession';
 
@@ -212,8 +213,9 @@ export default function Home() {
         </aside>
       </main>
 
-      <footer className="mx-auto max-w-6xl border-t px-5 py-6 text-xs text-muted-foreground md:px-10">
-        winss132r connects only while the person at the PC has the app open and has approved. Either side can end the session.
+      <footer className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-6 border-t px-5 py-3 text-xs text-muted-foreground md:px-10">
+        <p>winss132r connects only while the person at the PC has the app open and has approved. Either side can end the session.</p>
+        <Link href="/privacy" className="inline-flex min-h-11 items-center rounded-md font-semibold text-foreground underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary">Privacy</Link>
       </footer>
     </div>
   );
