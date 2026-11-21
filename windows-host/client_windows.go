@@ -48,19 +48,56 @@ func main() {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	setDPI()
-	if err := runClient(); err != nil {
+	err := startHost()
+	if err != nil {
 		user.NewProc("MessageBoxW").Call(0, uintptr(unsafe.Pointer(textPtr(err.Error()))),
 			uintptr(unsafe.Pointer(textPtr("winss132r"))), 0x10)
 	}
 }
 
-func runClient() error {
+// The unattended key lives in the local (non-roaming) profile so that it is
+// tied to this PC and is not copied to other PCs by roaming profiles.
+func unattendedPath() string {
+	dir, err := os.UserCacheDir() // %LocalAppData% on Windows.
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(dir, "winss132r", unattendedFile)
+}
+
+// startHost opens unattended mode when it is set up on this PC (including
+// when started at sign-in), and the attended client otherwise.
+func startHost() error {
+	path := unattendedPath()
+	if path != "" {
+		if config, ok, _ := loadUnattended(path); ok {
+			return runUnattended(path, config)
+		}
+	}
+	for _, arg := range os.Args[1:] {
+		if arg == "--unattended" {
+			// Started at sign-in, but unattended access was turned off or its
+			// settings are gone: clean up quietly instead of opening a window.
+			return setAutostart(false)
+		}
+	}
+	switchTo, err := runClient(path)
+	if err != nil || switchTo == nil {
+		return err
+	}
+	return runUnattended(path, *switchTo)
+}
+
+// runClient runs attended support. It returns a config when the user turned
+// on unattended access, so the caller switches to that mode.
+func runClient(unattendedConfigPath string) (*unattendedConfig, error) {
 	const (
 		start    = 201
 		save     = 202
 		forget   = 203
 		approve  = 204
 		decline  = 205
+		standing = 206
 		stopMenu = 0x210
 	)
 	const idleText = "Start a session to get a fresh one-time code. Nothing is shared until you approve."
@@ -108,7 +145,8 @@ func runClient() error {
 	}
 	px := func(n uintptr) uintptr { return n * dpi / 96 }
 
-	var relayEdit, accessCode, verification, status, startButton, saveButton, forgetButton, approveButton, declineButton, systemMenu uintptr
+	var relayEdit, accessCode, verification, status, startButton, saveButton, forgetButton, unattendedButton, approveButton, declineButton, systemMenu uintptr
+	var switchTo *unattendedConfig
 	updates := make(chan sessionUpdate, 8)
 	var cancel context.CancelFunc
 	var done chan struct{}
@@ -121,6 +159,7 @@ func runClient() error {
 		enable(startButton, idle)
 		enable(saveButton, idle && path != "")
 		enable(forgetButton, idle && path != "")
+		enable(unattendedButton, idle && unattendedConfigPath != "")
 		enable(approveButton, state == "pending")
 		enable(verification, state == "pending")
 		enable(declineButton, !idle && state != "stopping")
@@ -223,6 +262,36 @@ func runClient() error {
 						setText(status, "Saved relay cleared. Paste a relay address to start a session.")
 					}
 				}
+			case standing:
+				if state != "idle" || unattendedConfigPath == "" {
+					break
+				}
+				address := editText(relayEdit)
+				if _, err := newRelay(address); err != nil {
+					setText(status, err.Error())
+					break
+				}
+				if !ask(window, "Turn on unattended access for this PC?\n\n"+
+					"IT will be able to view and control this PC at any time with a saved access code, without asking you first. "+
+					"winss132r will start when you sign in. A taskbar and notification-area icon stays visible and turns red while someone is connected. "+
+					"You can turn this off from that window.") {
+					break
+				}
+				config, err := enableUnattended(unattendedConfigPath, address)
+				if err == nil {
+					if err = setAutostart(true); err != nil {
+						_ = disableUnattended(unattendedConfigPath)
+					}
+				}
+				if err != nil {
+					setText(status, "Could not turn on unattended access: "+err.Error())
+					break
+				}
+				if path != "" {
+					_ = saveRelayAddress(path, address)
+				}
+				switchTo = &config
+				destroyWindow.Call(window)
 			case approve:
 				if state == "pending" {
 					value := editText(verification)
@@ -283,23 +352,23 @@ func runClient() error {
 	windowError := errors.New("could not open the Windows support client")
 	class := indicatorClass{procedure: proc, instance: instance, cursor: cursor, brush: 16, name: className}
 	if atom, _, _ := registerClass.Call(uintptr(unsafe.Pointer(&class))); atom == 0 {
-		return windowError
+		return nil, windowError
 	}
 	title := textPtr(idleTitle)
 	window, _, _ := createWindow.Call(0x10000, uintptr(unsafe.Pointer(className)), uintptr(unsafe.Pointer(title)),
 		0x00ca0000, 0x80000000, 0x80000000, px(580), px(420), 0, 0, instance, 0)
 	if window == 0 {
-		return windowError
+		return nil, windowError
 	}
 	systemMenu, _, _ = getSystemMenu.Call(window, 0)
 	if systemMenu == 0 {
 		destroyWindow.Call(window)
-		return windowError
+		return nil, windowError
 	}
 	menuText := textPtr("Stop sharing")
 	if added, _, _ := appendMenu.Call(systemMenu, 0, stopMenu, uintptr(unsafe.Pointer(menuText))); added == 0 {
 		destroyWindow.Call(window)
-		return windowError
+		return nil, windowError
 	}
 	font, _, _ := getStockObject.Call(17)
 	failed := false
@@ -321,6 +390,7 @@ func runClient() error {
 	startButton = add("BUTTON", "Start session", 0x10000, 20, 116, 126, 32, start)
 	saveButton = add("BUTTON", "Save && Close", 0x10000, 156, 116, 126, 32, save)
 	forgetButton = add("BUTTON", "Clear saved relay", 0x10000, 292, 116, 136, 32, forget)
+	unattendedButton = add("BUTTON", "Unattended…", 0x10000, 438, 116, 112, 32, standing)
 	add("STATIC", "One-time access code", 0, 20, 169, 250, 22, 0)
 	accessCode = add("EDIT", "", 0x00810880, 20, 194, 250, 27, 0)
 	add("STATIC", "Helper's 6-digit verification number", 0, 20, 235, 250, 22, 0)
@@ -332,7 +402,7 @@ func runClient() error {
 	timer, _, _ := setWindowTimer.Call(window, 1, 100, 0)
 	if failed || timer == 0 {
 		destroyWindow.Call(window)
-		return windowError
+		return nil, windowError
 	}
 	refresh()
 	showWindow.Call(window, 1)
@@ -352,5 +422,5 @@ func runClient() error {
 		cancel()
 		<-done
 	}
-	return nil
+	return switchTo, nil
 }

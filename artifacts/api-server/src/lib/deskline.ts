@@ -1,9 +1,16 @@
-import { randomBytes, randomInt } from "node:crypto";
+import { createHash, randomBytes, randomInt } from "node:crypto";
 import type { DesklineInput } from "@workspace/api-zod";
 
 const inviteTTL = 3 * 60_000;
 const sessionTTL = 30 * 60_000;
 const peerTTL = 20_000;
+
+// Unattended (pre-approved) hosts keep a long random key on the PC. The
+// public access code is derived from it, so only the holder of the key can
+// register under that code, and the relay does not need to store anything.
+export function standingCode(key: string) {
+  return createHash("sha256").update("winss132r-standing:" + key).digest("hex").slice(0, 12).toUpperCase();
+}
 
 export type Session = {
   code: string;
@@ -11,6 +18,7 @@ export type Session = {
   viewer?: string;
   verification?: string;
   state: "waiting" | "pending" | "live";
+  preapproved: boolean;
   expires: number;
   hostSeen: number;
   viewerSeen: number;
@@ -51,7 +59,29 @@ export function createDesklineStore(clock = Date.now) {
       const host = randomBytes(32).toString("base64url");
       const now = clock();
       const session: Session = {
-        code, host, state: "waiting", expires: now + inviteTTL,
+        code, host, state: "waiting", preapproved: false, expires: now + inviteTTL,
+        hostSeen: now, viewerSeen: 0, sequence: 0, lastFrame: 0, input: [],
+      };
+      codes.set(code, session);
+      peers.set(host, {session, role: "host"});
+      return {code, token: host};
+    },
+    // Registers (or refreshes) the waiting session of an unattended host.
+    // A viewer that joins it goes live at once, without host approval.
+    standing(key: string) {
+      sweep();
+      if (!/^[\w-]{43}$/.test(key)) return;
+      const code = standingCode(key);
+      const previous = codes.get(code);
+      if (previous) {
+        if (!previous.preapproved) return;
+        end(previous);
+      }
+      if (peers.size >= 96) return;
+      const host = randomBytes(32).toString("base64url");
+      const now = clock();
+      const session: Session = {
+        code, host, state: "waiting", preapproved: true, expires: now + inviteTTL,
         hostSeen: now, viewerSeen: 0, sequence: 0, lastFrame: 0, input: [],
       };
       codes.set(code, session);
@@ -63,13 +93,19 @@ export function createDesklineStore(clock = Date.now) {
       if (!s || expired(s) || s.state !== "waiting") return;
       codes.delete(code);
       const token = randomBytes(32).toString("base64url");
-      const verification = String(randomInt(100000, 1000000));
+      const now = clock();
       s.viewer = token;
+      s.viewerSeen = now;
+      peers.set(token, {session: s, role: "viewer"});
+      if (s.preapproved) {
+        s.state = "live";
+        s.expires = now + sessionTTL;
+        return {token, verification: "", preapproved: true};
+      }
+      const verification = String(randomInt(100000, 1000000));
       s.verification = verification;
       s.state = "pending";
-      s.viewerSeen = clock();
-      peers.set(token, {session: s, role: "viewer"});
-      return {token, verification};
+      return {token, verification, preapproved: false};
     },
     authenticate(header: string | undefined, role?: "host" | "viewer") {
       const token = /^Bearer ([\w-]{43})$/.exec(header ?? "")?.[1];

@@ -49,6 +49,10 @@ Section "Uninstall"
   Delete "$SMPROGRAMS\winss132r.lnk"
   Delete "$INSTDIR\winss132r.exe"
   Delete "$INSTDIR\Uninstall.exe"
+  ; Unattended access: remove sign-in startup and the saved access key.
+  DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "winss132r"
+  Delete "$LOCALAPPDATA\winss132r\unattended.json"
+  RMDir "$LOCALAPPDATA\winss132r"
   RMDir "$INSTDIR"
   DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winss132r"
 SectionEnd

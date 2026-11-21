@@ -1,9 +1,10 @@
 # winss132r Windows host
 
-winss132r is for attended support on Windows 10/11 x64. The installer runs
+winss132r is for attended support on Windows 10/11 x64, with an optional
+unattended mode for designated company PCs (see below). The installer runs
 without administrator privileges and adds a Start menu shortcut and an
 uninstall entry for the current user. It is unsigned; follow your organization's
-software policy. There is no Windows service or automatic startup.
+software policy. There is no Windows service. Automatic startup is added only when unattended access is turned on.
 If you installed the older Deskline preview, uninstall it separately from Windows Settings.
 
 ## Start a session
@@ -17,7 +18,7 @@ If you installed the older Deskline preview, uninstall it separately from Window
 3. Select **Start session** and give the one-time code to a trusted helper. The helper enters it in their
    browser and reads the six-digit verification number back to you. Enter that
    number in the Windows host and select **Approve**, or select **Decline**
-   to end the request. There is no automatic approval.
+   to end the request. In this attended mode there is no automatic approval.
 4. The helper can enable remote input from the viewer. The Windows user can
    stop the session with **Ctrl+2**, **F12**, or **Stop sharing** on the
    always-on-top indicator. The setup window minimizes to the taskbar on
@@ -28,8 +29,40 @@ If you installed the older Deskline preview, uninstall it separately from Window
    Alt+Space). Closing the app or the indicator ends the session. The helper
    can use **End session**. Locking Windows stops the host session.
 
+## Unattended access (designated company PCs)
+
+For PCs that IT supports without someone at the keyboard, the Windows user
+can turn on a saved, pre-approved access code:
+
+1. Open winss132r, paste the relay address, and select **Unattended…**.
+   Confirm the prompt. This is the only prompt; there is none during a session.
+2. winss132r saves a random key in `%LOCALAPPDATA%\winss132r\unattended.json`
+   (not roaming) and adds itself to sign-in startup for this Windows user
+   (`HKCU\...\CurrentVersion\Run`), so the same code works after restarts.
+   The 12-character access code is derived from that key and shown in the
+   status window. Only this PC's key can register that code on the relay.
+3. IT enters the access code in the viewer. The session goes live at once,
+   with no verification number and no approval.
+
+There are no pop-ups while unattended access runs. The status window stays
+minimized on the taskbar, and an icon is added to the notification area. Both
+are blue when ready, amber when the relay can't be reached, and turn **red**
+(with a taskbar badge and a "LIVE" title) while IT is connected. Click either
+to see the connection status, the number of connections since the app started,
+and the access code. From that window the user can **Stop current session**,
+**Exit** (unattended access starts again at next sign-in), or **Turn off
+unattended access**, which deletes the key and the startup entry. Ctrl+2 and
+F12 still end a live session, and locking Windows still stops sharing.
+Windows 11 may put new notification-area icons in the overflow; pin it under
+Settings > Personalization > Taskbar > Other system tray icons. The taskbar
+button is always visible.
+
+Anyone with the access code can control the PC while it is signed in, so
+treat the code like a password. To change it, turn unattended access off and
+on again. Uninstalling removes the key and the startup entry.
+
 Shares the primary display only. No file transfer, clipboard sync, audio,
-unattended access, administrator elevation, or Windows sign-in/UAC control.
+administrator elevation, or Windows sign-in/UAC control.
 The relay terminates TLS and can read screen frames and control events. Use a
 relay you and your helper trust. It holds only the latest frame in memory and
 does not record sessions. Sessions are process-local and require a single

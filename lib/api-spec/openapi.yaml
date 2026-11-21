@@ -33,6 +33,23 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/DesklineInvite"}
+  /deskline/standing:
+    post:
+      operationId: registerDesklineStanding
+      description: >-
+        Unattended host registration. The access code is derived from the
+        host's saved key; a viewer that joins it is live without approval.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/DesklineStandingKey"}
+      responses:
+        "201":
+          description: Pre-approved host invite for the derived code
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DesklineInvite"}
   /deskline/join:
     post:
       operationId: joinDeskline
@@ -117,6 +134,11 @@ components:
       required: [code]
       properties:
         code: {type: string, pattern: '^[A-F0-9]{12}$'}
+    DesklineStandingKey:
+      type: object
+      required: [key]
+      properties:
+        key: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
     DesklineInvite:
       type: object
       required: [code, token]
@@ -125,10 +147,11 @@ components:
         token: {type: string}
     DesklineViewer:
       type: object
-      required: [token, verification]
+      required: [token, verification, preapproved]
       properties:
         token: {type: string}
         verification: {type: string}
+        preapproved: {type: boolean}
     DesklineInput:
       type: object
       required: [kind]

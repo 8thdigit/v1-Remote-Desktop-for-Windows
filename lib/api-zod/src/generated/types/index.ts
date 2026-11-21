@@ -11,6 +11,7 @@ export * from './desklineInput';
 export * from './desklineInputDelta';
 export * from './desklineInputKind';
 export * from './desklineInvite';
+export * from './desklineStandingKey';
 export * from './desklineTick';
 export * from './desklineTickState';
 export * from './desklineViewer';

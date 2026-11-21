@@ -28,6 +28,7 @@ import type {
   DesklineCode,
   DesklineInput,
   DesklineInvite,
+  DesklineStandingKey,
   DesklineTick,
   DesklineViewer,
   GetDesklineFrameParams,
@@ -229,6 +230,91 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getCreateDesklineInviteMutationOptions(options), queryClient);
+    }
+
+export const getRegisterDesklineStandingUrl = () => {
+
+
+
+
+  return `/api/deskline/standing`
+}
+
+/**
+ * Unattended host registration. The access code is derived from the host's saved key; a viewer that joins it is live without approval.
+ */
+export const registerDesklineStanding = async (desklineStandingKey: DesklineStandingKey, options?: Parameters<typeof customFetch>[1]): Promise<DesklineInvite> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<DesklineInvite>(getRegisterDesklineStandingUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(desklineStandingKey)
+  }
+);}
+
+
+
+
+
+export const getRegisterDesklineStandingMutationKey = () => ['registerDesklineStanding'] as const;
+
+export const getRegisterDesklineStandingMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerDesklineStanding>>, TError,RegisterDesklineStandingMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof registerDesklineStanding>>, TError,RegisterDesklineStandingMutationVariables, TContext> => {
+
+const mutationKey = getRegisterDesklineStandingMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof registerDesklineStanding>>, RegisterDesklineStandingMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  registerDesklineStanding(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RegisterDesklineStandingMutationResult = NonNullable<Awaited<ReturnType<typeof registerDesklineStanding>>>
+    export type RegisterDesklineStandingMutationBody = BodyType<DesklineStandingKey>
+    export type RegisterDesklineStandingMutationError = ErrorType<unknown>
+    export type RegisterDesklineStandingMutationVariables = {data: BodyType<DesklineStandingKey>}
+
+    export const useRegisterDesklineStanding = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerDesklineStanding>>, TError,RegisterDesklineStandingMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof registerDesklineStanding>>,
+        TError,
+        RegisterDesklineStandingMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRegisterDesklineStandingMutationOptions(options), queryClient);
     }
 
 export const getJoinDesklineUrl = () => {

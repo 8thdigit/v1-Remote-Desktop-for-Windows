@@ -4,7 +4,7 @@ import { Link } from 'wouter';
 import { ArrowRight, Check, Copy, Download, Monitor, ShieldCheck, UserRound } from 'lucide-react';
 import LiveSession from '@/LiveSession';
 
-type Session = { token: string; verification: string };
+type Session = { token: string; verification: string; preapproved: boolean };
 
 const HEX = /^[A-F0-9]{12}$/;
 
@@ -56,7 +56,7 @@ export default function Home() {
     }
     try {
       const viewer = await join.mutateAsync({ data: { code } });
-      setSession({ token: viewer.token, verification: viewer.verification });
+      setSession({ token: viewer.token, verification: viewer.verification, preapproved: viewer.preapproved });
       setCode('');
     } catch (reason) {
       const status = typeof reason === 'object' && reason !== null && 'status' in reason ? reason.status : undefined;
@@ -71,6 +71,7 @@ export default function Home() {
       <LiveSession
         token={session.token}
         verification={session.verification}
+        preapproved={session.preapproved}
         onLeave={(message) => {
           setSession(null);
           setNotice(message ?? 'Session ended. The helper is no longer connected.');

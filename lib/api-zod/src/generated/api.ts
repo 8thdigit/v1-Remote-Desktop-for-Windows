@@ -23,6 +23,22 @@ export const CreateDesklineInviteResponse = zod.object({
 })
 
 
+/**
+ * Unattended host registration. The access code is derived from the host's saved key; a viewer that joins it is live without approval.
+ */
+export const registerDesklineStandingBodyKeyRegExp = new RegExp('^[A-Za-z0-9_-]{43}$');
+
+
+export const RegisterDesklineStandingBody = zod.object({
+  "key": zod.string().regex(registerDesklineStandingBodyKeyRegExp)
+})
+
+export const RegisterDesklineStandingResponse = zod.object({
+  "code": zod.string(),
+  "token": zod.string()
+})
+
+
 export const joinDesklineBodyCodeRegExp = new RegExp('^[A-F0-9]{12}$');
 
 
@@ -32,7 +48,8 @@ export const JoinDesklineBody = zod.object({
 
 export const JoinDesklineResponse = zod.object({
   "token": zod.string(),
-  "verification": zod.string()
+  "verification": zod.string(),
+  "preapproved": zod.boolean()
 })
 
 
