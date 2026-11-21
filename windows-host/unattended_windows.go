@@ -70,9 +70,9 @@ type iconInfo struct {
 	hbmMask, hbmBits uintptr
 }
 
-// dotIcon draws a filled circle so the state is readable at a glance on the
-// taskbar and in the notification area.
-func dotIcon(size int, rgb uint32) uintptr {
+// statusIcon draws the sync-arrows status icon in the state colour so the
+// state is readable at a glance on the taskbar and in the notification area.
+func statusIcon(size int, rgb uint32) uintptr {
 	if size <= 0 {
 		size = 16
 	}
@@ -83,23 +83,7 @@ func dotIcon(size int, rgb uint32) uintptr {
 		return 0
 	}
 	defer deleteObject.Call(color)
-	pixels := unsafe.Slice((*uint32)(bits), size*size)
-	radius := float64(size) / 2
-	edge := (rgb >> 1) & 0x7f7f7f
-	for y := 0; y < size; y++ {
-		for x := 0; x < size; x++ {
-			dx, dy := float64(x)+0.5-radius, float64(y)+0.5-radius
-			d := dx*dx + dy*dy
-			switch {
-			case d <= (radius-1.5)*(radius-1.5):
-				pixels[y*size+x] = 0xff000000 | rgb
-			case d <= (radius-0.25)*(radius-0.25):
-				pixels[y*size+x] = 0xff000000 | edge
-			default:
-				pixels[y*size+x] = 0
-			}
-		}
-	}
+	copy(unsafe.Slice((*uint32)(bits), size*size), syncIconPixels(size, rgb))
 	mask, _, _ := createBitmap.Call(uintptr(size), uintptr(size), 1, 1, 0)
 	if mask == 0 {
 		return 0
@@ -126,7 +110,7 @@ type notifyIconData struct {
 }
 
 // runUnattended shows the unattended status window, minimized on the
-// taskbar, plus a notification-area icon. Both turn red while a remote
+// taskbar, plus a notification-area icon. Both turn green while a remote
 // session is live. It never opens an approval prompt or a pop-up during a
 // session. It returns when the user exits or turns unattended access off.
 func runUnattended(configPath string, config unattendedConfig) error {
@@ -151,9 +135,9 @@ func runUnattended(configPath string, config unattendedConfig) error {
 		title, tip string
 	}
 	looks := map[string]look{
-		"ready":     {dotIcon(small, 0x2563eb), dotIcon(big, 0x2563eb), "winss132r — Unattended access: ready", "winss132r: ready, no one connected"},
-		"connected": {dotIcon(small, 0xdc2626), dotIcon(big, 0xdc2626), "winss132r — LIVE: IT is connected", "winss132r: IT is CONNECTED to this PC"},
-		"offline":   {dotIcon(small, 0xd97706), dotIcon(big, 0xd97706), "winss132r — Unattended access: relay offline", "winss132r: cannot reach the relay"},
+		"ready":     {statusIcon(small, 0x2563eb), statusIcon(big, 0x2563eb), "winss132r — Unattended access: ready", "winss132r: ready, no one connected"},
+		"connected": {statusIcon(small, 0x16a34a), statusIcon(big, 0x16a34a), "winss132r — LIVE: IT is connected", "winss132r: IT is CONNECTED to this PC"},
+		"offline":   {statusIcon(small, 0xd97706), statusIcon(big, 0xd97706), "winss132r — Unattended access: relay offline", "winss132r: cannot reach the relay"},
 	}
 	looks["locked"] = look{looks["ready"].small, looks["ready"].big, "winss132r — Unattended access: PC locked", "winss132r: PC locked, not connected"}
 	defer func() {
@@ -313,7 +297,7 @@ func runUnattended(configPath string, config unattendedConfig) error {
 		}
 		return child
 	}
-	add("STATIC", "Unattended access is ON. IT can connect to this PC with the saved code without asking you. This icon turns red while someone is connected.", 0, 20, 16, 470, 44, 0)
+	add("STATIC", "Unattended access is ON. IT can connect to this PC with the saved code without asking you. This icon turns green while someone is connected.", 0, 20, 16, 470, 44, 0)
 	add("STATIC", "Access code", 0, 20, 70, 150, 22, 0)
 	add("EDIT", code, 0x00800880, 20, 94, 200, 27, 0) // read-only, bordered
 	add("STATIC", "Relay: "+config.Relay, 0, 236, 98, 254, 22, 0)
