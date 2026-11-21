@@ -127,3 +127,27 @@ test("an unattended host's Initiate request is visible only to viewers that know
   heartbeat(20_000);
   assert.deepEqual(store.calls([second.code]), []);
 });
+
+test("presence reports online and busy unattended PCs only to viewers that know the code", () => {
+  let now = 1_000_000;
+  const store = createDesklineStore(() => now);
+  const host = store.standing("F".repeat(43), "RECEPTION-PC<b>");
+  const other = store.standing("G".repeat(43));
+  const missing = standingCode("H".repeat(43));
+  assert.deepEqual(store.presence([host.code, missing]), [{code: host.code, name: "RECEPTION-PCb", state: "online"}]);
+  // Initiate falls back to the registered name.
+  const s = store.authenticate(bearer(host.token), "host");
+  store.call(s, "");
+  assert.deepEqual(store.calls([host.code]), [{code: host.code, name: "RECEPTION-PCb"}]);
+  // A live session is busy, then gone after it ends.
+  store.join(host.code);
+  assert.deepEqual(store.presence([host.code]), [{code: host.code, name: "RECEPTION-PCb", state: "busy"}]);
+  store.end(s);
+  assert.deepEqual(store.presence([host.code]), []);
+  // A host that stops refreshing goes offline.
+  now += 25_000;
+  assert.deepEqual(store.presence([other.code]), []);
+  // Attended invites never show presence.
+  const attended = store.invite();
+  assert.deepEqual(store.presence([attended.code]), []);
+});

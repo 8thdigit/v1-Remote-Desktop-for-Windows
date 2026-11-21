@@ -41,7 +41,7 @@ router.post("/standing", (req, res) => {
   if (tooManyStanding()) { res.status(429).json({error: "Relay busy. Try again in a minute."}); return; }
   const body = RegisterDesklineStandingBody.safeParse(req.body);
   if (!body.success) { res.status(400).json({error: "Invalid unattended access key."}); return; }
-  const standing = store.standing(body.data.key);
+  const standing = store.standing(body.data.key, body.data.name);
   if (!standing) { res.status(409).json({error: "Relay busy, or the code is in use by another session."}); return; }
   res.status(201).json(RegisterDesklineStandingResponse.parse(standing));
 });
@@ -57,7 +57,7 @@ router.post("/calls", (req, res) => {
   if (tooManyCallChecks()) { res.status(429).json({error: "Too many checks. Try again in a minute."}); return; }
   const body = ListDesklineCallsBody.safeParse(req.body);
   if (!body.success) { res.status(400).json({error: "Send up to 50 saved access codes."}); return; }
-  res.json(ListDesklineCallsResponse.parse({calls: store.calls(body.data.codes)}));
+  res.json(ListDesklineCallsResponse.parse({calls: store.calls(body.data.codes), presence: store.presence(body.data.codes)}));
 });
 router.post("/join", (req, res) => {
   if (tooManyJoins()) { res.status(429).json({error: "Too many attempts. Try again in a minute."}); return; }

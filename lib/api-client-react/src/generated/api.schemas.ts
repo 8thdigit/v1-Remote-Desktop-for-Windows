@@ -73,6 +73,8 @@ export interface DesklineCode {
 export interface DesklineStandingKey {
   /** @pattern ^[A-Za-z0-9_-]{43}$ */
   key: string;
+  /** @maxLength 64 */
+  name?: string;
 }
 
 export interface DesklineCall {
@@ -93,8 +95,23 @@ export type DesklineCallListCallsItem = {
   name: string;
 };
 
+export type DesklineCallListPresenceItemState = typeof DesklineCallListPresenceItemState[keyof typeof DesklineCallListPresenceItemState];
+
+
+export const DesklineCallListPresenceItemState = {
+  online: 'online',
+  busy: 'busy',
+} as const;
+
+export type DesklineCallListPresenceItem = {
+  code: string;
+  name: string;
+  state: DesklineCallListPresenceItemState;
+};
+
 export interface DesklineCallList {
   calls: DesklineCallListCallsItem[];
+  presence?: DesklineCallListPresenceItem[];
 }
 
 export interface DesklineInvite {

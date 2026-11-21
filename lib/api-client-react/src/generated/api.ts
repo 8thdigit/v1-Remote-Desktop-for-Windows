@@ -414,7 +414,7 @@ export const getListDesklineCallsUrl = () => {
 }
 
 /**
- * Which of the viewer's saved access codes have a pending Initiate request.
+ * Which of the viewer's saved access codes have a pending Initiate request, and which of them are online (waiting) or in a session. Codes that are not listed are offline.
  */
 export const listDesklineCalls = async (desklineCallQuery: DesklineCallQuery, options?: Parameters<typeof customFetch>[1]): Promise<DesklineCallList> => {
 

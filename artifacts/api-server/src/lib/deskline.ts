@@ -21,6 +21,8 @@ export type Session = {
   verification?: string;
   state: "waiting" | "pending" | "live";
   preapproved: boolean;
+  // The PC name an unattended host reports, shown to viewers that know its code.
+  name?: string;
   // Set when an unattended host pressed Initiate: viewers that already know
   // this code see the request and can accept it by joining.
   call?: { name: string; until: number };
@@ -33,11 +35,20 @@ export type Session = {
   input: { item: DesklineInput; time: number }[];
 };
 
+// PC names are display text only: keep letters, digits, space, dot, dash, underscore.
+function cleanName(name: string) {
+  return name.replace(/[^\w .-]/g, "").trim().slice(0, 40);
+}
+
 export function createDesklineStore(clock = Date.now) {
   const codes = new Map<string, Session>();
   const peers = new Map<string, { session: Session; role: "host" | "viewer" }>();
+  // Unattended sessions by access code, including live ones (which are no
+  // longer joinable, so they are not in codes). Used for presence only.
+  const standings = new Map<string, Session>();
   const end = (s: Session) => {
-    codes.delete(s.code);
+    if (codes.get(s.code) === s) codes.delete(s.code);
+    if (standings.get(s.code) === s) standings.delete(s.code);
     peers.delete(s.host);
     if (s.viewer) peers.delete(s.viewer);
     s.frame = undefined;
@@ -73,7 +84,7 @@ export function createDesklineStore(clock = Date.now) {
     },
     // Registers (or refreshes) the waiting session of an unattended host.
     // A viewer that joins it goes live at once, without host approval.
-    standing(key: string) {
+    standing(key: string, name = "") {
       sweep();
       if (!/^[\w-]{43}$/.test(key)) return;
       const code = standingCode(key);
@@ -82,21 +93,24 @@ export function createDesklineStore(clock = Date.now) {
         if (!previous.preapproved) return;
         end(previous);
       }
+      const live = standings.get(code);
+      if (live) end(live);
       if (peers.size >= 96) return;
       const host = randomBytes(32).toString("base64url");
       const now = clock();
       const session: Session = {
-        code, host, state: "waiting", preapproved: true, expires: now + inviteTTL,
+        code, host, state: "waiting", preapproved: true, name: cleanName(name), expires: now + inviteTTL,
         hostSeen: now, viewerSeen: 0, sequence: 0, lastFrame: 0, input: [],
       };
       codes.set(code, session);
+      standings.set(code, session);
       peers.set(host, {session, role: "host"});
       return {code, token: host};
     },
     // An unattended host asks the viewers that know its code to connect.
     call(s: Session, name: string, until = clock() + callTTL) {
       if (!s.preapproved || s.state !== "waiting" || !codes.has(s.code)) return false;
-      s.call = {name: name.replace(/[^\w .-]/g, "").slice(0, 40), until: Math.min(until, clock() + callTTL)};
+      s.call = {name: cleanName(name) || s.name || "", until: Math.min(until, clock() + callTTL)};
       return true;
     },
     // Reports which of the given codes have a pending Initiate request. A
@@ -107,6 +121,16 @@ export function createDesklineStore(clock = Date.now) {
       for (const code of new Set(list)) {
         const s = codes.get(code);
         if (s?.call && s.call.until > now && s.state === "waiting" && !expired(s)) found.push({code, name: s.call.name});
+      }
+      return found;
+    },
+    // Reports which of the given codes have an unattended host online
+    // (waiting for a viewer) or busy (in a session). Others are offline.
+    presence(list: string[]) {
+      const found: {code: string; name: string; state: "online" | "busy"}[] = [];
+      for (const code of new Set(list)) {
+        const s = standings.get(code);
+        if (s && !expired(s)) found.push({code, name: s.name ?? "", state: s.state === "waiting" ? "online" : "busy"});
       }
       return found;
     },

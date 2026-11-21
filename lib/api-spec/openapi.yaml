@@ -66,7 +66,10 @@ paths:
   /deskline/calls:
     post:
       operationId: listDesklineCalls
-      description: Which of the viewer's saved access codes have a pending Initiate request.
+      description: >-
+        Which of the viewer's saved access codes have a pending Initiate
+        request, and which of them are online (waiting) or in a session.
+        Codes that are not listed are offline.
       requestBody:
         required: true
         content:
@@ -167,6 +170,7 @@ components:
       required: [key]
       properties:
         key: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
+        name: {type: string, maxLength: 64}
     DesklineCall:
       type: object
       properties:
@@ -191,6 +195,15 @@ components:
             properties:
               code: {type: string}
               name: {type: string}
+        presence:
+          type: array
+          items:
+            type: object
+            required: [code, name, state]
+            properties:
+              code: {type: string}
+              name: {type: string}
+              state: {type: string, enum: [online, busy]}
     DesklineInvite:
       type: object
       required: [code, token]

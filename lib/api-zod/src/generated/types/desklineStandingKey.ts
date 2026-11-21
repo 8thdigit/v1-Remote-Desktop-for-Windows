@@ -9,4 +9,6 @@
 export interface DesklineStandingKey {
   /** @pattern ^[A-Za-z0-9_-]{43}$ */
   key: string;
+  /** @maxLength 64 */
+  name?: string;
 }

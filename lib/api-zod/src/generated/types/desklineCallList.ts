@@ -6,7 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { DesklineCallListCallsItem } from './desklineCallListCallsItem';
+import type { DesklineCallListPresenceItem } from './desklineCallListPresenceItem';
 
 export interface DesklineCallList {
   calls: DesklineCallListCallsItem[];
+  presence?: DesklineCallListPresenceItem[];
 }

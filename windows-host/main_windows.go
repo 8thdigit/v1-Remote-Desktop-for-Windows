@@ -233,7 +233,7 @@ func unattendedRound(parent context.Context, origin, key, name string, stopSessi
 		return false, err
 	}
 	var invitation invite
-	if err := r.postJSON(parent, "standing", map[string]string{"key": key}, &invitation); err != nil {
+	if err := r.postJSON(parent, "standing", map[string]string{"key": key, "name": name}, &invitation); err != nil {
 		return false, err
 	}
 	if invitation.Code != standingCode(key) || !tokenFormat.MatchString(invitation.Token) {

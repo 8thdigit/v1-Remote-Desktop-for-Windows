@@ -437,3 +437,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:50;op
 .dl-rise{animation:dl-rise .7s cubic-bezier(.2,.7,.2,1) both}
 @keyframes dl-pulse{0%,100%{opacity:1}50%{opacity:.3}}
 .dl-pulse{animation:dl-pulse 1.6s ease-in-out infinite}
+.dl-shell{
+  background:
+    radial-gradient(1200px 520px at 85% -10%, hsl(14 78% 50% / 0.10), transparent 60%),
+    radial-gradient(900px 480px at -10% 10%, hsl(174 45% 34% / 0.08), transparent 60%),
+    hsl(var(--background));
+}
+@keyframes dl-ping{0%{transform:scale(1);opacity:.7}80%,100%{transform:scale(1.35);opacity:0}}
+.dl-ping{animation:dl-ping 1.6s cubic-bezier(0,0,.2,1) infinite}
+@media (prefers-reduced-motion: reduce){.dl-rise,.dl-pulse,.dl-ping{animation:none}}

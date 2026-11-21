@@ -46,12 +46,18 @@ can turn on a saved, pre-approved access code:
 
 ### Initiate from the PC
 
-The PC can also ask IT to connect. In the viewer, IT saves the PC's access
-code under **Unattended PCs on this browser** (it stays in that browser only).
-On the PC, click the winss132r icon and select **Initiate — ask IT to connect**.
-The relay shows the request, with the PC's name, to any viewer that saved that
-code, for two minutes. IT selects **Accept** and the session starts at once.
+The PC can also ask IT to connect. In the viewer's **Unattended PCs** tab, IT
+saves the PC's access code (it stays in that browser only); a PC is also saved
+automatically the first time IT connects to it with its access code.
+On the PC, click the winss132r icon and select **Initiate — ask IT to connect**
+(select it again to resend). The relay shows the request, with the PC's name,
+to any viewer that saved that code, for two minutes. IT gets an Accept banner,
+a chime and, if allowed, a desktop alert; **Accept** starts the session at once.
 Viewers that have not saved the code see nothing.
+
+The **Unattended PCs** tab also shows each saved PC as online, in a session or
+offline, lets IT label and connect to it directly, and keeps a history of new
+and previous requests (waiting, accepted, missed, dismissed) in that browser.
 
 ### Notification-area icon
 
@@ -62,12 +68,14 @@ reached, and green while IT is connected. Its tooltip reads
 **Connect: +01** while a session is live, counting sessions since the app
 started (+02 for the second, and so on). Click the icon (left or right) for a
 small menu with the status, the access code, the connection count,
-**Initiate**, **Stop current session**, **Turn off unattended access…**
+**Copy access code**, **Initiate**, **Stop current session**, **Turn off unattended access…**
 (deletes the key and the startup entry), and **Exit** (unattended access
 starts again at next sign-in). Ctrl+2 and F12 still end a live session, and
 locking Windows still stops sharing. Windows 11 may put new notification-area
 icons in the overflow; pin it under Settings > Personalization > Taskbar >
-Other system tray icons.
+Other system tray icons. Short notification balloons say when a request was
+sent and when IT connects or disconnects. Starting winss132r again while it
+runs only shows a balloon on the existing icon; it opens no window.
 
 Anyone with the access code can control the PC while it is signed in, so
 treat the code like a password. To change it, turn unattended access off and

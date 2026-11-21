@@ -25,6 +25,17 @@ var (
 	trackPopupMenu    = user.NewProc("TrackPopupMenu")
 	getCursorPos      = user.NewProc("GetCursorPos")
 	postMessage       = user.NewProc("PostMessageW")
+	findWindow        = user.NewProc("FindWindowW")
+	openClipboard     = user.NewProc("OpenClipboard")
+	emptyClipboard    = user.NewProc("EmptyClipboard")
+	setClipboardData  = user.NewProc("SetClipboardData")
+	closeClipboard    = user.NewProc("CloseClipboard")
+	kernel32          = syscall.NewLazyDLL("kernel32.dll")
+	globalAlloc       = kernel32.NewProc("GlobalAlloc")
+	globalLock        = kernel32.NewProc("GlobalLock")
+	globalUnlock      = kernel32.NewProc("GlobalUnlock")
+	globalFree        = kernel32.NewProc("GlobalFree")
+	moveMemory        = kernel32.NewProc("RtlMoveMemory")
 )
 
 const (
@@ -33,7 +44,38 @@ const (
 	runValue        = "winss132r"
 	hkeyCurrentUser = 0x80000001
 	trayMessage     = 0x8001 // WM_APP + 1
+	showAgain       = 0x8002 // WM_APP + 2: a second copy was started
 )
+
+// copyText puts text on the clipboard.
+func copyText(window uintptr, text string) bool {
+	data, err := syscall.UTF16FromString(text)
+	if err != nil {
+		return false
+	}
+	if r, _, _ := openClipboard.Call(window); r == 0 {
+		return false
+	}
+	defer closeClipboard.Call()
+	emptyClipboard.Call()
+	size := uintptr(len(data) * 2)
+	memory, _, _ := globalAlloc.Call(0x0002, size) // GMEM_MOVEABLE
+	if memory == 0 {
+		return false
+	}
+	target, _, _ := globalLock.Call(memory)
+	if target == 0 {
+		globalFree.Call(memory)
+		return false
+	}
+	moveMemory.Call(target, uintptr(unsafe.Pointer(&data[0])), size)
+	globalUnlock.Call(memory)
+	if r, _, _ := setClipboardData.Call(13, memory); r == 0 { // CF_UNICODETEXT
+		globalFree.Call(memory)
+		return false
+	}
+	return true
+}
 
 // setAutostart starts winss132r in unattended mode when this Windows user
 // signs in, so the saved access works after a restart.
@@ -123,9 +165,12 @@ type notifyIconData struct {
 func runUnattended(configPath string, config unattendedConfig, announce bool) error {
 	mutexName := textPtr(`Local\winss132r-unattended`)
 	if m, _, lastErr := createMutex.Call(0, 0, uintptr(unsafe.Pointer(mutexName))); m != 0 && lastErr == syscall.Errno(183) {
-		// Already running (for example, started at sign-in).
-		messageBox.Call(0, uintptr(unsafe.Pointer(textPtr("winss132r unattended access is already running.\n\nClick its icon in the notification area to see the status or to initiate a session."))),
-			uintptr(unsafe.Pointer(textPtr("winss132r"))), 0x40) // MB_ICONINFORMATION
+		// Already running (for example, started at sign-in). Ask the running
+		// copy to point at its notification-area icon instead of opening a
+		// window here.
+		if running, _, _ := findWindow.Call(uintptr(unsafe.Pointer(textPtr(unattendedClass))), 0); running != 0 {
+			postMessage.Call(running, showAgain, 0, 0)
+		}
 		return nil
 	}
 	const (
@@ -133,6 +178,7 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 		stopItem     = 301
 		disableItem  = 302
 		exitItem     = 303
+		copyItem     = 304
 	)
 	code := formatCode(standingCode(config.Key))
 	small := metric(49)
@@ -185,6 +231,19 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 		shellNotifyIcon.Call(action, uintptr(unsafe.Pointer(&tray)))
 	}
 
+	notify := func(title, text string) {
+		balloon := tray
+		balloon.flags = 0x10 // NIF_INFO
+		balloon.info = [256]uint16{}
+		balloon.infoTitle = [64]uint16{}
+		info, _ := syscall.UTF16FromString(text)
+		copy(balloon.info[:len(balloon.info)-1], info)
+		heading, _ := syscall.UTF16FromString(title)
+		copy(balloon.infoTitle[:len(balloon.infoTitle)-1], heading)
+		balloon.infoFlags = 0x1                                    // NIIF_INFO
+		shellNotifyIcon.Call(1, uintptr(unsafe.Pointer(&balloon))) // NIM_MODIFY
+	}
+
 	showMenu := func(window uintptr) {
 		menu, _, _ := createPopupMenu.Call()
 		if menu == 0 {
@@ -208,11 +267,15 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 		item(mfGrayed, 0, "Access code: "+code)
 		item(mfGrayed, 0, "Connections since start: "+twoDigits(connections))
 		item(mfSeparator, 0, "")
-		if state == "ready" {
+		switch state {
+		case "ready":
 			item(mfString, initiateItem, "Initiate — ask IT to connect")
-		} else {
+		case "calling":
+			item(mfString, initiateItem, "Initiate again — resend the request")
+		default:
 			item(mfGrayed, initiateItem, "Initiate — ask IT to connect")
 		}
+		item(mfString, copyItem, "Copy access code")
 		if state == "connected" {
 			item(mfString, stopItem, "Stop current session")
 		} else {
@@ -240,6 +303,9 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 				showMenu(window)
 			}
 			return 0
+		case showAgain:
+			notify("winss132r is already running", "Unattended access runs from this icon. Click it for the status, the access code, or Initiate.")
+			return 0
 		case 0x0010: // WM_CLOSE: keep running in the notification area; Exit quits.
 			return 0
 		case 0x0002: // WM_DESTROY
@@ -249,8 +315,12 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 			return 0
 		case 0x0111: // WM_COMMAND from the menu
 			switch wParam & 0xffff {
+			case copyItem:
+				if copyText(window, code) {
+					notify("Access code copied", code)
+				}
 			case initiateItem:
-				if state == "ready" {
+				if state == "ready" || state == "calling" {
 					select {
 					case initiate <- struct{}{}:
 					default:
@@ -278,8 +348,14 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 			for {
 				select {
 				case next := <-updates:
-					if next.state == "connected" && state != "connected" {
+					switch {
+					case next.state == "connected" && state != "connected":
 						connections++
+						notify(connectStatus(connections)+" — IT is connected", "IT can view and control this PC. Press Ctrl+2 or F12 to stop.")
+					case state == "connected" && next.state != "connected":
+						notify("Remote session ended", next.text)
+					case next.state == "calling" && state != "calling":
+						notify("Request sent to IT", "IT sees an Accept button in the browser. The request lasts 2 minutes.")
 					}
 					state = next.state
 					detail = next.text
@@ -308,8 +384,9 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 	}
 	// A hidden top-level window that is never shown: it only receives the
 	// notification-area icon and menu messages, so there is no taskbar button.
+	// WS_EX_TOOLWINDOW plus WS_POPUP, and ShowWindow is never called for it.
 	window, _, _ := createWindow.Call(0x80, uintptr(unsafe.Pointer(className)), uintptr(unsafe.Pointer(textPtr("winss132r"))), // WS_EX_TOOLWINDOW
-		0, 0, 0, 0, 0, 0, 0, instance, 0)
+		0x80000000, 0, 0, 0, 0, 0, 0, instance, 0) // WS_POPUP
 	if window == 0 {
 		return windowError
 	}
@@ -320,14 +397,7 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 	tray.window = window
 	setTray(0) // NIM_ADD
 	if announce {
-		balloon := tray
-		balloon.flags = 0x10 // NIF_INFO
-		info, _ := syscall.UTF16FromString("Unattended access is on. Click this icon for the status, the access code, or Initiate.")
-		copy(balloon.info[:len(balloon.info)-1], info)
-		title, _ := syscall.UTF16FromString("winss132r")
-		copy(balloon.infoTitle[:len(balloon.infoTitle)-1], title)
-		balloon.infoFlags = 0x1 // NIIF_INFO
-		shellNotifyIcon.Call(1, uintptr(unsafe.Pointer(&balloon)))
+		notify("winss132r", "Unattended access is on. Click this icon for the status, the access code, or Initiate.")
 	}
 
 	hostName, _ := os.Hostname()

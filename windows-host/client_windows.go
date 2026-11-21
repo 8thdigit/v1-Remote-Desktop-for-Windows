@@ -273,8 +273,8 @@ func runClient(unattendedConfigPath string) (*unattendedConfig, error) {
 				}
 				if !ask(window, "Turn on unattended access for this PC?\n\n"+
 					"IT will be able to view and control this PC at any time with a saved access code, without asking you first. "+
-					"winss132r will start when you sign in. A taskbar and notification-area icon stays visible and turns red while someone is connected. "+
-					"You can turn this off from that window.") {
+					"winss132r will start when you sign in and run only as an icon in the notification area (no window), which turns green while someone is connected. "+
+					"Click that icon to see the access code, to Initiate a session, or to turn this off.") {
 					break
 				}
 				config, err := enableUnattended(unattendedConfigPath, address)
