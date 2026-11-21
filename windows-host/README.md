@@ -46,9 +46,10 @@ can turn on a saved, pre-approved access code:
 
 There are no pop-ups while unattended access runs. The status window stays
 minimized on the taskbar, and an icon is added to the notification area. Both
-are blue when ready, amber when the relay can't be reached, and turn **red**
-(with a taskbar badge and a "LIVE" title) while IT is connected. Click either
-to see the connection status, the number of connections since the app started,
+show a sync-arrows icon that is blue when ready, amber when the relay can't be
+reached, and green (with a taskbar badge and a "LIVE" title) while IT is
+connected. Click either to see the connection status, the number of
+connections since the app started,
 and the access code. From that window the user can **Stop current session**,
 **Exit** (unattended access starts again at next sign-in), or **Turn off
 unattended access**, which deletes the key and the startup entry. Ctrl+2 and
