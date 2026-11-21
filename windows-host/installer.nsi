@@ -6,6 +6,11 @@ RequestExecutionLevel user
 SetCompressor /SOLID lzma
 BrandingText "winss132r  |  Attended remote support"
 
+!ifdef RELEASE_SIGNER
+!uninstfinalize '"${RELEASE_SIGNER}" "%1"' = 0
+!finalize '"${RELEASE_SIGNER}" "%1"' = 0
+!endif
+
 !include "MUI2.nsh"
 !include "x64.nsh"
 !define MUI_ABORTWARNING

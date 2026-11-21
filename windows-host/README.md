@@ -41,3 +41,35 @@ missing from a fresh checkout. Keep the API and viewer on the same origin,
 with `/api/deskline/` routed to the API service behind HTTPS. On Windows,
 verify install/uninstall, pairing on two devices, streaming, remote input,
 display scaling, F12, and locking Windows before distributing this preview.
+
+## Trusted publisher signing
+
+Smart App Control checks publisher trust, not the installer filename. Leave
+it enabled. A self-signed certificate or an open-source signing tool by itself
+does not provide a publisher that Windows trusts.
+
+- [SignPath Foundation](https://signpath.org/) offers free signing for approved
+  open-source projects. It verifies the artifact against the public repository;
+  use its required build and submission process if accepted. Keep private
+  repositories private unless you have explicitly decided to publish them.
+- [Microsoft Artifact Signing](https://azure.microsoft.com/en-us/pricing/details/artifact-signing/)
+  offers a paid Basic plan. Use a public-trust signing profile and complete
+  publisher identity validation before attempting to sign a release.
+
+For a provider that accepts individual binaries, run the build in an approved
+build environment with `bash windows-host/build.sh --sign-with /absolute/path/to/signer`.
+The signed build requires an NSIS version that supports `!uninstfinalize`:
+check with `makensis -CMDHELP '!uninstfinalize'`, or set `MAKENSIS` to the path
+of a newer compiler. The older preview compiler can still build unsigned
+installers but is deliberately refused for signing.
+The executable signer must accept one local file path, sign and timestamp it
+in place through the authorized provider, verify the result, and return
+nonzero on failure. It is called for the host, embedded uninstaller, and
+installer. This hook does not enroll a publisher or provide credentials.
+Keep private keys and provider credentials outside the repository.
+
+The release is staged under `windows-host/dist/release.*`, not served by the
+preview. Before distribution, use Windows SDK SignTool (`signtool verify /pa /all /v`)
+on the installer, the installed host, and the installed uninstaller, check that
+the expected publisher appears, then test installation and launch with Smart
+App Control enabled. A signature check is not a substitute for that runtime test.
