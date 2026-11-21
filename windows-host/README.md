@@ -21,7 +21,9 @@ If you installed the older Deskline preview, uninstall it separately from Window
 4. The helper can enable remote input from the viewer. The Windows user can
    stop the session with **Ctrl+2**, **F12**, or **Stop sharing** on the
    always-on-top indicator. The setup window minimizes to the taskbar on
-   approval. Shift-right-click its taskbar button to open the Windows system
+   approval. Its taskbar icon shows a live badge when Windows supports
+   overlays; click the taskbar button to restore the client and see session
+   status and the **Stop sharing** button. Shift-right-click its taskbar button to open the Windows system
    menu with **Stop sharing** and **Close** (or open the window and press
    Alt+Space). Closing the app or the indicator ends the session. The helper
    can use **End session**. Locking Windows stops the host session.

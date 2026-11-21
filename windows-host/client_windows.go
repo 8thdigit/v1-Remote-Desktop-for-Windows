@@ -64,6 +64,8 @@ func runClient() error {
 		stopMenu = 0x210
 	)
 	const idleText = "Start a session to get a fresh one-time code. Nothing is shared until you approve."
+	const idleTitle = "winss132r — Windows support"
+	const liveTitle = "winss132r — LIVE: sharing and remote control"
 	configDir, configErr := os.UserConfigDir()
 	var path, saved string
 	initialStatus := idleText
@@ -78,6 +80,26 @@ func runClient() error {
 	instance, _, _ := getModule.Call(0)
 	cursor, _, _ := user.NewProc("LoadCursorW").Call(0, 32512)
 	className := textPtr("Winss132rSupportClient")
+	taskbarMessage, _, _ := registerWindowMessage.Call(uintptr(unsafe.Pointer(textPtr("TaskbarButtonCreated"))))
+	overlay := newTaskbarOverlay()
+	defer func() { overlay.close() }()
+	liveIcon, _, _ := user.NewProc("LoadIconW").Call(0, 32516) // Windows information badge.
+	liveDescription := textPtr("Screen sharing and remote control active")
+	sharing := false
+	taskbarReady := false
+	updateTaskbar := func(window uintptr) {
+		if sharing {
+			setText(window, liveTitle)
+			if taskbarReady && liveIcon != 0 {
+				overlay.set(window, liveIcon, liveDescription)
+			}
+		} else {
+			setText(window, idleTitle)
+			if taskbarReady {
+				overlay.set(window, 0, nil)
+			}
+		}
+	}
 	dpi := uintptr(96)
 	if p := user.NewProc("GetDpiForSystem"); p.Find() == nil {
 		if value, _, _ := p.Call(); value != 0 {
@@ -127,6 +149,11 @@ func runClient() error {
 		}
 	}
 	proc := syscall.NewCallback(func(window, msg, wParam, lParam uintptr) uintptr {
+		if taskbarMessage != 0 && msg == taskbarMessage {
+			taskbarReady = true
+			updateTaskbar(window)
+			return 0
+		}
 		switch msg {
 		case 0x0112: // WM_SYSCOMMAND
 			if wParam&0xfff0 == stopMenu {
@@ -220,6 +247,8 @@ func runClient() error {
 					if next.state == "finished" {
 						<-done
 						cancel, done, answer = nil, nil, nil
+						sharing = false
+						updateTaskbar(window)
 						if closing {
 							destroyWindow.Call(window)
 							return 0
@@ -238,6 +267,8 @@ func runClient() error {
 					if state == "pending" {
 						setFocus.Call(verification)
 					} else if state == "live" {
+						sharing = true
+						updateTaskbar(window)
 						showWindow.Call(window, 6) // Minimize setup; the live indicator is a separate window.
 					}
 				default:
@@ -254,7 +285,7 @@ func runClient() error {
 	if atom, _, _ := registerClass.Call(uintptr(unsafe.Pointer(&class))); atom == 0 {
 		return windowError
 	}
-	title := textPtr("winss132r — Windows support")
+	title := textPtr(idleTitle)
 	window, _, _ := createWindow.Call(0x10000, uintptr(unsafe.Pointer(className)), uintptr(unsafe.Pointer(title)),
 		0x00ca0000, 0x80000000, 0x80000000, px(580), px(420), 0, 0, instance, 0)
 	if window == 0 {
