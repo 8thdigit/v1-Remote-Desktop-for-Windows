@@ -36,6 +36,7 @@ paths:
   /deskline/join:
     post:
       operationId: joinDeskline
+      security: [{browserLogin: []}]
       requestBody:
         required: true
         content:
@@ -50,13 +51,13 @@ paths:
   /deskline/end:
     post:
       operationId: endDeskline
-      security: [{sessionToken: []}]
+      security: [{sessionToken: []}, {browserLogin: [], viewerCapability: []}]
       responses:
         "204": {description: Session ended}
   /deskline/input:
     post:
       operationId: sendDesklineInput
-      security: [{sessionToken: []}]
+      security: [{browserLogin: [], viewerCapability: []}]
       requestBody:
         required: true
         content:
@@ -88,7 +89,7 @@ paths:
   /deskline/frame:
     get:
       operationId: getDesklineFrame
-      security: [{sessionToken: []}]
+      security: [{browserLogin: [], viewerCapability: []}]
       parameters:
         - {in: query, name: after, schema: {type: integer, minimum: 0}}
       responses:
@@ -102,6 +103,8 @@ paths:
 components:
   securitySchemes:
     sessionToken: { type: http, scheme: bearer }
+    browserLogin: { type: apiKey, in: cookie, name: __session }
+    viewerCapability: { type: apiKey, in: header, name: X-Viewer-Session }
   schemas:
     DesklineTick:
       type: object

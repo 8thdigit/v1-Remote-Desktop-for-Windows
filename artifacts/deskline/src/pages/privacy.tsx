@@ -17,7 +17,7 @@ const sections = [
   },
   {
     title: 'Website requests and logs',
-    text: 'No account is required. App request logs can include technical details such as the request path, method, status, and response time. The infrastructure serving the site and relay may also process connection details such as IP addresses. The site loads fonts from Google Fonts, which receives your browser’s request.',
+    text: 'Browsing the public pages and running the Windows host do not require an account. The browser operator signs in through Clerk, which handles account information such as their email and sign-in session. App request logs can include details such as the request path, method, status, and response time. The hosting infrastructure may also process IP addresses. Google Fonts receives requests when the site loads its fonts.',
   },
   {
     title: 'Your controls',

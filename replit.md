@@ -1,6 +1,7 @@
 # winss132r
 
 An installable Windows host and browser viewer for attended remote support over HTTPS.
+The user uses winss132r as an internal lab application.
 
 ## Run & Operate
 
@@ -12,6 +13,7 @@ An installable Windows host and browser viewer for attended remote support over 
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - The winss132r preview does not use PostgreSQL; keep one API instance for active sessions.
+- Set `LAB_OPERATOR_EMAIL` to the verified primary email of the approved Clerk account. Unconfigured or unmatched accounts cannot join a host. Public information and the installer remain accessible.
 
 ## Stack
 

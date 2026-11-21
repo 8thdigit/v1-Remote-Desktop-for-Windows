@@ -9,6 +9,7 @@ export type Session = {
   code: string;
   host: string;
   viewer?: string;
+  viewerSession?: string;
   verification?: string;
   state: "waiting" | "pending" | "live";
   expires: number;
@@ -58,26 +59,28 @@ export function createDesklineStore(clock = Date.now) {
       peers.set(host, {session, role: "host"});
       return {code, token: host};
     },
-    join(code: string) {
+    join(code: string, browserSession: string) {
       const s = codes.get(code);
       if (!s || expired(s) || s.state !== "waiting") return;
       codes.delete(code);
       const token = randomBytes(32).toString("base64url");
       const verification = String(randomInt(100000, 1000000));
       s.viewer = token;
+      s.viewerSession = browserSession;
       s.verification = verification;
       s.state = "pending";
       s.viewerSeen = clock();
       peers.set(token, {session: s, role: "viewer"});
       return {token, verification};
     },
-    authenticate(header: string | undefined, role?: "host" | "viewer") {
+    authenticate(header: string | undefined, role?: "host" | "viewer", viewerSession?: string) {
       const token = /^Bearer ([\w-]{43})$/.exec(header ?? "")?.[1];
       const peer = token && peers.get(token);
       if (!peer) return;
       const {session: s} = peer;
       if (expired(s)) { end(s); return; }
       if (role && role !== peer.role) return;
+      if (peer.role === "viewer" && (!viewerSession || viewerSession !== s.viewerSession)) return;
       if (peer.role === "host") s.hostSeen = clock();
       else s.viewerSeen = clock();
       return s;
