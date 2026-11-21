@@ -6,6 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './desklineCall';
+export * from './desklineCallList';
+export * from './desklineCallListCallsItem';
+export * from './desklineCallQuery';
 export * from './desklineCode';
 export * from './desklineInput';
 export * from './desklineInputDelta';

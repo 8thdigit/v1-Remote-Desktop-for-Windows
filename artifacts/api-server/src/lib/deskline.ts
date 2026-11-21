@@ -4,6 +4,8 @@ import type { DesklineInput } from "@workspace/api-zod";
 const inviteTTL = 3 * 60_000;
 const sessionTTL = 30 * 60_000;
 const peerTTL = 20_000;
+// How long an unattended host's "Initiate" request stays visible to viewers.
+export const callTTL = 2 * 60_000;
 
 // Unattended (pre-approved) hosts keep a long random key on the PC. The
 // public access code is derived from it, so only the holder of the key can
@@ -19,6 +21,9 @@ export type Session = {
   verification?: string;
   state: "waiting" | "pending" | "live";
   preapproved: boolean;
+  // Set when an unattended host pressed Initiate: viewers that already know
+  // this code see the request and can accept it by joining.
+  call?: { name: string; until: number };
   expires: number;
   hostSeen: number;
   viewerSeen: number;
@@ -88,10 +93,28 @@ export function createDesklineStore(clock = Date.now) {
       peers.set(host, {session, role: "host"});
       return {code, token: host};
     },
+    // An unattended host asks the viewers that know its code to connect.
+    call(s: Session, name: string, until = clock() + callTTL) {
+      if (!s.preapproved || s.state !== "waiting" || !codes.has(s.code)) return false;
+      s.call = {name: name.replace(/[^\w .-]/g, "").slice(0, 40), until: Math.min(until, clock() + callTTL)};
+      return true;
+    },
+    // Reports which of the given codes have a pending Initiate request. A
+    // viewer learns nothing about codes it does not already know.
+    calls(list: string[]) {
+      const now = clock();
+      const found: {code: string; name: string}[] = [];
+      for (const code of new Set(list)) {
+        const s = codes.get(code);
+        if (s?.call && s.call.until > now && s.state === "waiting" && !expired(s)) found.push({code, name: s.call.name});
+      }
+      return found;
+    },
     join(code: string) {
       const s = codes.get(code);
       if (!s || expired(s) || s.state !== "waiting") return;
       codes.delete(code);
+      s.call = undefined;
       const token = randomBytes(32).toString("base64url");
       const now = clock();
       s.viewer = token;

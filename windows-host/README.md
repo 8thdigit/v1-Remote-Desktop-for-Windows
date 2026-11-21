@@ -40,23 +40,34 @@ can turn on a saved, pre-approved access code:
    (not roaming) and adds itself to sign-in startup for this Windows user
    (`HKCU\...\CurrentVersion\Run`), so the same code works after restarts.
    The 12-character access code is derived from that key and shown in the
-   status window. Only this PC's key can register that code on the relay.
+   notification-area menu. Only this PC's key can register that code on the relay.
 3. IT enters the access code in the viewer. The session goes live at once,
    with no verification number and no approval.
 
-There are no pop-ups while unattended access runs. The status window stays
-minimized on the taskbar, and an icon is added to the notification area. Both
-show a sync-arrows icon that is blue when ready, amber when the relay can't be
-reached, and green (with a taskbar badge and a "LIVE" title) while IT is
-connected. Click either to see the connection status, the number of
-connections since the app started,
-and the access code. From that window the user can **Stop current session**,
-**Exit** (unattended access starts again at next sign-in), or **Turn off
-unattended access**, which deletes the key and the startup entry. Ctrl+2 and
-F12 still end a live session, and locking Windows still stops sharing.
-Windows 11 may put new notification-area icons in the overflow; pin it under
-Settings > Personalization > Taskbar > Other system tray icons. The taskbar
-button is always visible.
+### Initiate from the PC
+
+The PC can also ask IT to connect. In the viewer, IT saves the PC's access
+code under **Unattended PCs on this browser** (it stays in that browser only).
+On the PC, click the winss132r icon and select **Initiate — ask IT to connect**.
+The relay shows the request, with the PC's name, to any viewer that saved that
+code, for two minutes. IT selects **Accept** and the session starts at once.
+Viewers that have not saved the code see nothing.
+
+### Notification-area icon
+
+There is no window and no taskbar button while unattended access runs, and no
+pop-ups during a session; only an icon in the notification area. It shows a
+sync-arrows icon that is blue when ready, amber when the relay can't be
+reached, and green while IT is connected. Its tooltip reads
+**Connect: +01** while a session is live, counting sessions since the app
+started (+02 for the second, and so on). Click the icon (left or right) for a
+small menu with the status, the access code, the connection count,
+**Initiate**, **Stop current session**, **Turn off unattended access…**
+(deletes the key and the startup entry), and **Exit** (unattended access
+starts again at next sign-in). Ctrl+2 and F12 still end a live session, and
+locking Windows still stops sharing. Windows 11 may put new notification-area
+icons in the overflow; pin it under Settings > Personalization > Taskbar >
+Other system tray icons.
 
 Anyone with the access code can control the PC while it is signed in, so
 treat the code like a password. To change it, turn unattended access off and
