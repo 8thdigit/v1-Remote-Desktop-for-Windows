@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "winss132r"
+description = "Browser viewer and Windows installer for attended remote desktop support over HTTPS."
+version = "1.0.0"
+id = "artifacts/deskline"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18451
+
+[services.development]
+run = "pnpm --filter @workspace/deskline run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/deskline", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/deskline/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18451"
+BASE_PATH = "/"

@@ -1,0 +1,152 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /deskline/invite:
+    post:
+      operationId: createDesklineInvite
+      responses:
+        "201":
+          description: One-time host invite
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DesklineInvite"}
+  /deskline/join:
+    post:
+      operationId: joinDeskline
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/DesklineCode"}
+      responses:
+        "200":
+          description: Viewer capability and verification number
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DesklineViewer"}
+  /deskline/end:
+    post:
+      operationId: endDeskline
+      security: [{sessionToken: []}]
+      responses:
+        "204": {description: Session ended}
+  /deskline/input:
+    post:
+      operationId: sendDesklineInput
+      security: [{sessionToken: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/DesklineInput"}
+      responses:
+        "204": {description: Accepted}
+  /deskline/approve:
+    post:
+      operationId: approveDeskline
+      security: [{sessionToken: []}]
+      responses:
+        "204": {description: Host approved the session}
+  /deskline/tick:
+    post:
+      operationId: tickDeskline
+      security: [{sessionToken: []}]
+      description: Host heartbeat; optional raw JPEG body when the approved screen changes.
+      requestBody:
+        content:
+          image/jpeg:
+            schema: {type: string, format: binary}
+      responses:
+        "200":
+          description: Host status and pending input
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DesklineTick"}
+  /deskline/frame:
+    get:
+      operationId: getDesklineFrame
+      security: [{sessionToken: []}]
+      parameters:
+        - {in: query, name: after, schema: {type: integer, minimum: 0}}
+      responses:
+        "200":
+          description: New JPEG frame; X-Deskline-Frame is its sequence number.
+          content:
+            image/jpeg:
+              schema: {type: string, format: binary}
+        "204":
+          description: No new frame. X-Deskline-State is pending or live.
+components:
+  securitySchemes:
+    sessionToken: { type: http, scheme: bearer }
+  schemas:
+    DesklineTick:
+      type: object
+      required: [state, input]
+      properties:
+        state: {type: string, enum: [waiting, pending, live]}
+        verification: {type: string}
+        input:
+          type: array
+          items: {$ref: "#/components/schemas/DesklineInput"}
+    DesklineCode:
+      type: object
+      required: [code]
+      properties:
+        code: {type: string, pattern: '^[A-F0-9]{12}$'}
+    DesklineInvite:
+      type: object
+      required: [code, token]
+      properties:
+        code: {type: string}
+        token: {type: string}
+    DesklineViewer:
+      type: object
+      required: [token, verification]
+      properties:
+        token: {type: string}
+        verification: {type: string}
+    DesklineInput:
+      type: object
+      required: [kind]
+      properties:
+        kind: {type: string, enum: [key, wheel, down, up, move, release]}
+        x: {type: number, minimum: 0, maximum: 1}
+        y: {type: number, minimum: 0, maximum: 1}
+        button: {type: integer, minimum: 0, maximum: 2}
+        delta: {type: integer, enum: [-1, 1]}
+        key: {type: string, maxLength: 24}
+        ctrl: {type: boolean}
+        shift: {type: boolean}
+        alt: {type: boolean}
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
