@@ -79,9 +79,18 @@ bash windows-host/build.sh
 node --test artifacts/api-server/tests/deskline.test.mjs
 ```
 
-The build writes the installer to `artifacts/deskline/public/downloads/`.
-Generate it before building the browser viewer for distribution if it is
-missing from a fresh checkout. Keep the API and viewer on the same origin,
+The build writes the installer to
+`artifacts/deskline/public/downloads/winss132r-Setup-x64.exe`.
+
+## Publishing a release
+
+The viewer's download button links to the installer on the latest GitHub
+release:
+`https://github.com/mailbhrp-1/Remote-Desktop-for-Windows/releases/latest/download/winss132r-Setup-x64.exe`.
+To publish a new one, run the **Release installer** workflow from the Actions
+tab with a new tag (for example `v0.2.0`), or push that tag. The workflow runs
+the Go tests, builds the installer with the same `build.sh`, and attaches it to
+the release. Keep the asset name `winss132r-Setup-x64.exe` so the link stays valid. Keep the API and viewer on the same origin,
 with `/api/deskline/` routed to the API service behind HTTPS. On Windows,
 verify install/uninstall, pairing on two devices, streaming, remote input,
 display scaling, Ctrl+2, F12, and locking Windows before distributing this preview.

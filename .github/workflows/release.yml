@@ -1,0 +1,45 @@
+name: Release installer
+
+# Builds the Windows installer and attaches it to a GitHub release.
+# Run it from the Actions tab (Run workflow), or push a tag such as v0.1.0.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to create or update, for example v0.1.0'
+        required: true
+        default: 'v0.1.0'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: windows-host/go.mod
+      - name: Install NSIS
+        run: sudo apt-get update && sudo apt-get install -y nsis
+      - name: Test
+        working-directory: windows-host
+        run: go test ./...
+      - name: Build installer
+        run: bash windows-host/build.sh
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          file=artifacts/deskline/public/downloads/winss132r-Setup-x64.exe
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$file" --clobber
+          else
+            gh release create "$TAG" "$file" --target "$GITHUB_SHA" --title "winss132r $TAG" \
+              --notes "Windows 10/11 x64 installer for the winss132r host. This preview installer is unsigned, so Windows SmartScreen may warn before it runs."
+          fi
