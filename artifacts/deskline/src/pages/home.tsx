@@ -215,7 +215,10 @@ export default function Home() {
 
       <footer className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-6 border-t px-5 py-3 text-xs text-muted-foreground md:px-10">
         <p>winss132r connects only while the person at the PC has the app open and has approved. Either side can end the session.</p>
-        <Link href="/privacy" className="inline-flex min-h-11 items-center rounded-md font-semibold text-foreground underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary">Privacy</Link>
+        <nav aria-label="About winss132r" className="flex flex-wrap gap-x-5">
+          <Link href="/project" className="inline-flex min-h-11 items-center rounded-md font-semibold text-foreground underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary">Project status</Link>
+          <Link href="/privacy" className="inline-flex min-h-11 items-center rounded-md font-semibold text-foreground underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary">Privacy</Link>
+        </nav>
       </footer>
     </div>
   );
