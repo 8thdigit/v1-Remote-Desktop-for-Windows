@@ -1,6 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useJoinDeskline } from '@workspace/api-client-react';
-import { useClerk } from '@clerk/react';
 import { Link } from 'wouter';
 import { ArrowRight, Check, Copy, Download, Monitor, ShieldCheck, UserRound } from 'lucide-react';
 import LiveSession from '@/LiveSession';
@@ -17,9 +16,8 @@ function groups(code: string) {
   return [code.slice(0, 4), code.slice(4, 8), code.slice(8, 12)];
 }
 
-export default function Home({ viewer = false }: { viewer?: boolean }) {
+export default function Home() {
   const join = useJoinDeskline();
-  const { signOut } = useClerk();
   const [session, setSession] = useState<Session | null>(null);
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -62,9 +60,7 @@ export default function Home({ viewer = false }: { viewer?: boolean }) {
       setCode('');
     } catch (reason) {
       const status = typeof reason === 'object' && reason !== null && 'status' in reason ? reason.status : undefined;
-      setError(status === 401 ? 'Sign in again to start a session.' :
-        status === 403 ? 'This account is not approved for lab access. Contact the lab operator.' :
-        status === 429 ? 'The relay is busy. Wait a minute, then try again.' :
+      setError(status === 429 ? 'The relay is busy. Wait a minute, then try again.' :
         status === 404 || status === 400 ? 'That code was not accepted. Check it against the Windows PC or ask for a fresh code.' :
           'Could not reach the relay. Check your connection and try again.');
     }
@@ -94,15 +90,13 @@ export default function Home({ viewer = false }: { viewer?: boolean }) {
           </span>
           <span className="text-lg font-bold tracking-tight">winss132r</span>
         </div>
-        {viewer ? (
-          <button type="button" onClick={() => void signOut({ redirectUrl: import.meta.env.BASE_URL })} className="rounded-lg border px-3 py-2 text-sm font-semibold">Sign out</button>
-        ) : (
-          <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Attended support · Windows</span>
-        )}
+        <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
+          Attended support · Windows
+        </span>
       </header>
 
-      <main className="mx-auto grid max-w-6xl gap-10 px-5 pb-20 pt-6 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] md:gap-16 md:px-10 md:pt-12">
-        <section className="dl-rise min-w-0">
+      <main className="mx-auto grid max-w-6xl gap-10 px-5 pb-20 pt-6 md:grid-cols-[1.1fr_1fr] md:gap-16 md:px-10 md:pt-12">
+        <section className="dl-rise">
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">Two people. One screen. Both aware.</p>
           <h1 className="mt-4 text-[2.6rem] font-extrabold leading-[0.95] tracking-tight md:text-7xl">
             Help someone at their PC, <span className="text-primary">with them watching.</span>
@@ -132,8 +126,8 @@ export default function Home({ viewer = false }: { viewer?: boolean }) {
           </ol>
         </section>
 
-        <aside className="dl-rise min-w-0 space-y-5 [animation-delay:120ms]">
-          {viewer ? <form onSubmit={onSubmit} className="rounded-2xl bg-foreground p-6 text-background shadow-[0_30px_60px_-30px_hsl(200_32%_13%/0.6)] md:p-8">
+        <aside className="dl-rise space-y-5 [animation-delay:120ms]">
+          <form onSubmit={onSubmit} className="rounded-2xl bg-foreground p-6 text-background shadow-[0_30px_60px_-30px_hsl(200_32%_13%/0.6)] md:p-8">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold">I'm the helper</h2>
               <span className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-background/60">
@@ -182,13 +176,7 @@ export default function Home({ viewer = false }: { viewer?: boolean }) {
             <p className="mt-4 text-xs text-background/55">
               Next you'll see a verification number. Read it to the person at the PC. Control starts only after they approve.
             </p>
-          </form> : (
-            <section className="rounded-2xl bg-foreground p-6 text-background md:p-8">
-              <h2 className="text-xl font-bold">I’m the lab operator</h2>
-              <p className="mt-3 text-sm text-background/75">Sign in to request an attended session using a code from the Windows PC.</p>
-              <Link href="/sign-in" className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-5 py-2.5 font-semibold text-primary-foreground">Operator sign-in <ArrowRight size={16} aria-hidden="true" /></Link>
-            </section>
-          )}
+          </form>
 
           {notice && (
             <div data-testid="text-notice" className="flex items-start gap-3 rounded-xl border border-foreground/15 bg-accent/60 px-4 py-3 text-sm">

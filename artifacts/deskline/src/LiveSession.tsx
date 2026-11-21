@@ -24,7 +24,7 @@ export default function LiveSession({ token, verification, onLeave }: Props) {
   const lastMove = useRef(0);
   const lastWheel = useRef(0);
   const pressed = useRef<number | null>(null);
-  const headers = { 'X-Viewer-Session': token };
+  const headers = { Authorization: `Bearer ${token}` };
   leaveRef.current = onLeave;
 
   function finish(message?: string, remoteAlreadyClosed = false) {
@@ -49,17 +49,13 @@ export default function LiveSession({ token, verification, onLeave }: Props) {
     async function poll() {
       try {
         const res = await fetch(getGetDesklineFrameUrl({ after: sequence }), {
-          headers: { 'X-Viewer-Session': token }, cache: 'no-store',
-          credentials: 'same-origin', redirect: 'error',
+          headers: { Authorization: `Bearer ${token}` }, cache: 'no-store',
+          credentials: 'omit', redirect: 'error',
           signal: AbortSignal.any([controller.signal, AbortSignal.timeout(6500)]),
         });
         if (controller.signal.aborted) return;
         if (res.status === 410) {
           finishRef.current('The host ended the session, or it expired. Ask for a new code to reconnect.', true);
-          return;
-        }
-        if (res.status === 401) {
-          finishRef.current('Your operator sign-in expired. Sign in again and ask for a new code.', true);
           return;
         }
         if (!res.ok) throw new Error('Frame request failed');
@@ -84,7 +80,7 @@ export default function LiveSession({ token, verification, onLeave }: Props) {
     }
     function pageExit() {
       controller.abort();
-      void endDeskline({ headers: { 'X-Viewer-Session': token }, keepalive: true }).catch(() => {});
+      void endDeskline({ headers: { Authorization: `Bearer ${token}` }, keepalive: true }).catch(() => {});
     }
     void poll();
     window.addEventListener('pagehide', pageExit);
@@ -115,7 +111,7 @@ export default function LiveSession({ token, verification, onLeave }: Props) {
       while (!signal.aborted && queue.length) {
         await sendDesklineInput(queue.shift()!, {
           headers, signal: AbortSignal.any([signal, AbortSignal.timeout(3000)]),
-          redirect: 'error', credentials: 'same-origin',
+          redirect: 'error', credentials: 'omit',
         });
       }
     } catch {

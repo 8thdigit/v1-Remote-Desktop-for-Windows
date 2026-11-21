@@ -4,7 +4,6 @@ import {
   SendDesklineInputBody, TickDesklineResponse, GetDesklineFrameQueryParams,
 } from "@workspace/api-zod";
 import { createDesklineStore } from "../lib/deskline";
-import { browserSession, isLabOperator } from "../lib/deskline-operator";
 
 const router = Router();
 const store = createDesklineStore();
@@ -23,18 +22,7 @@ const tooManyInvites = throttle(90);
 const tooManyJoins = throttle(240);
 
 function auth(req: Request, res: Response, role?: "host" | "viewer") {
-  const viewer = req.get("X-Viewer-Session");
-  let found;
-  if (role === "viewer" || (!role && viewer !== undefined)) {
-    const session = browserSession(req);
-    if (!session) {
-      res.status(401).json({error: "Sign in to the operator viewer."});
-      return;
-    }
-    found = store.authenticate(`Bearer ${viewer ?? ""}`, "viewer", session);
-  } else {
-    found = store.authenticate(req.get("authorization"), "host");
-  }
+  const found = store.authenticate(req.get("authorization"), role);
   if (!found) res.status(410).json({error: "This session ended or expired. Ask for a new code."});
   return found;
 }
@@ -47,15 +35,11 @@ router.post("/invite", (_req, res) => {
   if (!invite) { res.status(429).json({error: "Relay busy. Try again in a minute."}); return; }
   res.status(201).json(CreateDesklineInviteResponse.parse(invite));
 });
-router.post("/join", async (req, res) => {
-  const session = browserSession(req);
-  if (!session) { res.status(401).json({error: "Sign in to the operator viewer."}); return; }
+router.post("/join", (req, res) => {
   if (tooManyJoins()) { res.status(429).json({error: "Too many attempts. Try again in a minute."}); return; }
-  if (!(await isLabOperator(req))) { res.status(403).json({error: "This account is not approved for lab access."}); return; }
-  if (!req.is("application/json")) { res.status(415).json({error: "Expected a JSON request."}); return; }
   const body = JoinDesklineBody.safeParse(req.body);
   if (!body.success) { res.status(400).json({error: "Enter a 12-character code from the host."}); return; }
-  const viewer = store.join(body.data.code, session);
+  const viewer = store.join(body.data.code);
   if (!viewer) { res.status(404).json({error: "Code not found, already used, or expired."}); return; }
   res.json(JoinDesklineResponse.parse(viewer));
 });
