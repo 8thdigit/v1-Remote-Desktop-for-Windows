@@ -9,4 +9,5 @@
 export interface DesklineViewer {
   token: string;
   verification: string;
+  preapproved: boolean;
 }

@@ -1,7 +1,7 @@
 import { Router, raw, type Request, type Response } from "express";
 import {
   JoinDesklineBody, JoinDesklineResponse, CreateDesklineInviteResponse,
-  SendDesklineInputBody, TickDesklineResponse, GetDesklineFrameQueryParams,
+  SendDesklineInputBody, RegisterDesklineStandingBody, RegisterDesklineStandingResponse, TickDesklineResponse, GetDesklineFrameQueryParams,
 } from "@workspace/api-zod";
 import { createDesklineStore } from "../lib/deskline";
 
@@ -20,6 +20,7 @@ function throttle(max: number) {
 }
 const tooManyInvites = throttle(90);
 const tooManyJoins = throttle(240);
+const tooManyStanding = throttle(240);
 
 function auth(req: Request, res: Response, role?: "host" | "viewer") {
   const found = store.authenticate(req.get("authorization"), role);
@@ -34,6 +35,14 @@ router.post("/invite", (_req, res) => {
   const invite = !tooManyInvites() && store.invite();
   if (!invite) { res.status(429).json({error: "Relay busy. Try again in a minute."}); return; }
   res.status(201).json(CreateDesklineInviteResponse.parse(invite));
+});
+router.post("/standing", (req, res) => {
+  if (tooManyStanding()) { res.status(429).json({error: "Relay busy. Try again in a minute."}); return; }
+  const body = RegisterDesklineStandingBody.safeParse(req.body);
+  if (!body.success) { res.status(400).json({error: "Invalid unattended access key."}); return; }
+  const standing = store.standing(body.data.key);
+  if (!standing) { res.status(409).json({error: "Relay busy, or the code is in use by another session."}); return; }
+  res.status(201).json(RegisterDesklineStandingResponse.parse(standing));
 });
 router.post("/join", (req, res) => {
   if (tooManyJoins()) { res.status(429).json({error: "Too many attempts. Try again in a minute."}); return; }

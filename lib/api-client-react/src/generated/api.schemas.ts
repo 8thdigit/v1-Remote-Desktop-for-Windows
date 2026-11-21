@@ -70,6 +70,11 @@ export interface DesklineCode {
   code: string;
 }
 
+export interface DesklineStandingKey {
+  /** @pattern ^[A-Za-z0-9_-]{43}$ */
+  key: string;
+}
+
 export interface DesklineInvite {
   code: string;
   token: string;
@@ -78,6 +83,7 @@ export interface DesklineInvite {
 export interface DesklineViewer {
   token: string;
   verification: string;
+  preapproved: boolean;
 }
 
 export interface HealthStatus {

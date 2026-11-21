@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createDesklineStore } from "../src/lib/deskline.ts";
+import { createDesklineStore, standingCode } from "../src/lib/deskline.ts";
 
 const bearer = (token) => `Bearer ${token}`;
 
@@ -66,4 +66,34 @@ test("waiting invites expire even with a host still polling", () => {
     store.authenticate(bearer(host.token), "host");
   }
   assert.equal(store.join(host.code), undefined);
+});
+
+test("an unattended host's derived code joins straight to live and only its key can claim it", () => {
+  let now = 1_000_000;
+  const store = createDesklineStore(() => now);
+  const key = "A".repeat(43);
+  const first = store.standing(key);
+  assert.match(first.code, /^[A-F0-9]{12}$/);
+  assert.equal(first.code, standingCode(key));
+  assert.notEqual(standingCode("B".repeat(43)), first.code);
+  assert.equal(store.standing("short"), undefined);
+  // Re-registering with the same key replaces the waiting session.
+  const host = store.standing(key);
+  assert.equal(host.code, first.code);
+  assert.equal(store.authenticate(bearer(first.token), "host"), undefined);
+  const s = store.authenticate(bearer(host.token), "host");
+  const viewer = store.join(host.code);
+  assert.equal(viewer.preapproved, true);
+  assert.equal(viewer.verification, "");
+  assert.equal(s.state, "live");
+  assert.equal(store.approve(s), false);
+  const jpeg = Buffer.from([255, 216, 255, 217]);
+  assert.equal(store.tick(s, jpeg).state, "live");
+  assert.deepEqual(s.frame, jpeg);
+  assert.equal(store.join(host.code), undefined);
+  // An attended invite still needs approval.
+  const attended = store.invite();
+  const attendedViewer = store.join(attended.code);
+  assert.equal(attendedViewer.preapproved, false);
+  assert.equal(store.authenticate(bearer(attended.token), "host").state, "pending");
 });

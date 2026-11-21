@@ -10,12 +10,17 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 )
 
+var codeFormat = regexp.MustCompile(`^[A-F0-9]{12}$`)
+var tokenFormat = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
+var verifyFormat = regexp.MustCompile(`^[0-9]{6}$`)
+
 type relay struct {
-origin      string
+	origin      string
 	base, token string
 	client      *http.Client
 }
@@ -36,15 +41,15 @@ type event struct {
 
 func newRelay(value string) (*relay, error) {
 	u, err := url.Parse(strings.TrimSpace(value))
-if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.ForceQuery ||
+	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.ForceQuery ||
 		u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
 		return nil, errors.New("enter only the relay origin, such as https://support.example.com")
 	}
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	tr.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
 	return &relay{
-origin: "https://" + u.Host,
-		base: "https://" + u.Host + "/api/deskline/",
+		origin: "https://" + u.Host,
+		base:   "https://" + u.Host + "/api/deskline/",
 		client: &http.Client{
 			Transport: tr, Timeout: 5 * time.Second,
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
@@ -52,13 +57,34 @@ origin: "https://" + u.Host,
 	}, nil
 }
 
+// statusError is a relay HTTP error, so callers can tell a rejected request
+// from a network failure.
+type statusError struct {
+	status int
+	text   string
+}
+
+func (e *statusError) Error() string { return e.text }
+
 func (r *relay) post(ctx context.Context, path string, jpeg []byte, response any) error {
-	req, err := http.NewRequestWithContext(ctx, "POST", r.base+path, bytes.NewReader(jpeg))
+	return r.send(ctx, path, jpeg, "image/jpeg", response)
+}
+
+func (r *relay) postJSON(ctx context.Context, path string, body, response any) error {
+	data, err := json.Marshal(body)
 	if err != nil {
 		return err
 	}
-	if len(jpeg) != 0 {
-		req.Header.Set("Content-Type", "image/jpeg")
+	return r.send(ctx, path, data, "application/json", response)
+}
+
+func (r *relay) send(ctx context.Context, path string, payload []byte, contentType string, response any) error {
+	req, err := http.NewRequestWithContext(ctx, "POST", r.base+path, bytes.NewReader(payload))
+	if err != nil {
+		return err
+	}
+	if len(payload) != 0 {
+		req.Header.Set("Content-Type", contentType)
 	}
 	if r.token != "" {
 		req.Header.Set("Authorization", "Bearer "+r.token)
@@ -76,13 +102,13 @@ func (r *relay) post(ctx context.Context, path string, jpeg []byte, response any
 		return errors.New("relay response exceeded limit")
 	}
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		text := fmt.Sprintf("relay rejected %s (HTTP %d)", path, res.StatusCode)
 		if res.StatusCode == 410 {
-			return errors.New("the session ended or expired")
+			text = "the session ended or expired"
+		} else if res.StatusCode == 429 {
+			text = "relay busy; wait a minute and try again"
 		}
-		if res.StatusCode == 429 {
-			return errors.New("relay busy; wait a minute and try again")
-		}
-		return fmt.Errorf("relay rejected %s (HTTP %d)", path, res.StatusCode)
+		return &statusError{status: res.StatusCode, text: text}
 	}
 	if response != nil {
 		return json.Unmarshal(body, response)

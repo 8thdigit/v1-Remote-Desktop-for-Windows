@@ -4,14 +4,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
-	"regexp"
 	"runtime"
 	"time"
 )
-
-var codeFormat = regexp.MustCompile(`^[A-F0-9]{12}$`)
-var tokenFormat = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
-var verifyFormat = regexp.MustCompile(`^[0-9]{6}$`)
 
 type sessionUpdate struct {
 	state, text, code string
@@ -157,4 +152,134 @@ func stream(ctx context.Context, r *relay) error {
 		case <-cadence.C:
 		}
 	}
+}
+
+type unattendedUpdate struct {
+	state, text string // state is ready, connected, offline or locked
+}
+
+// serveUnattended keeps a pre-approved registration open on the relay and
+// streams to the first viewer that joins with this PC's saved access code.
+// There is no approval prompt and no pop-up window; the UI shows the state on
+// the taskbar and tray icon instead. Ctrl+2, F12 or "Stop current session"
+// end a live session; the host then registers again for the next one.
+func serveUnattended(ctx context.Context, origin, key string, stopSession <-chan struct{}, updates chan<- unattendedUpdate) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	backoff := 2 * time.Second
+	pause := func(d time.Duration) bool {
+		t := time.NewTimer(d)
+		defer t.Stop()
+		select {
+		case <-ctx.Done():
+			return false
+		case <-t.C:
+			return true
+		}
+	}
+	for ctx.Err() == nil {
+		if !onDefaultDesktop() {
+			updates <- unattendedUpdate{state: "locked", text: "Windows is locked. Remote access resumes after you sign in."}
+			if !pause(3 * time.Second) {
+				return
+			}
+			continue
+		}
+		served, err := unattendedRound(ctx, origin, key, stopSession, updates)
+		if ctx.Err() != nil {
+			return
+		}
+		if served {
+			text := "Remote session ended. Ready for the next connection."
+			if err != nil && !errors.Is(err, context.Canceled) {
+				text = "Remote session ended: " + err.Error()
+			}
+			updates <- unattendedUpdate{state: "ready", text: text}
+			backoff = 2 * time.Second
+			continue
+		}
+		if err == nil {
+			backoff = 2 * time.Second
+			continue
+		}
+		updates <- unattendedUpdate{state: "offline", text: "Cannot reach the relay (" + err.Error() + "). Retrying…"}
+		if !pause(backoff) {
+			return
+		}
+		if backoff < time.Minute {
+			backoff *= 2
+		}
+	}
+}
+
+// unattendedRound registers once and waits up to two minutes for a viewer
+// before returning so the caller can refresh the registration. served reports
+// whether a viewer connected.
+func unattendedRound(parent context.Context, origin, key string, stopSession <-chan struct{}, updates chan<- unattendedUpdate) (served bool, err error) {
+	r, err := newRelay(origin)
+	if err != nil {
+		return false, err
+	}
+	var invitation invite
+	if err := r.postJSON(parent, "standing", map[string]string{"key": key}, &invitation); err != nil {
+		return false, err
+	}
+	if invitation.Code != standingCode(key) || !tokenFormat.MatchString(invitation.Token) {
+		return false, errors.New("relay returned an invalid registration")
+	}
+	r.token = invitation.Token
+	defer func() {
+		endCtx, stop := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+		defer stop()
+		_ = r.post(endCtx, "end", nil, nil)
+	}()
+	updates <- unattendedUpdate{state: "ready", text: "Ready. IT can connect with this PC's access code."}
+	refresh := time.Now().Add(2 * time.Minute)
+	wait := time.NewTicker(650 * time.Millisecond)
+	defer wait.Stop()
+	for time.Now().Before(refresh) {
+		var reply tick
+		if err := r.post(parent, "tick", nil, &reply); err != nil {
+			return false, err
+		}
+		switch reply.State {
+		case "waiting":
+		case "live":
+			if !onDefaultDesktop() {
+				return false, nil
+			}
+			ctx, cancel := context.WithCancel(parent)
+			defer cancel()
+			go func() {
+				t := time.NewTicker(25 * time.Millisecond)
+				defer t.Stop()
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case <-stopSession:
+						cancel()
+						return
+					case <-t.C:
+						if stopPressed() {
+							cancel()
+							return
+						}
+					}
+				}
+			}()
+			updates <- unattendedUpdate{state: "connected", text: "CONNECTED: IT is viewing and can control this PC. Press Ctrl+2 or F12 to stop."}
+			return true, stream(ctx, r)
+		default:
+			return false, errors.New("relay returned an unexpected state")
+		}
+		select {
+		case <-parent.Done():
+			return false, parent.Err()
+		case <-stopSession:
+			// Nothing is live; ignore a stale stop request.
+		case <-wait.C:
+		}
+	}
+	return false, nil
 }

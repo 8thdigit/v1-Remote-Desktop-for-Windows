@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, typ
 import { ArrowLeft, Laptop, MousePointer2, ShieldCheck } from 'lucide-react';
 import { endDeskline, getGetDesklineFrameUrl, sendDesklineInput, type DesklineInput } from '@workspace/api-client-react';
 
-type Props = { token: string; verification: string; onLeave: (message?: string) => void };
+type Props = { token: string; verification: string; preapproved?: boolean; onLeave: (message?: string) => void };
 const keys = /^(Backspace|Tab|Enter|PageUp|PageDown|End|Home|Arrow(Left|Up|Right|Down)|Insert|Delete|F([1-9]|1[01]))$/;
 const clamp = (n: number) => Math.max(0, Math.min(1, n));
 
@@ -11,8 +11,8 @@ function position(e: PointerEvent<HTMLImageElement> | WheelEvent<HTMLImageElemen
   return { x: clamp((e.clientX - r.left) / r.width), y: clamp((e.clientY - r.top) / r.height) };
 }
 
-export default function LiveSession({ token, verification, onLeave }: Props) {
-  const [state, setState] = useState<'pending' | 'live'>('pending');
+export default function LiveSession({ token, verification, preapproved = false, onLeave }: Props) {
+  const [state, setState] = useState<'pending' | 'live'>(preapproved ? 'live' : 'pending');
   const [frame, setFrame] = useState<string>();
   const [control, setControl] = useState(false);
   const leaveRef = useRef(onLeave);
@@ -144,7 +144,7 @@ export default function LiveSession({ token, verification, onLeave }: Props) {
         <div>
           <p className="text-lg font-bold">winss132r</p>
           <p role="status" className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-            {state === 'live' ? 'Live · Host approved' : 'Waiting for host approval'}
+            {state !== 'live' ? 'Waiting for host approval' : preapproved ? 'Live · Pre-approved access' : 'Live · Host approved'}
           </p>
         </div>
         <button type="button" onClick={() => finish()} className="inline-flex items-center gap-2 rounded-lg border border-foreground/25 px-4 py-2 text-sm font-semibold hover:bg-foreground/10">
@@ -184,7 +184,7 @@ export default function LiveSession({ token, verification, onLeave }: Props) {
                 alt="Live view of the host's primary Windows screen"
                 tabIndex={0}
                 draggable={false}
-                className={`block max-h-[72dvh] max-w-full rounded-sm outline-offset-4 ${control ? 'touch-none cursor-crosshair' : ''}`}
+                className={`block max-h-[72dvh] max-w-full rounded-sm outline-offset-4 ${control ? 'touch-none cursor-default' : ''}`}
                 onBlur={() => { release(); setControl(false); }}
                 onKeyDown={key}
                 onContextMenu={(e) => { if (control) e.preventDefault(); }}
