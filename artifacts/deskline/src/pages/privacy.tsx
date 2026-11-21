@@ -21,7 +21,7 @@ const sections = [
   },
   {
     title: 'Your controls',
-    text: 'The Windows host does not share its screen before you approve. The host displays a live sharing notice, and you can press F12 on the Windows PC to stop sharing. The helper can end the session in the browser. The app does not include audio streaming, clipboard sync, file transfer, or unattended access.',
+    text: 'The Windows host does not share its screen before you approve. The host displays a live sharing indicator. Click Stop sharing on it or press Ctrl+2 or F12 on the Windows PC to stop. The helper can end the session in the browser. The app does not include audio streaming, clipboard sync, file transfer, or unattended access.',
   },
   {
     title: 'Privacy questions',

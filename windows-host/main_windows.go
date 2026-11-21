@@ -142,7 +142,7 @@ if path != "" && saved != r.origin {
 	}()
 	fmt.Printf("\nOne-time code: %s-%s-%s\n", invitation.Code[:4], invitation.Code[4:8], invitation.Code[8:])
 	fmt.Println("Share it with your helper. The code expires in 3 minutes.")
-	fmt.Println("No screen is shared until you approve. Press F12 to cancel.")
+fmt.Println("No screen is shared until you approve. Press Ctrl+2 or F12 to cancel.")
 	wait := time.NewTicker(650 * time.Millisecond)
 	defer wait.Stop()
 	challenge := ""
@@ -172,9 +172,18 @@ if path != "" && saved != r.origin {
 			if err := r.post(ctx, "approve", nil, nil); err != nil {
 				return err
 			}
-			fmt.Println("\nLIVE: your primary screen is being shared and remote control is enabled.")
-			fmt.Println("Press F12 at any time to stop. Keep this window open.")
-			go showLiveNotice(cancel)
+ready := make(chan error, 1)
+indicatorDone := make(chan struct{})
+go func() {
+	defer close(indicatorDone)
+	showSharingIndicator(ctx, cancel, ready)
+}()
+defer func() { cancel(); <-indicatorDone }()
+if err := <-ready; err != nil {
+	return err
+}
+fmt.Println("\nLIVE: your primary screen is being shared and remote control is enabled.")
+fmt.Println("You can minimize this terminal. Press Ctrl+2 or F12, or click Stop sharing, to end the session.")
 			return stream(ctx, r)
 		case <-wait.C:
 		}

@@ -18,7 +18,9 @@ If you installed the older Deskline preview, uninstall it separately from Window
    browser and reads the six-digit verification number back to you. Enter that
    number in the Windows host to approve sharing the screen and allowing input.
 4. The helper can enable remote input from the viewer. The Windows user can
-   stop the session with **F12** or **OK** on the live-sharing notice. The helper
+   stop the session with **Ctrl+2**, **F12**, or **Stop sharing** on the
+   always-on-top indicator. You can minimize the terminal during sharing;
+   closing the terminal or the indicator ends the session. The helper
    can use **End session**. Locking Windows stops the host session.
 
 Shares the primary display only. No file transfer, clipboard sync, audio,
@@ -43,7 +45,7 @@ Generate it before building the browser viewer for distribution if it is
 missing from a fresh checkout. Keep the API and viewer on the same origin,
 with `/api/deskline/` routed to the API service behind HTTPS. On Windows,
 verify install/uninstall, pairing on two devices, streaming, remote input,
-display scaling, F12, and locking Windows before distributing this preview.
+display scaling, Ctrl+2, F12, and locking Windows before distributing this preview.
 
 ## Trusted publisher signing
 

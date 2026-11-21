@@ -19,7 +19,6 @@ var (
 	openDesktop   = user.NewProc("OpenInputDesktop")
 	closeDesktop  = user.NewProc("CloseDesktop")
 	getObjectInfo = user.NewProc("GetUserObjectInformationW")
-	messageBox    = user.NewProc("MessageBoxW")
 	createDC      = gdi.NewProc("CreateCompatibleDC")
 	deleteDC      = gdi.NewProc("DeleteDC")
 	createDIB     = gdi.NewProc("CreateDIBSection")
@@ -41,15 +40,11 @@ func setDPI() {
 }
 
 func stopPressed() bool {
-	v, _, _ := getAsyncKey.Call(0x7b) // F12 is never injectable through winss132r.
-	return v&0x8000 != 0
-}
-
-func showLiveNotice(stop func()) {
-	title, _ := syscall.UTF16PtrFromString("winss132r — screen sharing is live")
-	body, _ := syscall.UTF16PtrFromString("Your helper can see your primary screen and control your mouse and keyboard.\n\nClick OK or press F12 at any time to stop sharing.")
-	messageBox.Call(0, uintptr(unsafe.Pointer(body)), uintptr(unsafe.Pointer(title)), 0x00050040)
-	stop()
+	keyDown := func(key uintptr) bool {
+		v, _, _ := getAsyncKey.Call(key)
+		return v&0x8000 != 0
+	}
+	return (keyDown(0x11) && keyDown(0x32)) || keyDown(0x7b)
 }
 
 func onDefaultDesktop() bool {

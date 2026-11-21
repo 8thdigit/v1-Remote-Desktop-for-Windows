@@ -222,7 +222,7 @@ export default function LiveSession({ token, verification, onLeave }: Props) {
               </div>
             )}
           </div>
-          <p className="mt-3 text-sm text-muted-foreground">Primary display only. The person at the PC can stop sharing by pressing F12.</p>
+          <p className="mt-3 text-sm text-muted-foreground">Primary display only. At the Windows PC, press Ctrl+2 or F12 to stop sharing.</p>
         </section>
       )}
     </main>
