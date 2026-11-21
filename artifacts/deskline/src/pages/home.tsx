@@ -24,7 +24,8 @@ export default function Home() {
   const [notice, setNotice] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const relay = typeof window !== 'undefined' && window.location.protocol === 'https:' ? window.location.origin : '';
-  const installer = `${import.meta.env.BASE_URL}downloads/winss132r-Setup-x64.exe`;
+  // Served from the latest GitHub release, published by .github/workflows/release.yml.
+  const installer = 'https://github.com/mailbhrp-1/Remote-Desktop-for-Windows/releases/latest/download/winss132r-Setup-x64.exe';
 
   useEffect(() => {
     document.title = session
