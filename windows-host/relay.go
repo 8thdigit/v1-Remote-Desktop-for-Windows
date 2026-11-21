@@ -15,6 +15,7 @@ import (
 )
 
 type relay struct {
+origin      string
 	base, token string
 	client      *http.Client
 }
@@ -35,13 +36,14 @@ type event struct {
 
 func newRelay(value string) (*relay, error) {
 	u, err := url.Parse(strings.TrimSpace(value))
-	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil ||
+if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.ForceQuery ||
 		u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
 		return nil, errors.New("enter only the relay origin, such as https://support.example.com")
 	}
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	tr.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
 	return &relay{
+origin: "https://" + u.Host,
 		base: "https://" + u.Host + "/api/deskline/",
 		client: &http.Client{
 			Transport: tr, Timeout: 5 * time.Second,

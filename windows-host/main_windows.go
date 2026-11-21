@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -47,15 +48,68 @@ func main() {
 }
 
 func run(parent context.Context, lines <-chan string) error {
-	fmt.Print("Paste the HTTPS relay address shown in the browser viewer: ")
-	value, ok := <-lines
-	if !ok {
-		return nil
+read := func() (string, error) {
+	select {
+	case <-parent.Done():
+		return "", parent.Err()
+	case answer, ok := <-lines:
+		if !ok {
+			return "", context.Canceled
+		}
+		return answer, nil
 	}
-	r, err := newRelay(value)
+}
+configDir, configErr := os.UserConfigDir()
+path := ""
+saved := ""
+if configErr == nil {
+	path = filepath.Join(configDir, "winss132r", "relay.txt")
+	var loadErr error
+	saved, loadErr = loadRelayAddress(path)
+	if loadErr != nil {
+		fmt.Println("Could not load the saved relay address. Enter a new address or type forget to clear it.")
+	}
+}
+if saved != "" {
+	fmt.Printf("Saved HTTPS relay: %s\nPress Enter to use it, paste a different address, or type forget: ", saved)
+} else {
+	fmt.Print("Paste the HTTPS relay address shown in the browser viewer: ")
+}
+value, err := read()
+if err != nil {
+	return err
+}
+if path != "" && strings.EqualFold(value, "forget") {
+	if err := forgetRelayAddress(path); err != nil {
+		return fmt.Errorf("could not clear the saved relay address: %w", err)
+	}
+	fmt.Println("Saved relay address cleared.")
+	fmt.Print("Paste the HTTPS relay address for this session, or press Enter to exit: ")
+	value, err = read()
+	if err != nil || value == "" {
+		return err
+	}
+	saved = ""
+}
+if value == "" {
+	value = saved
+}
+r, err := newRelay(value)
 	if err != nil {
 		return err
 	}
+if path != "" && saved != r.origin {
+	fmt.Print("Remember this relay address on this Windows account? [y/N]: ")
+	answer, err := read()
+	if err != nil {
+		return err
+	}
+	if strings.EqualFold(answer, "y") || strings.EqualFold(answer, "yes") {
+		if err := saveRelayAddress(path, r.origin); err != nil {
+			fmt.Println("Could not save the address; continuing without saving it:", err)
+		}
+	}
+}
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
 	go func() {
