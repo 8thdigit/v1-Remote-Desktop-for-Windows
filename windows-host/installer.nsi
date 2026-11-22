@@ -122,24 +122,14 @@ Section "winss132r"
 
   ; Schedule the auto-uninstall chosen on the timeline page (default 24 h).
   ; A one-shot Task Scheduler task runs the silent uninstaller at NOW+hours.
-  ; PowerShell does the date math so day and month rollovers are exact.
+  ; The timing script lives in the install folder so quoting stays simple:
+  ; no nested single/double quotes inside an nsExec command line.
   DeleteRegValue HKCU "Software\winss132r" "AutoUninstallHours"
   ${If} $UninstHours != ""
-    nsExec::ExecToStack 'powershell.exe -NoProfile -NonInteractive -Command "$d=(Get-Date).AddHours($UninstHours); [Console]::Out.Write($d.ToString(\x27yyyy/MM/dd\x27) + \x27 \x27 + $d.ToString(\x27HH:mm\x27))"'
+    File /oname=schedule-uninstall.ps1 "schedule-uninstall.ps1"
+    nsExec::ExecToStack 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$INSTDIR\schedule-uninstall.ps1" -Hours $UninstHours -Uninstaller "$INSTDIR\Uninstall.exe"'
     Pop $9            ; exit code
-    Pop $8            ; output: "<yyyy/MM/dd> <HH:mm>"
-    ${If} $9 == 0
-      ; Split the timestamp and schedule a one-shot task that runs the
-      ; silent uninstaller at that local time.
-      StrCpy $7 $8 10     ; date part "yyyy/MM/dd"
-      StrCpy $6 $8 "" 11  ; time part "HH:mm"
-      ${If} $6 != ""
-        ${If} $7 != ""
-          nsExec::ExecToLog 'schtasks.exe /create /f /tn winss132r-auto-uninstall /sc once /st $6 /sd $7 /tr \\'"$INSTDIR\\Uninstall.exe" /SILENT\\''
-          Pop $9
-        ${EndIf}
-      ${EndIf}
-    ${EndIf}
+    Pop $8            ; script output (diagnostics only)
     ${If} $9 != 0
       MessageBox MB_ICONEXCLAMATION "winss132r is installed, but the automatic uninstall could not be scheduled. You can uninstall it any time from Windows Settings." /SD IDOK
     ${EndIf}
@@ -154,6 +144,7 @@ Section "Uninstall"
   DeleteRegValue HKCU "Software\winss132r" "AutoUninstallHours"
   Delete "$SMPROGRAMS\winss132r.lnk"
   Delete "$INSTDIR\winss132r.exe"
+  Delete "$INSTDIR\schedule-uninstall.ps1"
   Delete "$INSTDIR\Uninstall.exe"
   ; Unattended access: remove sign-in startup and the saved access key.
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "winss132r"

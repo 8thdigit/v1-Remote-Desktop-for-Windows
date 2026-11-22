@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -122,6 +123,19 @@ type remoteLink struct {
 
 func (l *remoteLink) URL(origin string) string {
 	return origin + "/?access=" + l.Code
+}
+
+// linkOrigin is where viewers open a shared remote access URL. The relay
+// serves the viewer app itself, so its API host minus the /api/ prefix is
+// the right base; custom deployments can override it with the
+// WINSS132R_VIEWER_ORIGIN environment variable.
+func linkOrigin(r *relay) string {
+	if v := strings.TrimSpace(os.Getenv("WINSS132R_VIEWER_ORIGIN")); v != "" {
+		if u, err := url.Parse(v); err == nil && u.Scheme == "https" && u.Hostname() != "" {
+			return "https://" + u.Host
+		}
+	}
+	return r.origin
 }
 
 type linkCreateRequest struct {

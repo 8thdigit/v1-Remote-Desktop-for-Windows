@@ -30,7 +30,11 @@ func (l savedLink) expired(now time.Time) bool {
 
 func (l savedLink) shareURL() string {
 	link := remoteLink{Code: l.Code}
-	return link.URL(l.Relay)
+	r, err := newRelay(l.Relay)
+	if err != nil {
+		return l.Relay + "/?access=" + l.Code
+	}
+	return link.URL(linkOrigin(r))
 }
 
 const linksFile = "links.json"
