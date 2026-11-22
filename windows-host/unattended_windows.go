@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strings"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
@@ -179,8 +181,12 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 		disableItem  = 302
 		exitItem     = 303
 		copyItem     = 304
+		createLink   = 305
+		linkBase     = 400 // linkBase+2*i = copy URL i, linkBase+2*i+1 = revoke URL i
+		stopAllItem  = 500
 	)
 	code := formatCode(standingCode(config.Key))
+	hostName, _ := os.Hostname()
 	small := metric(49)
 	type look struct {
 		icon uintptr
@@ -198,6 +204,9 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 	updates := make(chan unattendedUpdate, 16)
 	stopSession := make(chan struct{}, 1)
 	initiate := make(chan struct{}, 1)
+	newLink := make(chan linkRequest, 1)
+	inflight := &linkInflight{}
+	linksPath := linksPathFor(configPath)
 	worker := make(chan struct{})
 
 	instance, _, _ := getModule.Call(0)
@@ -282,6 +291,28 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 			item(mfGrayed, stopItem, "Stop current session")
 		}
 		item(mfSeparator, 0, "")
+		if state != "connected" {
+			item(mfString, createLink, "Create Remote Access URL… (default 24 h)")
+		} else {
+			item(mfGrayed, createLink, "Create Remote Access URL… (default 24 h)")
+		}
+		activeLinks := listLinkEntries(linksPath, time.Now())
+		for i, entry := range activeLinks {
+			if i >= 8 {
+				break
+			}
+			if entry.id == "" {
+				item(mfGrayed, 0, entry.url)
+				continue
+			}
+			item(mfGrayed, 0, entry.url)
+			item(mfString, uintptr(linkBase+2*i), "Copy URL "+twoDigits(i+1))
+			item(mfString, uintptr(linkBase+2*i+1), "Revoke URL "+twoDigits(i+1))
+		}
+		if len(activeLinks) > 0 {
+			item(mfString, stopAllItem, "Stop all sessions now")
+		}
+		item(mfSeparator, 0, "")
 		item(mfString, disableItem, "Turn off unattended access…")
 		item(mfString, exitItem, "Exit")
 		var at struct{ x, y int32 }
@@ -331,6 +362,21 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 				case stopSession <- struct{}{}:
 				default:
 				}
+			case createLink:
+				if hours, ok := pickValidity(window); ok {
+					req := newLinkRequest(hostName, hours)
+					if inflight.begin(req) {
+						select {
+						case newLink <- req:
+						default:
+						}
+					}
+				}
+			case stopAllItem:
+				select {
+				case stopSession <- struct{}{}:
+				default:
+				}
 			case disableItem:
 				if ask(window, "Turn off unattended access?\n\nIT will no longer be able to connect without your approval, and this access code stops working. Turning it on again creates a new code.") {
 					disabling = true
@@ -339,6 +385,22 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 			case exitItem:
 				if ask(window, "Exit winss132r?\n\nAny remote session ends. Unattended access stays on and starts again the next time you sign in.") {
 					destroyWindow.Call(window)
+				}
+			default:
+				if id := int(wParam & 0xffff); id >= linkBase && id < linkBase+2*8 {
+					entries := listLinkEntries(linksPath, time.Now())
+					i := (id - linkBase) / 2
+					if i < len(entries) && entries[i].id != "" {
+						if (id-linkBase)%2 == 0 {
+							if copyText(window, entries[i].url) {
+								notify("Remote access URL copied", "Share it with anyone who needs to connect. Multiple sessions can use it until it expires.")
+							}
+						} else if err := revokeLink(linksPath, entries[i].id, time.Now()); err != nil {
+							notify("Could not revoke the URL", err.Error())
+						} else {
+							notify("Remote access URL revoked", "The shared link no longer opens sessions on this PC.")
+						}
+					}
 				}
 			}
 			return 0
@@ -359,6 +421,9 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 					}
 					state = next.state
 					detail = next.text
+					if strings.Contains(next.text, "link is live") || strings.Contains(next.text, "Could not create") {
+						inflight.done()
+					}
 					if state == "connected" {
 						detail = connectStatus(connections) + ": IT can view and control this PC. Ctrl+2 or F12 stops."
 					}
@@ -400,10 +465,9 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 		notify("winss132r", "Unattended access is on. Click this icon for the status, the access code, or Initiate.")
 	}
 
-	hostName, _ := os.Hostname()
 	go func() {
 		defer close(worker)
-		serveUnattended(ctx, config.Relay, config.Key, hostName, stopSession, initiate, updates)
+		serveUnattended(ctx, config.Relay, config.Key, hostName, linksPath, stopSession, initiate, newLink, updates)
 	}()
 
 	var msg indicatorMessage

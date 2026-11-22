@@ -201,20 +201,26 @@ func serveUnattended(ctx context.Context, origin, key, name, linksPath string, s
 			continue
 		}
 		// Retry a link whose creation did not finish before the last round
-		// ended (relay offline, error, or session raced ahead of it).
+		// ended (relay offline, error, or session raced ahead of it). The UI
+		// dedupes clicks with its own in-flight marker; this keeps retrying
+		// every few seconds until the relay confirms the link exists.
+	retry:
 		for {
 			select {
 			case req := <-pending:
 				rc, err := newRelay(origin)
 				var created *remoteLink
 				if err == nil {
-					ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-					created, err = rc.createLink(ctx, key, req.name, req.hours)
-					cancel()
+					cctx, ccancel := context.WithTimeout(context.Background(), 8*time.Second)
+					created, err = rc.createLink(cctx, key, req.name, req.hours)
+					ccancel()
 				}
 				if err != nil {
-					updates <- unattendedUpdate{state: "ready", text: "Could not create the remote access URL: " + err.Error()}
-					continue
+					updates <- unattendedUpdate{state: "ready", text: "Could not create the remote access URL: " + err.Error() + ". Retrying…"}
+					if !pause(3 * time.Second) {
+						return
+					}
+					continue retry
 				}
 				stored := savedLink{ID: created.ID, Code: created.Code, Key: key, Name: req.name, Relay: origin, CreatedAt: created.CreatedAt, ExpiresAt: created.ExpiresAt}
 				if linksPath != "" {
@@ -222,10 +228,10 @@ func serveUnattended(ctx context.Context, origin, key, name, linksPath string, s
 					_ = saveLinks(linksPath, addLink(current, stored, time.Now()))
 				}
 				updates <- unattendedUpdate{state: "ready", text: "Remote access link is live: share " + stored.shareURL() + " (" + timeLeft(stored.ExpiresAt, time.Now()) + ")"}
-				continue
+				continue retry
 			default:
+				break retry
 			}
-			break
 		}
 		served, err := unattendedRound(ctx, origin, key, name, stopSession, initiate, linksPath, newLink, pending, &callUntil, updates)
 		if ctx.Err() != nil {
@@ -402,6 +408,10 @@ func unattendedRound(parent context.Context, origin, key, name string, stopSessi
 				return false, err
 			}
 		case req := <-newLink:
+			select {
+			case <-pendingLink: // drop any older unconfirmed request; this one wins
+			default:
+			}
 			pendingLink <- req // remembered if creation below fails or errors
 			createLink(req)
 			drainRequest(pendingLink, req)
