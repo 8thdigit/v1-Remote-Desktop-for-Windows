@@ -77,7 +77,8 @@ on. It shows:
 - **Version**, for example `Msfwr v0.3.2 · Windows x64`.
 
 Closing the window (or **Hide**) only hides it; unattended access keeps
-running from the icon. When Msfwr starts at sign-in it stays in the
+running from the icon. Like every Msfwr window it has no taskbar button and
+no minimize button; reopen it from the icon or from Start. When Msfwr starts at sign-in it stays in the
 notification area and does not open the window. The relay does not report
 who the viewer is, so the window shows when a session started, not a name.
 
