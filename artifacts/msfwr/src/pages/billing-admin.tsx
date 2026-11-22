@@ -23,7 +23,7 @@ export type Plan = {
 export type Subscription = {
   accountId: string; planId: string | null; status: Exclude<SubStatus, 'none'>;
   currentPeriodStart: number; currentPeriodEnd: number; sessionsUsed: number;
-  licenseVersion: number; autoRenew: boolean; notes: string;
+  licenseVersion: number; autoRenew: boolean; requireLicense: boolean; notes: string;
 };
 export type Entitlement = {
   subscribed: boolean; status: SubStatus; reason?: string; plan?: Plan;
@@ -313,6 +313,7 @@ function SubscriptionDialog({ company, plans, onClose, onSaved, onError }: { com
   const [planId, setPlanId] = useState<string>('');
   const [status, setStatus] = useState<Exclude<SubStatus, 'none'>>('active');
   const [autoRenew, setAutoRenew] = useState(true);
+  const [requireLicense, setRequireLicense] = useState(false);
   const [periodEnd, setPeriodEnd] = useState('');
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
@@ -322,6 +323,7 @@ function SubscriptionDialog({ company, plans, onClose, onSaved, onError }: { com
     setPlanId(sub?.planId ?? (plans[0]?.id ?? ''));
     setStatus(sub?.status ?? 'active');
     setAutoRenew(sub?.autoRenew ?? true);
+    setRequireLicense(sub?.requireLicense ?? false);
     setPeriodEnd(sub?.currentPeriodEnd ? new Date(sub.currentPeriodEnd).toISOString().slice(0, 10) : '');
     setNotes(sub?.notes ?? '');
   }, [company, plans]);
@@ -329,7 +331,7 @@ function SubscriptionDialog({ company, plans, onClose, onSaved, onError }: { com
     e.preventDefault();
     if (!company) return;
     setBusy(true); onError(null);
-    const body: Record<string, unknown> = { planId: planId || null, status, autoRenew, notes: notes.trim() };
+    const body: Record<string, unknown> = { planId: planId || null, status, autoRenew, requireLicense, notes: notes.trim() };
     if (periodEnd) body.currentPeriodEnd = new Date(periodEnd + 'T00:00:00').getTime();
     try { await api(`/subscriptions/${company.id}`, { method: 'PUT', body: JSON.stringify(body) }); onSaved(); onClose(); }
     catch (err) { onError(errorText(err, 'Could not save the subscription.')); }
@@ -357,6 +359,10 @@ function SubscriptionDialog({ company, plans, onClose, onSaved, onError }: { com
             <input type="date" className={`${inputCls} mt-1`} value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} data-testid="input-period-end" /></label>
           <label className="flex items-center gap-2 text-sm font-semibold">
             <input type="checkbox" checked={autoRenew} onChange={(e) => setAutoRenew(e.target.checked)} className="h-4 w-4" /> Auto-renew the period when it lapses
+          </label>
+          <label className="flex items-start gap-2 text-sm font-semibold" data-testid="toggle-require-license">
+            <input type="checkbox" checked={requireLicense} onChange={(e) => setRequireLicense(e.target.checked)} className="mt-0.5 h-4 w-4" />
+            <span>Require a licensed client<span className="block text-xs font-normal text-muted-foreground">PCs must present a valid license to register — blocks copied clients and enforces revocation. Configure each PC's client first.</span></span>
           </label>
           <label className="block text-xs font-semibold text-muted-foreground">Notes <span className="font-normal">(optional)</span>
             <textarea className={`${inputCls} mt-1`} value={notes} onChange={(e) => setNotes(e.target.value)} maxLength={500} rows={2} /></label>

@@ -41625,7 +41625,8 @@ function createBilling(backend, options = {}) {
         currentPeriodEnd: null,
         maxConcurrentViewers: 0,
         maxSessionMinutes: 0,
-        licenseVersion: 0
+        licenseVersion: 0,
+        requireLicense: false
       };
     }
     rollIfLapsed(sub, now);
@@ -41648,7 +41649,8 @@ function createBilling(backend, options = {}) {
       currentPeriodEnd: sub.currentPeriodEnd || null,
       maxConcurrentViewers: plan?.maxConcurrentViewers ?? 0,
       maxSessionMinutes: plan?.maxSessionMinutes ?? 0,
-      licenseVersion: sub.licenseVersion
+      licenseVersion: sub.licenseVersion,
+      requireLicense: !!sub.requireLicense
     };
   }
   const sign = (body) => createHmac2("sha256", secret()).update(body).digest("base64url");
@@ -41783,6 +41785,7 @@ function createBilling(backend, options = {}) {
           sessionsUsed: 0,
           licenseVersion: 1,
           autoRenew: true,
+          requireLicense: false,
           notes: "",
           createdAt: now,
           updatedAt: now
@@ -41793,6 +41796,7 @@ function createBilling(backend, options = {}) {
       sub.planId = planId;
       if (input.status !== void 0) sub.status = input.status;
       if (input.autoRenew !== void 0) sub.autoRenew = !!input.autoRenew;
+      if (input.requireLicense !== void 0) sub.requireLicense = !!input.requireLicense;
       if (input.notes !== void 0) sub.notes = cleanText(input.notes, 500);
       if (input.currentPeriodStart !== void 0) sub.currentPeriodStart = input.currentPeriodStart;
       if (input.currentPeriodEnd !== void 0) {
@@ -41853,6 +41857,15 @@ function createBilling(backend, options = {}) {
     // --- Licenses ---
     issueLicense,
     verifyLicense,
+    // Validates a license presented for a company: "ok" (valid and for this
+    // company), "mismatch" (valid but issued to another company), "invalid"
+    // (bad signature or revoked), or "absent" (none presented).
+    checkLicense(accountId, token) {
+      if (!token) return "absent";
+      const id2 = verifyLicense(token);
+      if (!id2) return "invalid";
+      return id2.accountId === accountId ? "ok" : "mismatch";
+    },
     // --- Payments ---
     listPayments(accountId, limit = 200) {
       return payments.filter((p) => !accountId || p.accountId === accountId).sort((a, b) => b.dueDate - a.dueDate || b.createdAt - a.createdAt).slice(0, limit).map((p) => ({ ...p }));
@@ -42093,16 +42106,25 @@ function subBlockMessage(reason) {
       return "This company's WINRSS.net subscription is suspended. Contact your provider.";
     case "quota":
       return "This company has reached its session limit for the current billing period.";
+    case "license":
+      return "This client's license is missing, invalid or revoked. Reconfigure it from the admin console.";
     default:
       return "This company's WINRSS.net subscription is not active.";
   }
 }
-async function gateForRa(raId) {
+async function gateForRa(raId, license) {
   if (!raId) return { ok: true, status: "none" };
   try {
     const account = (await accountsReady()).findRa(raId);
     if (!account) return { ok: true, status: "none" };
     const billing = await billingReady();
+    const sub = billing.getSubscription(account.id);
+    if (!sub) return { ok: true, status: "none" };
+    const ent = billing.entitlement(account.id);
+    const lic = billing.checkLicense(account.id, license);
+    if (lic === "mismatch" || lic === "invalid" || ent.requireLicense && lic !== "ok") {
+      return { ok: false, status: ent.status, reason: "license", message: subBlockMessage("license") };
+    }
     const gate = billing.canStartSession(account.id);
     if (gate.ok) return { ok: true, status: gate.entitlement.status };
     return { ok: false, status: gate.entitlement.status, reason: gate.reason, message: subBlockMessage(gate.reason) };
@@ -42198,7 +42220,52 @@ function limiter(max, windowMs) {
   };
 }
 
+// src/lib/security.ts
+function securityHeaders() {
+  return (_req, res, next) => {
+    res.set({
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY",
+      "Referrer-Policy": "no-referrer",
+      "Cross-Origin-Resource-Policy": "same-origin",
+      "X-Permitted-Cross-Domain-Policies": "none"
+    });
+    next();
+  };
+}
+function keyedLimiter(max, windowMs, cap = 2e4) {
+  const hits = /* @__PURE__ */ new Map();
+  const sweep = (now) => {
+    if (hits.size <= cap) return;
+    for (const [k, v] of hits) if (now - v.since >= windowMs) hits.delete(k);
+  };
+  return {
+    // Records a hit and reports whether the key is now over the limit.
+    hit(key, now = Date.now()) {
+      const h = hits.get(key);
+      if (!h || now - h.since >= windowMs) {
+        hits.set(key, { since: now, count: 1 });
+        sweep(now);
+        return false;
+      }
+      h.count += 1;
+      return h.count > max;
+    },
+    blocked(key, now = Date.now()) {
+      const h = hits.get(key);
+      return !!h && now - h.since < windowMs && h.count > max;
+    },
+    reset(key) {
+      hits.delete(key);
+    },
+    get size() {
+      return hits.size;
+    }
+  };
+}
+
 // src/routes/msfwr.ts
+var standingByKey = keyedLimiter(40, 6e4);
 var router2 = (0, import_express2.Router)();
 function throttle(max) {
   let since = 0;
@@ -42251,8 +42318,13 @@ router2.post("/standing", async (req, res) => {
     res.status(400).json({ error: "Invalid unattended access key." });
     return;
   }
+  if (standingByKey.hit(body.data.key)) {
+    res.status(429).json({ error: "This PC is registering too often. Try again in a minute." });
+    return;
+  }
   const ra = await lookupRa(body.data.ra);
-  const gate = ra.status === "ok" ? await gateForRa(ra.ra) : { ok: true, status: "none" };
+  const license = typeof req.body?.license === "string" ? req.body.license : void 0;
+  const gate = ra.status === "ok" ? await gateForRa(ra.ra, license) : { ok: true, status: "none" };
   if (!gate.ok) {
     res.status(402).json({ error: gate.message, subStatus: gate.status, reason: gate.reason });
     return;
@@ -42869,6 +42941,7 @@ router5.put("/subscriptions/:accountId", async (req, res) => {
       planId: req.body?.planId === null ? null : asStr(req.body?.planId),
       status: asSubStatus(req.body?.status),
       autoRenew: asBool(req.body?.autoRenew),
+      requireLicense: asBool(req.body?.requireLicense),
       notes: asStr(req.body?.notes),
       currentPeriodStart: asNum(req.body?.currentPeriodStart),
       currentPeriodEnd: asNum(req.body?.currentPeriodEnd),
@@ -43073,6 +43146,7 @@ app.use(
 app.use((0, import_cors.default)());
 app.use(import_express7.default.json());
 app.use(import_express7.default.urlencoded({ extended: true }));
+app.use(securityHeaders());
 app.use("/api", routes_default);
 var app_default = app;
 

@@ -168,6 +168,7 @@ router.put("/subscriptions/:accountId", async (req, res) => {
       planId: req.body?.planId === null ? null : asStr(req.body?.planId),
       status: asSubStatus(req.body?.status),
       autoRenew: asBool(req.body?.autoRenew),
+      requireLicense: asBool(req.body?.requireLicense),
       notes: asStr(req.body?.notes),
       currentPeriodStart: asNum(req.body?.currentPeriodStart),
       currentPeriodEnd: asNum(req.body?.currentPeriodEnd),

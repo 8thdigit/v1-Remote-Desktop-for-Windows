@@ -48,10 +48,10 @@ function client(root = base) {
 }
 
 const pcKey = (c) => c.repeat(43);
-async function registerStanding(key, name, ra) {
+async function registerStanding(key, name, ra, license) {
   const res = await fetch(`${base}/msfwr/standing`, {
     method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ key, name, ra }),
+    body: JSON.stringify({ key, name, ra, ...(license ? { license } : {}) }),
   });
   return { status: res.status, json: await res.json().catch(() => undefined) };
 }
@@ -139,4 +139,38 @@ test("state survives a relay restart (durable billing store)", async () => {
 test("non-admins cannot reach billing", async () => {
   const anon = client();
   assert.equal((await anon("GET", "/billing/plans")).status, 401);
+});
+
+test("a forged or mismatched license is refused even when the subscription is active", async () => {
+  const bundle = await admin("GET", `/billing/companies/${companyId}/client?origin=https://support.example.com`);
+  const license = bundle.json.config.license;
+  // A valid license registers fine.
+  assert.equal((await registerStanding(pcKey("e"), "Desk", companyRa, license)).status, 201);
+  // A tampered license is rejected.
+  const forged = await registerStanding(pcKey("f"), "Desk", companyRa, license + "x");
+  assert.equal(forged.status, 402, JSON.stringify(forged.json));
+  assert.equal(forged.json.reason, "license");
+});
+
+test("requireLicense blocks an unlicensed PC and allows a licensed one", async () => {
+  await admin("PUT", `/billing/subscriptions/${companyId}`, { requireLicense: true });
+  const noLicense = await registerStanding(pcKey("g"), "Desk", companyRa);
+  assert.equal(noLicense.status, 402, JSON.stringify(noLicense.json));
+  assert.equal(noLicense.json.reason, "license");
+  const bundle = await admin("GET", `/billing/companies/${companyId}/client?origin=https://support.example.com`);
+  const ok = await registerStanding(pcKey("h"), "Desk", companyRa, bundle.json.config.license);
+  assert.equal(ok.status, 201);
+  // Revoking licenses invalidates the issued one immediately.
+  await admin("POST", `/billing/subscriptions/${companyId}/revoke-license`, {});
+  const revoked = await registerStanding(pcKey("i"), "Desk", companyRa, bundle.json.config.license);
+  assert.equal(revoked.status, 402);
+  assert.equal(revoked.json.reason, "license");
+  // Clean up so later assertions about active status hold.
+  await admin("PUT", `/billing/subscriptions/${companyId}`, { requireLicense: false });
+});
+
+test("security headers are present on API responses", async () => {
+  const res = await fetch(`${base}/healthz`);
+  assert.equal(res.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(res.headers.get("x-frame-options"), "DENY");
 });

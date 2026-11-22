@@ -145,3 +145,26 @@ test("effectiveStatus flips active to expired past the period end", () => {
   assert.equal(effectiveStatus(sub, 50), "active");
   assert.equal(effectiveStatus(sub, 150), "expired");
 });
+
+test("checkLicense distinguishes ok, mismatch, invalid and absent", async () => {
+  const now = { value: 1_000_000 };
+  const b = await makeBilling(now);
+  await b.setSubscription("acct-1", { status: "active" });
+  await b.setSubscription("acct-2", { status: "active" });
+  const t1 = b.issueLicense("acct-1", "123456");
+  assert.equal(b.checkLicense("acct-1", t1), "ok");
+  assert.equal(b.checkLicense("acct-2", t1), "mismatch");
+  assert.equal(b.checkLicense("acct-1", t1 + "x"), "invalid");
+  assert.equal(b.checkLicense("acct-1", undefined), "absent");
+  await b.revokeLicenses("acct-1");
+  assert.equal(b.checkLicense("acct-1", t1), "invalid", "revoked license is invalid");
+});
+
+test("requireLicense is persisted and surfaced on the entitlement", async () => {
+  const now = { value: 1_000_000 };
+  const b = await makeBilling(now);
+  await b.setSubscription("acct-1", { status: "active", requireLicense: true });
+  assert.equal(b.entitlement("acct-1").requireLicense, true);
+  await b.setSubscription("acct-1", { requireLicense: false });
+  assert.equal(b.entitlement("acct-1").requireLicense, false);
+});

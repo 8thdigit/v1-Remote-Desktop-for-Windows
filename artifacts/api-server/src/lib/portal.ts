@@ -126,19 +126,37 @@ export function subBlockMessage(reason: Entitlement["reason"]): string {
     case "expired": return "This company's WINRSS.net subscription has expired. Contact your provider to renew it.";
     case "suspended": return "This company's WINRSS.net subscription is suspended. Contact your provider.";
     case "quota": return "This company has reached its session limit for the current billing period.";
+    case "license": return "This client's license is missing, invalid or revoked. Reconfigure it from the admin console.";
     default: return "This company's WINRSS.net subscription is not active.";
   }
 }
 
 // Whether a PC that points to this RA ID may register and serve sessions.
 // A company with no subscription on record is ungated (legacy); gating
-// begins once an operator assigns it a subscription.
-export async function gateForRa(raId: string | undefined): Promise<{ ok: boolean; status: SubStatus | "none"; reason?: Entitlement["reason"]; message?: string }> {
+// begins once an operator assigns it a subscription. When a license token is
+// presented it is verified against the company, and when the subscription
+// requires a license, a registration without a valid one is refused — this is
+// what stops a cracked or copied client from impersonating a company or
+// dodging revocation.
+export async function gateForRa(
+  raId: string | undefined,
+  license?: string,
+): Promise<{ ok: boolean; status: SubStatus | "none"; reason?: Entitlement["reason"]; message?: string }> {
   if (!raId) return { ok: true, status: "none" };
   try {
     const account = (await accountsReady()).findRa(raId);
     if (!account) return { ok: true, status: "none" };
     const billing = await billingReady();
+    const sub = billing.getSubscription(account.id);
+    if (!sub) return { ok: true, status: "none" };
+    const ent = billing.entitlement(account.id);
+    // License checks come first: a presented license that is forged, revoked
+    // or issued to another company is always refused, and a company that
+    // requires a license refuses anything without a valid one.
+    const lic = billing.checkLicense(account.id, license);
+    if (lic === "mismatch" || lic === "invalid" || (ent.requireLicense && lic !== "ok")) {
+      return { ok: false, status: ent.status, reason: "license", message: subBlockMessage("license") };
+    }
     const gate = billing.canStartSession(account.id);
     if (gate.ok) return { ok: true, status: gate.entitlement.status };
     return { ok: false, status: gate.entitlement.status, reason: gate.reason, message: subBlockMessage(gate.reason) };

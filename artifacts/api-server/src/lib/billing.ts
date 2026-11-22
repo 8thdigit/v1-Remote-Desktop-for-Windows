@@ -62,6 +62,11 @@ export type Subscription = {
   // compromised, or a client that must be re-provisioned).
   licenseVersion: number;
   autoRenew: boolean;
+  // When set, the company's PCs must present a valid, current license to
+  // register. This blocks a cracked or copied client that drops the license,
+  // and enforces revocation. Off by default so legacy PCs keep working until
+  // the operator provisions licensed clients.
+  requireLicense: boolean;
   notes: string;
   createdAt: number;
   updatedAt: number;
@@ -202,7 +207,7 @@ export function effectiveStatus(sub: Subscription, now: number): SubStatus {
 export type Entitlement = {
   subscribed: boolean;
   status: SubStatus | "none";
-  reason?: "inactive" | "expired" | "suspended" | "quota";
+  reason?: "inactive" | "expired" | "suspended" | "quota" | "license";
   plan?: Plan;
   sessionsUsed: number;
   sessionQuota: number;
@@ -211,6 +216,7 @@ export type Entitlement = {
   maxConcurrentViewers: number;
   maxSessionMinutes: number;
   licenseVersion: number;
+  requireLicense: boolean;
 };
 
 export function createBilling(backend: BillingBackend, options: { secret?: string; clock?: () => number } = {}) {
@@ -290,7 +296,7 @@ export function createBilling(backend: BillingBackend, options: { secret?: strin
     if (!sub) {
       return {
         subscribed: false, status: "none", sessionsUsed: 0, sessionQuota: 0, remaining: null,
-        currentPeriodEnd: null, maxConcurrentViewers: 0, maxSessionMinutes: 0, licenseVersion: 0,
+        currentPeriodEnd: null, maxConcurrentViewers: 0, maxSessionMinutes: 0, licenseVersion: 0, requireLicense: false,
       };
     }
     rollIfLapsed(sub, now);
@@ -314,6 +320,7 @@ export function createBilling(backend: BillingBackend, options: { secret?: strin
       maxConcurrentViewers: plan?.maxConcurrentViewers ?? 0,
       maxSessionMinutes: plan?.maxSessionMinutes ?? 0,
       licenseVersion: sub.licenseVersion,
+      requireLicense: !!sub.requireLicense,
     };
   }
 
@@ -449,7 +456,7 @@ export function createBilling(backend: BillingBackend, options: { secret?: strin
     // (re)starts the current period from `now` unless an explicit period is
     // given.
     async setSubscription(accountId: string, input: {
-      planId?: string | null; status?: SubStatus; autoRenew?: boolean; notes?: string;
+      planId?: string | null; status?: SubStatus; autoRenew?: boolean; requireLicense?: boolean; notes?: string;
       currentPeriodStart?: number; currentPeriodEnd?: number; resetUsage?: boolean;
     }) {
       if (!accountId) throw new BillingError(400, "Missing company.");
@@ -462,7 +469,7 @@ export function createBilling(backend: BillingBackend, options: { secret?: strin
         sub = {
           accountId, planId: null, status: "active", startedAt: now,
           currentPeriodStart: now, currentPeriodEnd: 0, sessionsUsed: 0,
-          licenseVersion: 1, autoRenew: true, notes: "", createdAt: now, updatedAt: now,
+          licenseVersion: 1, autoRenew: true, requireLicense: false, notes: "", createdAt: now, updatedAt: now,
         };
         subscriptions.push(sub);
       }
@@ -470,6 +477,7 @@ export function createBilling(backend: BillingBackend, options: { secret?: strin
       sub.planId = planId;
       if (input.status !== undefined) sub.status = input.status;
       if (input.autoRenew !== undefined) sub.autoRenew = !!input.autoRenew;
+      if (input.requireLicense !== undefined) sub.requireLicense = !!input.requireLicense;
       if (input.notes !== undefined) sub.notes = cleanText(input.notes, 500);
       if (input.currentPeriodStart !== undefined) sub.currentPeriodStart = input.currentPeriodStart;
       if (input.currentPeriodEnd !== undefined) {
@@ -529,6 +537,15 @@ export function createBilling(backend: BillingBackend, options: { secret?: strin
     // --- Licenses ---
     issueLicense,
     verifyLicense,
+    // Validates a license presented for a company: "ok" (valid and for this
+    // company), "mismatch" (valid but issued to another company), "invalid"
+    // (bad signature or revoked), or "absent" (none presented).
+    checkLicense(accountId: string, token: string | undefined): "ok" | "mismatch" | "invalid" | "absent" {
+      if (!token) return "absent";
+      const id = verifyLicense(token);
+      if (!id) return "invalid";
+      return id.accountId === accountId ? "ok" : "mismatch";
+    },
 
     // --- Payments ---
     listPayments(accountId?: string, limit = 200) {
