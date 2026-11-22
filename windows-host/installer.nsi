@@ -84,6 +84,7 @@ Function UninstTimelineLeave
   ${If} $0 == ${BST_CHECKED}
     ${NSD_GetText} $R7 $0
     ${If} $0 > 0
+    ${AndIf} $0 <= 720
       StrCpy $UninstHours $0
     ${Else}
       MessageBox MB_ICONEXCLAMATION "Enter a number of hours between 1 and 720, or pick another option." /SD IDOK
@@ -131,7 +132,7 @@ Section "Msfwr"
     Pop $9            ; exit code
     Pop $8            ; script output (diagnostics only)
     ${If} $9 != 0
-      MessageBox MB_ICONEXCLAMATION "Msfwr is installed, but the automatic uninstall could not be scheduled. You can uninstall it any time from Windows Settings." /SD IDOK
+      MessageBox MB_ICONEXCLAMATION "Msfwr is installed, but the automatic uninstall could not be scheduled (code $9). You can uninstall it any time from Windows Settings.$\r$\n$\r$\nDetails: $TEMP\msfwr-schedule-uninstall.log" /SD IDOK
     ${EndIf}
     WriteRegStr HKCU "Software\Msfwr" "AutoUninstallHours" "$UninstHours"
   ${EndIf}
