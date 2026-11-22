@@ -123,24 +123,20 @@ func runClient(unattendedConfigPath string) (*unattendedConfig, error) {
 	instance, _, _ := getModule.Call(0)
 	cursor, _, _ := user.NewProc("LoadCursorW").Call(0, 32512)
 	className := textPtr("MsfwrSupportClient")
-	taskbarMessage, _, _ := registerWindowMessage.Call(uintptr(unsafe.Pointer(textPtr("TaskbarButtonCreated"))))
-	overlay := newTaskbarOverlay()
-	defer func() { overlay.close() }()
-	liveIcon, _, _ := user.NewProc("LoadIconW").Call(0, 32516) // Windows information badge.
-	liveDescription := textPtr("Screen sharing and remote control active")
+	// No taskbar presence: the client window is a tool window (WS_EX_TOOLWINDOW,
+	// see CreateWindowEx below), so Windows never shows a taskbar button for it,
+	// even while a session is live. The title still marks live sharing, and the
+	// separate topmost sharing indicator window appears when IT is connected.
 	sharing := false
-	taskbarReady := false
-	updateTaskbar := func(window uintptr) {
+	var clientWindow uintptr
+	updateTitle := func() {
+		if clientWindow == 0 {
+			return
+		}
 		if sharing {
-			setText(window, liveTitle)
-			if taskbarReady && liveIcon != 0 {
-				overlay.set(window, liveIcon, liveDescription)
-			}
+			setText(clientWindow, liveTitle)
 		} else {
-			setText(window, idleTitle)
-			if taskbarReady {
-				overlay.set(window, 0, nil)
-			}
+			setText(clientWindow, idleTitle)
 		}
 	}
 	dpi := uintptr(96)
@@ -194,11 +190,6 @@ func runClient(unattendedConfigPath string) (*unattendedConfig, error) {
 		}
 	}
 	proc := syscall.NewCallback(func(window, msg, wParam, lParam uintptr) uintptr {
-		if taskbarMessage != 0 && msg == taskbarMessage {
-			taskbarReady = true
-			updateTaskbar(window)
-			return 0
-		}
 		switch msg {
 		case 0x0112: // WM_SYSCOMMAND
 			if wParam&0xfff0 == stopMenu {
@@ -323,7 +314,7 @@ func runClient(unattendedConfigPath string) (*unattendedConfig, error) {
 						<-done
 						cancel, done, answer = nil, nil, nil
 						sharing = false
-						updateTaskbar(window)
+						updateTitle()
 						if closing {
 							destroyWindow.Call(window)
 							return 0
@@ -343,7 +334,7 @@ func runClient(unattendedConfigPath string) (*unattendedConfig, error) {
 						setFocus.Call(verification)
 					} else if state == "live" {
 						sharing = true
-						updateTaskbar(window)
+						updateTitle()
 						showWindow.Call(window, 6) // Minimize setup; the live indicator is a separate window.
 					}
 				default:
@@ -361,11 +352,14 @@ func runClient(unattendedConfigPath string) (*unattendedConfig, error) {
 		return nil, windowError
 	}
 	title := textPtr(idleTitle)
-	window, _, _ := createWindow.Call(0x10000, uintptr(unsafe.Pointer(className)), uintptr(unsafe.Pointer(title)),
+	// WS_EX_TOOLWINDOW (0x80) instead of WS_EX_APPWINDOW (0x10000): no taskbar
+	// button at any time, per product requirement.
+	window, _, _ := createWindow.Call(0x80, uintptr(unsafe.Pointer(className)), uintptr(unsafe.Pointer(title)),
 		0x00ca0000, 0x80000000, 0x80000000, px(580), px(450), 0, 0, instance, 0)
 	if window == 0 {
 		return nil, windowError
 	}
+	clientWindow = window
 	systemMenu, _, _ = getSystemMenu.Call(window, 0)
 	if systemMenu == 0 {
 		destroyWindow.Call(window)

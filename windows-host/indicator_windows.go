@@ -102,8 +102,10 @@ func showSharingIndicator(ctx context.Context, stop context.CancelFunc, ready ch
 	}
 	scale := func(n uintptr) uintptr { return n * dpi / 96 }
 	title := syscall.StringToUTF16Ptr("Msfwr — Live sharing")
+	// WS_EX_TOOLWINDOW (0x80): the live-sharing indicator never shows a taskbar
+	// button; it is only the small topmost on-screen notice.
 	window, _, _ := createWindow.Call(
-		0x8, uintptr(unsafe.Pointer(class.name)), uintptr(unsafe.Pointer(title)), 0x80c80000,
+		0x80, uintptr(unsafe.Pointer(class.name)), uintptr(unsafe.Pointer(title)), 0x80c80000,
 		scale(16), scale(16), scale(350), scale(145), 0, 0, instance, 0,
 	)
 	if window == 0 {
