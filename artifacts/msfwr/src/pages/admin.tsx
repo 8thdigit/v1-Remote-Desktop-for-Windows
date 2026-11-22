@@ -53,7 +53,7 @@ export default function Admin() {
   const overview = useQuery<AdminOverview>({ queryKey: getGetAdminOverviewQueryKey(), queryFn: () => getAdminOverview(), refetchInterval: 4000 });
 
   useEffect(() => {
-    document.title = 'Admin console — Msfwr';
+    document.title = 'Admin console — WINRSS.net';
     const id = window.setInterval(() => setNow(Date.now()), 5000);
     return () => window.clearInterval(id);
   }, []);
@@ -366,7 +366,7 @@ function UsersPanel({ users, me, now, loading, onRole, onToggle, onRename, onRes
         </div>
       )}
       <p className="mt-3 text-xs text-muted-foreground">
-        Give each company its RA ID. On a PC, enter it in the Msfwr window (RA ID, Save): the PC then shows up for that company when it signs in, and
+        Give each company its RA ID. On a PC, enter it in the WINRSS.net window (RA ID, Save): the PC then shows up for that company when it signs in, and
         Initiate: ask IT to connect goes to it.
       </p>
       <ResetPassword user={reset} onClose={() => setReset(null)} onReset={onReset} />
@@ -426,7 +426,7 @@ function CreateUser({ open, onClose, onCreated }: { open: boolean; onClose: () =
       setBusy(false);
     }
   }
-  const summary = created && `Msfwr sign-in: ${window.location.origin}\nLogin ID: ${created.user.username}\nPassword: ${created.password}\nRA ID (enter it on your PCs): ${raLabel(created.user.raId)}`;
+  const summary = created && `WINRSS.net sign-in: ${window.location.origin}\nLogin ID: ${created.user.username}\nPassword: ${created.password}\nRA ID (enter it on your PCs): ${raLabel(created.user.raId)}`;
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) close(); }}>
       <DialogContent className="sm:max-w-md">

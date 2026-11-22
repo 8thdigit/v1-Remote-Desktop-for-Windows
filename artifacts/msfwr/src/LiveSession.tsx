@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type WheelEvent } from 'react';
 import { ArrowLeft, Laptop, Maximize2, Minimize2, MousePointer2, ShieldCheck } from 'lucide-react';
+import { LogoMark, Wordmark } from '@/components/logo';
 import { endMsfwr, getGetMsfwrFrameUrl, sendMsfwrInput, type MsfwrInput } from '@workspace/api-client-react';
 
 type Props = { token: string; verification: string; preapproved?: boolean; onLeave: (message?: string) => void };
@@ -163,7 +164,7 @@ export default function LiveSession({ token, verification, preapproved = false, 
     <main className="min-h-[100dvh] bg-background text-foreground" data-fullscreen={full || undefined}>
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-foreground/15 px-5 py-4 md:px-10">
         <div>
-          <p className="text-lg font-bold">Msfwr</p>
+          <div className="flex items-center gap-2"><LogoMark className="h-7 w-7" /><Wordmark /></div>
           <p role="status" className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
             {state !== 'live' ? 'Waiting for host approval' : preapproved ? 'Live · Pre-approved access' : 'Live · Host approved'}
           </p>
@@ -178,7 +179,7 @@ export default function LiveSession({ token, verification, preapproved = false, 
           <ShieldCheck className="mx-auto text-primary" size={36} />
           <h1 className="mt-5 text-4xl font-bold tracking-tight">Verify with the host</h1>
           <p className="mx-auto mt-4 max-w-md text-muted-foreground">
-            Read this number to the person at the Windows PC. They must type it into Msfwr to approve the connection.
+            Read this number to the person at the Windows PC. They must type it into WINRSS.net to approve the connection.
           </p>
           <div className="mt-7 rounded-xl bg-foreground px-3 py-6 text-background">
             <p className="font-mono text-xs uppercase tracking-widest text-background/65">Verification number</p>

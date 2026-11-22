@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { changePassword, getGetAuthStatusQueryKey, login, logout } from '@workspace/api-client-react';
-import { ArrowRight, KeyRound, Lock, Radio, ShieldCheck, UserRound } from 'lucide-react';
+import { ArrowRight, KeyRound, Lock, ShieldCheck, UserRound } from 'lucide-react';
+import { LogoMark, Wordmark } from '@/components/logo';
 import { errorText } from '@/lib/auth';
 
 // The password just used to sign in, kept in memory only so the first-password
@@ -13,11 +14,9 @@ function Shell({ children }: { children: ReactNode }) {
     <div className="dl-shell grid min-h-[100dvh] place-items-center px-4 py-10 text-foreground">
       <div className="w-full max-w-md">
         <div className="mb-6 flex items-center justify-center gap-2.5">
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-foreground text-background shadow-sm">
-            <Radio className="h-5 w-5 text-primary" />
-          </span>
+          <LogoMark className="h-10 w-10" />
           <div className="leading-tight">
-            <span className="block text-xl font-bold tracking-tight">Msfwr</span>
+            <Wordmark className="text-xl" />
             <span className="block font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Remote support</span>
           </div>
         </div>
@@ -28,7 +27,7 @@ function Shell({ children }: { children: ReactNode }) {
         </p>
         <p className="mt-2 text-center text-xs">
           <a href="https://github.com/mailbhrp-1/Remote-Desktop-for-Windows/releases/latest/download/msfwr-Setup-x64.exe" data-testid="link-download"
-            className="font-semibold text-foreground underline underline-offset-4">Download the Msfwr app for the Windows PC</a>
+            className="font-semibold text-foreground underline underline-offset-4">Download the WINRSS.net app for the Windows PC</a>
         </p>
       </div>
     </div>
@@ -53,7 +52,7 @@ export function SignIn() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  useEffect(() => { document.title = 'Sign in — Msfwr'; }, []);
+  useEffect(() => { document.title = 'Sign in — WINRSS.net'; }, []);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -104,7 +103,7 @@ export function FirstPassword({ username }: { username: string }) {
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  useEffect(() => { document.title = 'Choose a new password — Msfwr'; }, []);
+  useEffect(() => { document.title = 'Choose a new password — WINRSS.net'; }, []);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
