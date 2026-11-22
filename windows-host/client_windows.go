@@ -75,6 +75,25 @@ func startHost() error {
 		}
 	}
 	path := unattendedPath()
+	// A per-company configured client (winrss-client.json next to the app or
+	// in the config directory, or values baked into the installer) sets up
+	// unattended access with its relay URL, RA ID and license on first run,
+	// so the PC needs no manual setup. Best effort: a failure here just falls
+	// back to manual setup.
+	var provisionDirs []string
+	if exe, err := os.Executable(); err == nil {
+		provisionDirs = append(provisionDirs, filepath.Dir(exe))
+	}
+	if dir, err := os.UserConfigDir(); err == nil {
+		provisionDirs = append(provisionDirs, filepath.Join(dir, "Msfwr"))
+	}
+	if dir, err := os.UserCacheDir(); err == nil {
+		provisionDirs = append(provisionDirs, filepath.Join(dir, "Msfwr"))
+	}
+	cfg := locateClientConfig(provisionDirs)
+	if cfg != "" || embeddedRelay != "" {
+		_, _, _ = applyProvisioning(cfg, path)
+	}
 	if path != "" {
 		if config, ok, _ := loadUnattended(path); ok {
 			// Opened from Start: show the Msfwr window. Started at sign-in:

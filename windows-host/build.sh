@@ -33,7 +33,25 @@ display_version="${version#v}"
 if [[ ! $display_version =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
   display_version=0.0.0
 fi
-CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w -H=windowsgui -X main.version=$version" -o "$host" .
+# Per-company provisioning (optional). The admin console emits a build command
+# that bakes a company's relay URL, RA ID and signed license into the
+# installer, so its PCs need no manual setup. Values are validated here so a
+# malformed one does not silently ship.
+ldflags="-s -w -H=windowsgui -X main.version=$version"
+if [[ -n ${MSFWR_EMBED_RELAY:-} || -n ${MSFWR_EMBED_RA:-} || -n ${MSFWR_EMBED_LICENSE:-} ]]; then
+  if [[ ! ${MSFWR_EMBED_RELAY:-} =~ ^https://[A-Za-z0-9.-]+$ ]]; then
+    echo 'MSFWR_EMBED_RELAY must be an https origin, e.g. https://support.example.com' >&2; exit 2
+  fi
+  if [[ ! ${MSFWR_EMBED_RA:-} =~ ^[0-9]{6}$ ]]; then
+    echo 'MSFWR_EMBED_RA must be a six-digit RA ID.' >&2; exit 2
+  fi
+  if [[ -n ${MSFWR_EMBED_LICENSE:-} && ! ${MSFWR_EMBED_LICENSE} =~ ^L1(\.[A-Za-z0-9_-]+){5}$ ]]; then
+    echo 'MSFWR_EMBED_LICENSE is not a valid license token.' >&2; exit 2
+  fi
+  ldflags+=" -X main.embeddedRelay=${MSFWR_EMBED_RELAY} -X main.embeddedRA=${MSFWR_EMBED_RA} -X main.embeddedLicense=${MSFWR_EMBED_LICENSE:-}"
+  echo "Building a per-company client for RA-${MSFWR_EMBED_RA} on ${MSFWR_EMBED_RELAY}"
+fi
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="$ldflags" -o "$host" .
 if (( ${#signing[@]} )); then
   "$2" "$host"
 fi

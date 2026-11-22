@@ -22,6 +22,10 @@ type unattendedConfig struct {
 	// RA is the RA ID (six digits) this PC's remote access points to: the
 	// company that sees this PC and its Initiate requests. Empty for none.
 	RA string `json:"ra,omitempty"`
+	// License is the signed subscription license the relay issued for this
+	// company. The client sends it on registration; the relay validates it.
+	// Empty for an unlicensed (legacy) PC.
+	License string `json:"license,omitempty"`
 }
 
 const unattendedFile = "unattended.json"
@@ -72,6 +76,11 @@ func loadUnattended(path string) (unattendedConfig, bool, error) {
 		c.RA = ra
 	} else {
 		c.RA = ""
+	}
+	if license, ok := normalizeLicense(c.License); ok {
+		c.License = license
+	} else {
+		c.License = ""
 	}
 	return c, true, nil
 }
