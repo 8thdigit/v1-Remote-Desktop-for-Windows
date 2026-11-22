@@ -25,29 +25,22 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
-  Account,
-  AccountCreate,
-  AccountList,
-  AccountUpdate,
-  AdminOverview,
-  AuthLogin,
-  AuthSetup,
-  AuthStatus,
-  DesklineAccept,
-  DesklineCall,
-  DesklineCallList,
-  DesklineCallQuery,
-  DesklineCode,
-  DesklineInbox,
-  DesklineInput,
-  DesklineInputBatch,
-  DesklineInvite,
-  DesklineStandingKey,
-  DesklineTick,
-  DesklineViewer,
-  GetDesklineFrameParams,
-  HealthStatus,
-  PasswordChange
+  MsfwrCall,
+  MsfwrCallList,
+  MsfwrCallQuery,
+  MsfwrCode,
+  MsfwrInput,
+  MsfwrInvite,
+  MsfwrLink,
+  MsfwrLinkCreate,
+  MsfwrLinkRegister,
+  MsfwrLinkStatus,
+  MsfwrStandingKey,
+  MsfwrTick,
+  MsfwrViewer,
+  GetMsfwrFrameParams,
+  GetMsfwrLinkStatusParams,
+  HealthStatus
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -179,282 +172,17 @@ export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, 
 
 
 
-export const getGetAuthStatusUrl = () => {
+export const getCreateMsfwrInviteUrl = () => {
 
 
 
 
-  return `/api/auth/status`
+  return `/api/msfwr/invite`
 }
 
-/**
- * The signed-in portal user, or whether the first admin still has to be created.
- */
-export const getAuthStatus = async ( options?: Parameters<typeof customFetch>[1]): Promise<AuthStatus> => {
+export const createMsfwrInvite = async ( options?: Parameters<typeof customFetch>[1]): Promise<MsfwrInvite> => {
 
-  return customFetch<AuthStatus>(getGetAuthStatusUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getGetAuthStatusQueryKey = () => {
-    return [
-    `/api/auth/status`
-    ] as const;
-    }
-
-
-export const getGetAuthStatusQueryOptions = <TData = Awaited<ReturnType<typeof getAuthStatus>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAuthStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetAuthStatusQueryKey();
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAuthStatus>>> = ({ signal }) => getAuthStatus({ signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAuthStatus>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
-}
-
-export type GetAuthStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getAuthStatus>>>
-export type GetAuthStatusQueryError = ErrorType<unknown>
-
-
-export function useGetAuthStatus<TData = Awaited<ReturnType<typeof getAuthStatus>>, TError = ErrorType<unknown>>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAuthStatus>>, TError, TData>> & Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getAuthStatus>>,
-          TError,
-          Awaited<ReturnType<typeof getAuthStatus>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetAuthStatus<TData = Awaited<ReturnType<typeof getAuthStatus>>, TError = ErrorType<unknown>>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAuthStatus>>, TError, TData>> & Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getAuthStatus>>,
-          TError,
-          Awaited<ReturnType<typeof getAuthStatus>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetAuthStatus<TData = Awaited<ReturnType<typeof getAuthStatus>>, TError = ErrorType<unknown>>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAuthStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
-export function useGetAuthStatus<TData = Awaited<ReturnType<typeof getAuthStatus>>, TError = ErrorType<unknown>>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAuthStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getGetAuthStatusQueryOptions(options)
-
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-
-export const getSetupAdminUrl = () => {
-
-
-
-
-  return `/api/auth/setup`
-}
-
-/**
- * Creates the first admin account. Only works while no account exists, and needs the one-time setup code the relay writes to its log.
- */
-export const setupAdmin = async (authSetup: AuthSetup, options?: Parameters<typeof customFetch>[1]): Promise<Account> => {
-
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return customFetch<Account>(getSetupAdminUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(authSetup)
-  }
-);}
-
-
-
-
-
-export const getSetupAdminMutationKey = () => ['setupAdmin'] as const;
-
-export const getSetupAdminMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setupAdmin>>, TError,SetupAdminMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof setupAdmin>>, TError,SetupAdminMutationVariables, TContext> => {
-
-const mutationKey = getSetupAdminMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setupAdmin>>, SetupAdminMutationVariables> = (props) => {
-          const {data} = props ?? {};
-
-          return  setupAdmin(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type SetupAdminMutationResult = NonNullable<Awaited<ReturnType<typeof setupAdmin>>>
-    export type SetupAdminMutationBody = BodyType<AuthSetup>
-    export type SetupAdminMutationError = ErrorType<unknown>
-    export type SetupAdminMutationVariables = {data: BodyType<AuthSetup>}
-
-    export const useSetupAdmin = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setupAdmin>>, TError,SetupAdminMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof setupAdmin>>,
-        TError,
-        SetupAdminMutationVariables,
-        TContext
-      > => {
-      return useMutation(getSetupAdminMutationOptions(options), queryClient);
-    }
-
-export const getLoginUrl = () => {
-
-
-
-
-  return `/api/auth/login`
-}
-
-export const login = async (authLogin: AuthLogin, options?: Parameters<typeof customFetch>[1]): Promise<Account> => {
-
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return customFetch<Account>(getLoginUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(authLogin)
-  }
-);}
-
-
-
-
-
-export const getLoginMutationKey = () => ['login'] as const;
-
-export const getLoginMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof login>>, TError,LoginMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof login>>, TError,LoginMutationVariables, TContext> => {
-
-const mutationKey = getLoginMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof login>>, LoginMutationVariables> = (props) => {
-          const {data} = props ?? {};
-
-          return  login(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type LoginMutationResult = NonNullable<Awaited<ReturnType<typeof login>>>
-    export type LoginMutationBody = BodyType<AuthLogin>
-    export type LoginMutationError = ErrorType<unknown>
-    export type LoginMutationVariables = {data: BodyType<AuthLogin>}
-
-    export const useLogin = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof login>>, TError,LoginMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof login>>,
-        TError,
-        LoginMutationVariables,
-        TContext
-      > => {
-      return useMutation(getLoginMutationOptions(options), queryClient);
-    }
-
-export const getLogoutUrl = () => {
-
-
-
-
-  return `/api/auth/logout`
-}
-
-export const logout = async ( options?: Parameters<typeof customFetch>[1]): Promise<void> => {
-
-  return customFetch<void>(getLogoutUrl(),
+  return customFetch<MsfwrInvite>(getCreateMsfwrInviteUrl(),
   {
     ...options,
     method: 'POST'
@@ -467,13 +195,13 @@ export const logout = async ( options?: Parameters<typeof customFetch>[1]): Prom
 
 
 
-export const getLogoutMutationKey = () => ['logout'] as const;
+export const getCreateMsfwrInviteMutationKey = () => ['createMsfwrInvite'] as const;
 
-export const getLogoutMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError,void, TContext> => {
+export const getCreateMsfwrInviteMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createMsfwrInvite>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createMsfwrInvite>>, TError,void, TContext> => {
 
-const mutationKey = getLogoutMutationKey();
+const mutationKey = getCreateMsfwrInviteMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -483,10 +211,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof logout>>, void> = () => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createMsfwrInvite>>, void> = () => {
 
 
-          return  logout(requestOptions)
+          return  createMsfwrInvite(requestOptions)
         }
 
 
@@ -496,1014 +224,34 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type LogoutMutationResult = NonNullable<Awaited<ReturnType<typeof logout>>>
+    export type CreateMsfwrInviteMutationResult = NonNullable<Awaited<ReturnType<typeof createMsfwrInvite>>>
 
-    export type LogoutMutationError = ErrorType<unknown>
+    export type CreateMsfwrInviteMutationError = ErrorType<unknown>
 
 
-    export const useLogout = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+    export const useCreateMsfwrInvite = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createMsfwrInvite>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof logout>>,
+        Awaited<ReturnType<typeof createMsfwrInvite>>,
         TError,
         void,
         TContext
       > => {
-      return useMutation(getLogoutMutationOptions(options), queryClient);
+      return useMutation(getCreateMsfwrInviteMutationOptions(options), queryClient);
     }
 
-export const getChangePasswordUrl = () => {
+export const getRegisterMsfwrStandingUrl = () => {
 
 
 
 
-  return `/api/auth/password`
-}
-
-export const changePassword = async (passwordChange: PasswordChange, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
-
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return customFetch<void>(getChangePasswordUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(passwordChange)
-  }
-);}
-
-
-
-
-
-export const getChangePasswordMutationKey = () => ['changePassword'] as const;
-
-export const getChangePasswordMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changePassword>>, TError,ChangePasswordMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof changePassword>>, TError,ChangePasswordMutationVariables, TContext> => {
-
-const mutationKey = getChangePasswordMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof changePassword>>, ChangePasswordMutationVariables> = (props) => {
-          const {data} = props ?? {};
-
-          return  changePassword(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type ChangePasswordMutationResult = NonNullable<Awaited<ReturnType<typeof changePassword>>>
-    export type ChangePasswordMutationBody = BodyType<PasswordChange>
-    export type ChangePasswordMutationError = ErrorType<unknown>
-    export type ChangePasswordMutationVariables = {data: BodyType<PasswordChange>}
-
-    export const useChangePassword = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changePassword>>, TError,ChangePasswordMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof changePassword>>,
-        TError,
-        ChangePasswordMutationVariables,
-        TContext
-      > => {
-      return useMutation(getChangePasswordMutationOptions(options), queryClient);
-    }
-
-export const getListUsersUrl = () => {
-
-
-
-
-  return `/api/admin/users`
-}
-
-export const listUsers = async ( options?: Parameters<typeof customFetch>[1]): Promise<AccountList> => {
-
-  return customFetch<AccountList>(getListUsersUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getListUsersQueryKey = () => {
-    return [
-    `/api/admin/users`
-    ] as const;
-    }
-
-
-export const getListUsersQueryOptions = <TData = Awaited<ReturnType<typeof listUsers>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listUsers>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getListUsersQueryKey();
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listUsers>>> = ({ signal }) => listUsers({ signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listUsers>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
-}
-
-export type ListUsersQueryResult = NonNullable<Awaited<ReturnType<typeof listUsers>>>
-export type ListUsersQueryError = ErrorType<unknown>
-
-
-export function useListUsers<TData = Awaited<ReturnType<typeof listUsers>>, TError = ErrorType<unknown>>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listUsers>>, TError, TData>> & Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof listUsers>>,
-          TError,
-          Awaited<ReturnType<typeof listUsers>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListUsers<TData = Awaited<ReturnType<typeof listUsers>>, TError = ErrorType<unknown>>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listUsers>>, TError, TData>> & Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof listUsers>>,
-          TError,
-          Awaited<ReturnType<typeof listUsers>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListUsers<TData = Awaited<ReturnType<typeof listUsers>>, TError = ErrorType<unknown>>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listUsers>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
-export function useListUsers<TData = Awaited<ReturnType<typeof listUsers>>, TError = ErrorType<unknown>>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listUsers>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getListUsersQueryOptions(options)
-
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-
-export const getCreateUserUrl = () => {
-
-
-
-
-  return `/api/admin/users`
-}
-
-export const createUser = async (accountCreate: AccountCreate, options?: Parameters<typeof customFetch>[1]): Promise<Account> => {
-
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return customFetch<Account>(getCreateUserUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(accountCreate)
-  }
-);}
-
-
-
-
-
-export const getCreateUserMutationKey = () => ['createUser'] as const;
-
-export const getCreateUserMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createUser>>, TError,CreateUserMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof createUser>>, TError,CreateUserMutationVariables, TContext> => {
-
-const mutationKey = getCreateUserMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createUser>>, CreateUserMutationVariables> = (props) => {
-          const {data} = props ?? {};
-
-          return  createUser(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type CreateUserMutationResult = NonNullable<Awaited<ReturnType<typeof createUser>>>
-    export type CreateUserMutationBody = BodyType<AccountCreate>
-    export type CreateUserMutationError = ErrorType<unknown>
-    export type CreateUserMutationVariables = {data: BodyType<AccountCreate>}
-
-    export const useCreateUser = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createUser>>, TError,CreateUserMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof createUser>>,
-        TError,
-        CreateUserMutationVariables,
-        TContext
-      > => {
-      return useMutation(getCreateUserMutationOptions(options), queryClient);
-    }
-
-export const getUpdateUserUrl = (id: string,) => {
-
-
-
-
-  return `/api/admin/users/${id}`
-}
-
-export const updateUser = async (id: string,
-    accountUpdate: AccountUpdate, options?: Parameters<typeof customFetch>[1]): Promise<Account> => {
-
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return customFetch<Account>(getUpdateUserUrl(id),
-  {
-    ...options,
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(accountUpdate)
-  }
-);}
-
-
-
-
-
-export const getUpdateUserMutationKey = () => ['updateUser'] as const;
-
-export const getUpdateUserMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateUser>>, TError,UpdateUserMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof updateUser>>, TError,UpdateUserMutationVariables, TContext> => {
-
-const mutationKey = getUpdateUserMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateUser>>, UpdateUserMutationVariables> = (props) => {
-          const {id,data} = props ?? {};
-
-          return  updateUser(id,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type UpdateUserMutationResult = NonNullable<Awaited<ReturnType<typeof updateUser>>>
-    export type UpdateUserMutationBody = BodyType<AccountUpdate>
-    export type UpdateUserMutationError = ErrorType<unknown>
-    export type UpdateUserMutationVariables = {id: string;data: BodyType<AccountUpdate>}
-
-    export const useUpdateUser = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateUser>>, TError,UpdateUserMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof updateUser>>,
-        TError,
-        UpdateUserMutationVariables,
-        TContext
-      > => {
-      return useMutation(getUpdateUserMutationOptions(options), queryClient);
-    }
-
-export const getDeleteUserUrl = (id: string,) => {
-
-
-
-
-  return `/api/admin/users/${id}`
-}
-
-export const deleteUser = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
-
-  return customFetch<void>(getDeleteUserUrl(id),
-  {
-    ...options,
-    method: 'DELETE'
-
-
-  }
-);}
-
-
-
-
-
-export const getDeleteUserMutationKey = () => ['deleteUser'] as const;
-
-export const getDeleteUserMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteUser>>, TError,DeleteUserMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof deleteUser>>, TError,DeleteUserMutationVariables, TContext> => {
-
-const mutationKey = getDeleteUserMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteUser>>, DeleteUserMutationVariables> = (props) => {
-          const {id} = props ?? {};
-
-          return  deleteUser(id,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type DeleteUserMutationResult = NonNullable<Awaited<ReturnType<typeof deleteUser>>>
-
-    export type DeleteUserMutationError = ErrorType<unknown>
-    export type DeleteUserMutationVariables = {id: string}
-
-    export const useDeleteUser = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteUser>>, TError,DeleteUserMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof deleteUser>>,
-        TError,
-        DeleteUserMutationVariables,
-        TContext
-      > => {
-      return useMutation(getDeleteUserMutationOptions(options), queryClient);
-    }
-
-export const getGetAdminOverviewUrl = () => {
-
-
-
-
-  return `/api/admin/overview`
-}
-
-export const getAdminOverview = async ( options?: Parameters<typeof customFetch>[1]): Promise<AdminOverview> => {
-
-  return customFetch<AdminOverview>(getGetAdminOverviewUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getGetAdminOverviewQueryKey = () => {
-    return [
-    `/api/admin/overview`
-    ] as const;
-    }
-
-
-export const getGetAdminOverviewQueryOptions = <TData = Awaited<ReturnType<typeof getAdminOverview>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAdminOverview>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetAdminOverviewQueryKey();
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminOverview>>> = ({ signal }) => getAdminOverview({ signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminOverview>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
-}
-
-export type GetAdminOverviewQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminOverview>>>
-export type GetAdminOverviewQueryError = ErrorType<unknown>
-
-
-export function useGetAdminOverview<TData = Awaited<ReturnType<typeof getAdminOverview>>, TError = ErrorType<unknown>>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAdminOverview>>, TError, TData>> & Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getAdminOverview>>,
-          TError,
-          Awaited<ReturnType<typeof getAdminOverview>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetAdminOverview<TData = Awaited<ReturnType<typeof getAdminOverview>>, TError = ErrorType<unknown>>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAdminOverview>>, TError, TData>> & Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getAdminOverview>>,
-          TError,
-          Awaited<ReturnType<typeof getAdminOverview>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetAdminOverview<TData = Awaited<ReturnType<typeof getAdminOverview>>, TError = ErrorType<unknown>>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAdminOverview>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
-export function useGetAdminOverview<TData = Awaited<ReturnType<typeof getAdminOverview>>, TError = ErrorType<unknown>>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAdminOverview>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getGetAdminOverviewQueryOptions(options)
-
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-
-export const getEndSessionAsAdminUrl = (id: string,) => {
-
-
-
-
-  return `/api/admin/sessions/${id}/end`
-}
-
-export const endSessionAsAdmin = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
-
-  return customFetch<void>(getEndSessionAsAdminUrl(id),
-  {
-    ...options,
-    method: 'POST'
-
-
-  }
-);}
-
-
-
-
-
-export const getEndSessionAsAdminMutationKey = () => ['endSessionAsAdmin'] as const;
-
-export const getEndSessionAsAdminMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof endSessionAsAdmin>>, TError,EndSessionAsAdminMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof endSessionAsAdmin>>, TError,EndSessionAsAdminMutationVariables, TContext> => {
-
-const mutationKey = getEndSessionAsAdminMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof endSessionAsAdmin>>, EndSessionAsAdminMutationVariables> = (props) => {
-          const {id} = props ?? {};
-
-          return  endSessionAsAdmin(id,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type EndSessionAsAdminMutationResult = NonNullable<Awaited<ReturnType<typeof endSessionAsAdmin>>>
-
-    export type EndSessionAsAdminMutationError = ErrorType<unknown>
-    export type EndSessionAsAdminMutationVariables = {id: string}
-
-    export const useEndSessionAsAdmin = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof endSessionAsAdmin>>, TError,EndSessionAsAdminMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof endSessionAsAdmin>>,
-        TError,
-        EndSessionAsAdminMutationVariables,
-        TContext
-      > => {
-      return useMutation(getEndSessionAsAdminMutationOptions(options), queryClient);
-    }
-
-export const getGetDesklineInboxUrl = () => {
-
-
-
-
-  return `/api/deskline/inbox`
-}
-
-/**
- * Initiate requests that PCs sent to the signed-in user's RA ID.
- */
-export const getDesklineInbox = async ( options?: Parameters<typeof customFetch>[1]): Promise<DesklineInbox> => {
-
-  return customFetch<DesklineInbox>(getGetDesklineInboxUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getGetDesklineInboxQueryKey = () => {
-    return [
-    `/api/deskline/inbox`
-    ] as const;
-    }
-
-
-export const getGetDesklineInboxQueryOptions = <TData = Awaited<ReturnType<typeof getDesklineInbox>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDesklineInbox>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetDesklineInboxQueryKey();
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDesklineInbox>>> = ({ signal }) => getDesklineInbox({ signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDesklineInbox>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
-}
-
-export type GetDesklineInboxQueryResult = NonNullable<Awaited<ReturnType<typeof getDesklineInbox>>>
-export type GetDesklineInboxQueryError = ErrorType<unknown>
-
-
-export function useGetDesklineInbox<TData = Awaited<ReturnType<typeof getDesklineInbox>>, TError = ErrorType<unknown>>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDesklineInbox>>, TError, TData>> & Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getDesklineInbox>>,
-          TError,
-          Awaited<ReturnType<typeof getDesklineInbox>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetDesklineInbox<TData = Awaited<ReturnType<typeof getDesklineInbox>>, TError = ErrorType<unknown>>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDesklineInbox>>, TError, TData>> & Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getDesklineInbox>>,
-          TError,
-          Awaited<ReturnType<typeof getDesklineInbox>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetDesklineInbox<TData = Awaited<ReturnType<typeof getDesklineInbox>>, TError = ErrorType<unknown>>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDesklineInbox>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
-export function useGetDesklineInbox<TData = Awaited<ReturnType<typeof getDesklineInbox>>, TError = ErrorType<unknown>>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDesklineInbox>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getGetDesklineInboxQueryOptions(options)
-
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-
-export const getAcceptDesklineRequestUrl = () => {
-
-
-
-
-  return `/api/deskline/accept`
-}
-
-/**
- * Accepts a request sent to the signed-in user's RA ID and joins that PC.
- */
-export const acceptDesklineRequest = async (desklineAccept: DesklineAccept, options?: Parameters<typeof customFetch>[1]): Promise<DesklineViewer> => {
-
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return customFetch<DesklineViewer>(getAcceptDesklineRequestUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(desklineAccept)
-  }
-);}
-
-
-
-
-
-export const getAcceptDesklineRequestMutationKey = () => ['acceptDesklineRequest'] as const;
-
-export const getAcceptDesklineRequestMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptDesklineRequest>>, TError,AcceptDesklineRequestMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof acceptDesklineRequest>>, TError,AcceptDesklineRequestMutationVariables, TContext> => {
-
-const mutationKey = getAcceptDesklineRequestMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof acceptDesklineRequest>>, AcceptDesklineRequestMutationVariables> = (props) => {
-          const {data} = props ?? {};
-
-          return  acceptDesklineRequest(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type AcceptDesklineRequestMutationResult = NonNullable<Awaited<ReturnType<typeof acceptDesklineRequest>>>
-    export type AcceptDesklineRequestMutationBody = BodyType<DesklineAccept>
-    export type AcceptDesklineRequestMutationError = ErrorType<unknown>
-    export type AcceptDesklineRequestMutationVariables = {data: BodyType<DesklineAccept>}
-
-    export const useAcceptDesklineRequest = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptDesklineRequest>>, TError,AcceptDesklineRequestMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof acceptDesklineRequest>>,
-        TError,
-        AcceptDesklineRequestMutationVariables,
-        TContext
-      > => {
-      return useMutation(getAcceptDesklineRequestMutationOptions(options), queryClient);
-    }
-
-export const getSendDesklineInputsUrl = () => {
-
-
-
-
-  return `/api/deskline/inputs`
-}
-
-/**
- * Several viewer input events in order, in one request.
- */
-export const sendDesklineInputs = async (desklineInputBatch: DesklineInputBatch, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
-
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return customFetch<void>(getSendDesklineInputsUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(desklineInputBatch)
-  }
-);}
-
-
-
-
-
-export const getSendDesklineInputsMutationKey = () => ['sendDesklineInputs'] as const;
-
-export const getSendDesklineInputsMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendDesklineInputs>>, TError,SendDesklineInputsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof sendDesklineInputs>>, TError,SendDesklineInputsMutationVariables, TContext> => {
-
-const mutationKey = getSendDesklineInputsMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendDesklineInputs>>, SendDesklineInputsMutationVariables> = (props) => {
-          const {data} = props ?? {};
-
-          return  sendDesklineInputs(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type SendDesklineInputsMutationResult = NonNullable<Awaited<ReturnType<typeof sendDesklineInputs>>>
-    export type SendDesklineInputsMutationBody = BodyType<DesklineInputBatch>
-    export type SendDesklineInputsMutationError = ErrorType<unknown>
-    export type SendDesklineInputsMutationVariables = {data: BodyType<DesklineInputBatch>}
-
-    export const useSendDesklineInputs = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendDesklineInputs>>, TError,SendDesklineInputsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof sendDesklineInputs>>,
-        TError,
-        SendDesklineInputsMutationVariables,
-        TContext
-      > => {
-      return useMutation(getSendDesklineInputsMutationOptions(options), queryClient);
-    }
-
-export const getPullDesklineInputUrl = () => {
-
-
-
-
-  return `/api/deskline/pull`
-}
-
-/**
- * Host long poll for viewer input. Returns as soon as input is queued, or after about ten seconds with none.
- */
-export const pullDesklineInput = async ( options?: Parameters<typeof customFetch>[1]): Promise<DesklineTick> => {
-
-  return customFetch<DesklineTick>(getPullDesklineInputUrl(),
-  {
-    ...options,
-    method: 'POST'
-
-
-  }
-);}
-
-
-
-
-
-export const getPullDesklineInputMutationKey = () => ['pullDesklineInput'] as const;
-
-export const getPullDesklineInputMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof pullDesklineInput>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof pullDesklineInput>>, TError,void, TContext> => {
-
-const mutationKey = getPullDesklineInputMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof pullDesklineInput>>, void> = () => {
-
-
-          return  pullDesklineInput(requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PullDesklineInputMutationResult = NonNullable<Awaited<ReturnType<typeof pullDesklineInput>>>
-
-    export type PullDesklineInputMutationError = ErrorType<unknown>
-
-
-    export const usePullDesklineInput = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof pullDesklineInput>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof pullDesklineInput>>,
-        TError,
-        void,
-        TContext
-      > => {
-      return useMutation(getPullDesklineInputMutationOptions(options), queryClient);
-    }
-
-export const getCreateDesklineInviteUrl = () => {
-
-
-
-
-  return `/api/deskline/invite`
-}
-
-export const createDesklineInvite = async ( options?: Parameters<typeof customFetch>[1]): Promise<DesklineInvite> => {
-
-  return customFetch<DesklineInvite>(getCreateDesklineInviteUrl(),
-  {
-    ...options,
-    method: 'POST'
-
-
-  }
-);}
-
-
-
-
-
-export const getCreateDesklineInviteMutationKey = () => ['createDesklineInvite'] as const;
-
-export const getCreateDesklineInviteMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDesklineInvite>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof createDesklineInvite>>, TError,void, TContext> => {
-
-const mutationKey = getCreateDesklineInviteMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createDesklineInvite>>, void> = () => {
-
-
-          return  createDesklineInvite(requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type CreateDesklineInviteMutationResult = NonNullable<Awaited<ReturnType<typeof createDesklineInvite>>>
-
-    export type CreateDesklineInviteMutationError = ErrorType<unknown>
-
-
-    export const useCreateDesklineInvite = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDesklineInvite>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof createDesklineInvite>>,
-        TError,
-        void,
-        TContext
-      > => {
-      return useMutation(getCreateDesklineInviteMutationOptions(options), queryClient);
-    }
-
-export const getRegisterDesklineStandingUrl = () => {
-
-
-
-
-  return `/api/deskline/standing`
+  return `/api/msfwr/standing`
 }
 
 /**
  * Unattended host registration. The access code is derived from the host's saved key; a viewer that joins it is live without approval.
  */
-export const registerDesklineStanding = async (desklineStandingKey: DesklineStandingKey, options?: Parameters<typeof customFetch>[1]): Promise<DesklineInvite> => {
+export const registerMsfwrStanding = async (msfwrStandingKey: MsfwrStandingKey, options?: Parameters<typeof customFetch>[1]): Promise<MsfwrInvite> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -1519,12 +267,12 @@ export const registerDesklineStanding = async (desklineStandingKey: DesklineStan
     }
     return headers;
   };
-return customFetch<DesklineInvite>(getRegisterDesklineStandingUrl(),
+return customFetch<MsfwrInvite>(getRegisterMsfwrStandingUrl(),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(desklineStandingKey)
+    body: JSON.stringify(msfwrStandingKey)
   }
 );}
 
@@ -1532,13 +280,13 @@ return customFetch<DesklineInvite>(getRegisterDesklineStandingUrl(),
 
 
 
-export const getRegisterDesklineStandingMutationKey = () => ['registerDesklineStanding'] as const;
+export const getRegisterMsfwrStandingMutationKey = () => ['registerMsfwrStanding'] as const;
 
-export const getRegisterDesklineStandingMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerDesklineStanding>>, TError,RegisterDesklineStandingMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof registerDesklineStanding>>, TError,RegisterDesklineStandingMutationVariables, TContext> => {
+export const getRegisterMsfwrStandingMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerMsfwrStanding>>, TError,RegisterMsfwrStandingMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof registerMsfwrStanding>>, TError,RegisterMsfwrStandingMutationVariables, TContext> => {
 
-const mutationKey = getRegisterDesklineStandingMutationKey();
+const mutationKey = getRegisterMsfwrStandingMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -1548,10 +296,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof registerDesklineStanding>>, RegisterDesklineStandingMutationVariables> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof registerMsfwrStanding>>, RegisterMsfwrStandingMutationVariables> = (props) => {
           const {data} = props ?? {};
 
-          return  registerDesklineStanding(data,requestOptions)
+          return  registerMsfwrStanding(data,requestOptions)
         }
 
 
@@ -1561,34 +309,34 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type RegisterDesklineStandingMutationResult = NonNullable<Awaited<ReturnType<typeof registerDesklineStanding>>>
-    export type RegisterDesklineStandingMutationBody = BodyType<DesklineStandingKey>
-    export type RegisterDesklineStandingMutationError = ErrorType<unknown>
-    export type RegisterDesklineStandingMutationVariables = {data: BodyType<DesklineStandingKey>}
+    export type RegisterMsfwrStandingMutationResult = NonNullable<Awaited<ReturnType<typeof registerMsfwrStanding>>>
+    export type RegisterMsfwrStandingMutationBody = BodyType<MsfwrStandingKey>
+    export type RegisterMsfwrStandingMutationError = ErrorType<unknown>
+    export type RegisterMsfwrStandingMutationVariables = {data: BodyType<MsfwrStandingKey>}
 
-    export const useRegisterDesklineStanding = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerDesklineStanding>>, TError,RegisterDesklineStandingMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+    export const useRegisterMsfwrStanding = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerMsfwrStanding>>, TError,RegisterMsfwrStandingMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof registerDesklineStanding>>,
+        Awaited<ReturnType<typeof registerMsfwrStanding>>,
         TError,
-        RegisterDesklineStandingMutationVariables,
+        RegisterMsfwrStandingMutationVariables,
         TContext
       > => {
-      return useMutation(getRegisterDesklineStandingMutationOptions(options), queryClient);
+      return useMutation(getRegisterMsfwrStandingMutationOptions(options), queryClient);
     }
 
-export const getCallDesklineUrl = () => {
+export const getCallMsfwrUrl = () => {
 
 
 
 
-  return `/api/deskline/call`
+  return `/api/msfwr/call`
 }
 
 /**
  * An unattended host presses Initiate. Viewers that already know its access code see the request for two minutes and accept it by joining.
  */
-export const callDeskline = async (desklineCall?: DesklineCall, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+export const callMsfwr = async (msfwrCall?: MsfwrCall, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -1604,12 +352,12 @@ export const callDeskline = async (desklineCall?: DesklineCall, options?: Parame
     }
     return headers;
   };
-return customFetch<void>(getCallDesklineUrl(),
+return customFetch<void>(getCallMsfwrUrl(),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(desklineCall)
+    body: JSON.stringify(msfwrCall)
   }
 );}
 
@@ -1617,13 +365,13 @@ return customFetch<void>(getCallDesklineUrl(),
 
 
 
-export const getCallDesklineMutationKey = () => ['callDeskline'] as const;
+export const getCallMsfwrMutationKey = () => ['callMsfwr'] as const;
 
-export const getCallDesklineMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof callDeskline>>, TError,CallDesklineMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof callDeskline>>, TError,CallDesklineMutationVariables, TContext> => {
+export const getCallMsfwrMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof callMsfwr>>, TError,CallMsfwrMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof callMsfwr>>, TError,CallMsfwrMutationVariables, TContext> => {
 
-const mutationKey = getCallDesklineMutationKey();
+const mutationKey = getCallMsfwrMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -1633,10 +381,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof callDeskline>>, CallDesklineMutationVariables> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof callMsfwr>>, CallMsfwrMutationVariables> = (props) => {
           const {data} = props ?? {};
 
-          return  callDeskline(data,requestOptions)
+          return  callMsfwr(data,requestOptions)
         }
 
 
@@ -1646,34 +394,34 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type CallDesklineMutationResult = NonNullable<Awaited<ReturnType<typeof callDeskline>>>
-    export type CallDesklineMutationBody = BodyType<DesklineCall> | undefined
-    export type CallDesklineMutationError = ErrorType<unknown>
-    export type CallDesklineMutationVariables = {data?: BodyType<DesklineCall>}
+    export type CallMsfwrMutationResult = NonNullable<Awaited<ReturnType<typeof callMsfwr>>>
+    export type CallMsfwrMutationBody = BodyType<MsfwrCall> | undefined
+    export type CallMsfwrMutationError = ErrorType<unknown>
+    export type CallMsfwrMutationVariables = {data?: BodyType<MsfwrCall>}
 
-    export const useCallDeskline = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof callDeskline>>, TError,CallDesklineMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+    export const useCallMsfwr = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof callMsfwr>>, TError,CallMsfwrMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof callDeskline>>,
+        Awaited<ReturnType<typeof callMsfwr>>,
         TError,
-        CallDesklineMutationVariables,
+        CallMsfwrMutationVariables,
         TContext
       > => {
-      return useMutation(getCallDesklineMutationOptions(options), queryClient);
+      return useMutation(getCallMsfwrMutationOptions(options), queryClient);
     }
 
-export const getListDesklineCallsUrl = () => {
+export const getListMsfwrCallsUrl = () => {
 
 
 
 
-  return `/api/deskline/calls`
+  return `/api/msfwr/calls`
 }
 
 /**
  * Which of the viewer's saved access codes have a pending Initiate request, and which of them are online (waiting) or in a session. Codes that are not listed are offline.
  */
-export const listDesklineCalls = async (desklineCallQuery: DesklineCallQuery, options?: Parameters<typeof customFetch>[1]): Promise<DesklineCallList> => {
+export const listMsfwrCalls = async (msfwrCallQuery: MsfwrCallQuery, options?: Parameters<typeof customFetch>[1]): Promise<MsfwrCallList> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -1689,12 +437,12 @@ export const listDesklineCalls = async (desklineCallQuery: DesklineCallQuery, op
     }
     return headers;
   };
-return customFetch<DesklineCallList>(getListDesklineCallsUrl(),
+return customFetch<MsfwrCallList>(getListMsfwrCallsUrl(),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(desklineCallQuery)
+    body: JSON.stringify(msfwrCallQuery)
   }
 );}
 
@@ -1702,13 +450,13 @@ return customFetch<DesklineCallList>(getListDesklineCallsUrl(),
 
 
 
-export const getListDesklineCallsMutationKey = () => ['listDesklineCalls'] as const;
+export const getListMsfwrCallsMutationKey = () => ['listMsfwrCalls'] as const;
 
-export const getListDesklineCallsMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof listDesklineCalls>>, TError,ListDesklineCallsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof listDesklineCalls>>, TError,ListDesklineCallsMutationVariables, TContext> => {
+export const getListMsfwrCallsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof listMsfwrCalls>>, TError,ListMsfwrCallsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof listMsfwrCalls>>, TError,ListMsfwrCallsMutationVariables, TContext> => {
 
-const mutationKey = getListDesklineCallsMutationKey();
+const mutationKey = getListMsfwrCallsMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -1718,10 +466,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof listDesklineCalls>>, ListDesklineCallsMutationVariables> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof listMsfwrCalls>>, ListMsfwrCallsMutationVariables> = (props) => {
           const {data} = props ?? {};
 
-          return  listDesklineCalls(data,requestOptions)
+          return  listMsfwrCalls(data,requestOptions)
         }
 
 
@@ -1731,334 +479,34 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type ListDesklineCallsMutationResult = NonNullable<Awaited<ReturnType<typeof listDesklineCalls>>>
-    export type ListDesklineCallsMutationBody = BodyType<DesklineCallQuery>
-    export type ListDesklineCallsMutationError = ErrorType<unknown>
-    export type ListDesklineCallsMutationVariables = {data: BodyType<DesklineCallQuery>}
+    export type ListMsfwrCallsMutationResult = NonNullable<Awaited<ReturnType<typeof listMsfwrCalls>>>
+    export type ListMsfwrCallsMutationBody = BodyType<MsfwrCallQuery>
+    export type ListMsfwrCallsMutationError = ErrorType<unknown>
+    export type ListMsfwrCallsMutationVariables = {data: BodyType<MsfwrCallQuery>}
 
-    export const useListDesklineCalls = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof listDesklineCalls>>, TError,ListDesklineCallsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+    export const useListMsfwrCalls = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof listMsfwrCalls>>, TError,ListMsfwrCallsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof listDesklineCalls>>,
+        Awaited<ReturnType<typeof listMsfwrCalls>>,
         TError,
-        ListDesklineCallsMutationVariables,
+        ListMsfwrCallsMutationVariables,
         TContext
       > => {
-      return useMutation(getListDesklineCallsMutationOptions(options), queryClient);
+      return useMutation(getListMsfwrCallsMutationOptions(options), queryClient);
     }
 
-export const getJoinDesklineUrl = () => {
+export const getCreateMsfwrLinkUrl = () => {
 
 
 
 
-  return `/api/deskline/join`
-}
-
-export const joinDeskline = async (desklineCode: DesklineCode, options?: Parameters<typeof customFetch>[1]): Promise<DesklineViewer> => {
-
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return customFetch<DesklineViewer>(getJoinDesklineUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(desklineCode)
-  }
-);}
-
-
-
-
-
-export const getJoinDesklineMutationKey = () => ['joinDeskline'] as const;
-
-export const getJoinDesklineMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof joinDeskline>>, TError,JoinDesklineMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof joinDeskline>>, TError,JoinDesklineMutationVariables, TContext> => {
-
-const mutationKey = getJoinDesklineMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof joinDeskline>>, JoinDesklineMutationVariables> = (props) => {
-          const {data} = props ?? {};
-
-          return  joinDeskline(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type JoinDesklineMutationResult = NonNullable<Awaited<ReturnType<typeof joinDeskline>>>
-    export type JoinDesklineMutationBody = BodyType<DesklineCode>
-    export type JoinDesklineMutationError = ErrorType<unknown>
-    export type JoinDesklineMutationVariables = {data: BodyType<DesklineCode>}
-
-    export const useJoinDeskline = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof joinDeskline>>, TError,JoinDesklineMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof joinDeskline>>,
-        TError,
-        JoinDesklineMutationVariables,
-        TContext
-      > => {
-      return useMutation(getJoinDesklineMutationOptions(options), queryClient);
-    }
-
-export const getEndDesklineUrl = () => {
-
-
-
-
-  return `/api/deskline/end`
-}
-
-export const endDeskline = async ( options?: Parameters<typeof customFetch>[1]): Promise<void> => {
-
-  return customFetch<void>(getEndDesklineUrl(),
-  {
-    ...options,
-    method: 'POST'
-
-
-  }
-);}
-
-
-
-
-
-export const getEndDesklineMutationKey = () => ['endDeskline'] as const;
-
-export const getEndDesklineMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof endDeskline>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof endDeskline>>, TError,void, TContext> => {
-
-const mutationKey = getEndDesklineMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof endDeskline>>, void> = () => {
-
-
-          return  endDeskline(requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type EndDesklineMutationResult = NonNullable<Awaited<ReturnType<typeof endDeskline>>>
-
-    export type EndDesklineMutationError = ErrorType<unknown>
-
-
-    export const useEndDeskline = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof endDeskline>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof endDeskline>>,
-        TError,
-        void,
-        TContext
-      > => {
-      return useMutation(getEndDesklineMutationOptions(options), queryClient);
-    }
-
-export const getSendDesklineInputUrl = () => {
-
-
-
-
-  return `/api/deskline/input`
-}
-
-export const sendDesklineInput = async (desklineInput: DesklineInput, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
-
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return customFetch<void>(getSendDesklineInputUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(desklineInput)
-  }
-);}
-
-
-
-
-
-export const getSendDesklineInputMutationKey = () => ['sendDesklineInput'] as const;
-
-export const getSendDesklineInputMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendDesklineInput>>, TError,SendDesklineInputMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof sendDesklineInput>>, TError,SendDesklineInputMutationVariables, TContext> => {
-
-const mutationKey = getSendDesklineInputMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendDesklineInput>>, SendDesklineInputMutationVariables> = (props) => {
-          const {data} = props ?? {};
-
-          return  sendDesklineInput(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type SendDesklineInputMutationResult = NonNullable<Awaited<ReturnType<typeof sendDesklineInput>>>
-    export type SendDesklineInputMutationBody = BodyType<DesklineInput>
-    export type SendDesklineInputMutationError = ErrorType<unknown>
-    export type SendDesklineInputMutationVariables = {data: BodyType<DesklineInput>}
-
-    export const useSendDesklineInput = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendDesklineInput>>, TError,SendDesklineInputMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof sendDesklineInput>>,
-        TError,
-        SendDesklineInputMutationVariables,
-        TContext
-      > => {
-      return useMutation(getSendDesklineInputMutationOptions(options), queryClient);
-    }
-
-export const getApproveDesklineUrl = () => {
-
-
-
-
-  return `/api/deskline/approve`
-}
-
-export const approveDeskline = async ( options?: Parameters<typeof customFetch>[1]): Promise<void> => {
-
-  return customFetch<void>(getApproveDesklineUrl(),
-  {
-    ...options,
-    method: 'POST'
-
-
-  }
-);}
-
-
-
-
-
-export const getApproveDesklineMutationKey = () => ['approveDeskline'] as const;
-
-export const getApproveDesklineMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveDeskline>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof approveDeskline>>, TError,void, TContext> => {
-
-const mutationKey = getApproveDesklineMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof approveDeskline>>, void> = () => {
-
-
-          return  approveDeskline(requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type ApproveDesklineMutationResult = NonNullable<Awaited<ReturnType<typeof approveDeskline>>>
-
-    export type ApproveDesklineMutationError = ErrorType<unknown>
-
-
-    export const useApproveDeskline = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveDeskline>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof approveDeskline>>,
-        TError,
-        void,
-        TContext
-      > => {
-      return useMutation(getApproveDesklineMutationOptions(options), queryClient);
-    }
-
-export const getTickDesklineUrl = () => {
-
-
-
-
-  return `/api/deskline/tick`
+  return `/api/msfwr/link/create`
 }
 
 /**
- * Host heartbeat; optional raw JPEG body when the approved screen changes.
+ * Create a shareable remote access URL from the client app. The host PC registers a waiting session under the link's code; every viewer that opens the shared URL starts a new session without approval, until the link expires (24 hours by default) or is revoked. Requires the unattended access key of the PC.
  */
-export const tickDeskline = async (tickDesklineBody?: Blob, options?: Parameters<typeof customFetch>[1]): Promise<DesklineTick> => {
+export const createMsfwrLink = async (msfwrLinkCreate: MsfwrLinkCreate, options?: Parameters<typeof customFetch>[1]): Promise<MsfwrLink> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -2074,12 +522,12 @@ export const tickDeskline = async (tickDesklineBody?: Blob, options?: Parameters
     }
     return headers;
   };
-return customFetch<DesklineTick>(getTickDesklineUrl(),
+return customFetch<MsfwrLink>(getCreateMsfwrLinkUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'image/jpeg', ...getHeaders(options?.headers) },
-    body: tickDesklineBody
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(msfwrLinkCreate)
   }
 );}
 
@@ -2087,13 +535,13 @@ return customFetch<DesklineTick>(getTickDesklineUrl(),
 
 
 
-export const getTickDesklineMutationKey = () => ['tickDeskline'] as const;
+export const getCreateMsfwrLinkMutationKey = () => ['createMsfwrLink'] as const;
 
-export const getTickDesklineMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof tickDeskline>>, TError,TickDesklineMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof tickDeskline>>, TError,TickDesklineMutationVariables, TContext> => {
+export const getCreateMsfwrLinkMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createMsfwrLink>>, TError,CreateMsfwrLinkMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createMsfwrLink>>, TError,CreateMsfwrLinkMutationVariables, TContext> => {
 
-const mutationKey = getTickDesklineMutationKey();
+const mutationKey = getCreateMsfwrLinkMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -2103,10 +551,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof tickDeskline>>, TickDesklineMutationVariables> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createMsfwrLink>>, CreateMsfwrLinkMutationVariables> = (props) => {
           const {data} = props ?? {};
 
-          return  tickDeskline(data,requestOptions)
+          return  createMsfwrLink(data,requestOptions)
         }
 
 
@@ -2116,23 +564,108 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type TickDesklineMutationResult = NonNullable<Awaited<ReturnType<typeof tickDeskline>>>
-    export type TickDesklineMutationBody = BodyType<Blob> | undefined
-    export type TickDesklineMutationError = ErrorType<unknown>
-    export type TickDesklineMutationVariables = {data?: BodyType<Blob>}
+    export type CreateMsfwrLinkMutationResult = NonNullable<Awaited<ReturnType<typeof createMsfwrLink>>>
+    export type CreateMsfwrLinkMutationBody = BodyType<MsfwrLinkCreate>
+    export type CreateMsfwrLinkMutationError = ErrorType<unknown>
+    export type CreateMsfwrLinkMutationVariables = {data: BodyType<MsfwrLinkCreate>}
 
-    export const useTickDeskline = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof tickDeskline>>, TError,TickDesklineMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+    export const useCreateMsfwrLink = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createMsfwrLink>>, TError,CreateMsfwrLinkMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof tickDeskline>>,
+        Awaited<ReturnType<typeof createMsfwrLink>>,
         TError,
-        TickDesklineMutationVariables,
+        CreateMsfwrLinkMutationVariables,
         TContext
       > => {
-      return useMutation(getTickDesklineMutationOptions(options), queryClient);
+      return useMutation(getCreateMsfwrLinkMutationOptions(options), queryClient);
     }
 
-export const getGetDesklineFrameUrl = (params?: GetDesklineFrameParams,) => {
+export const getRegisterMsfwrLinkUrl = () => {
+
+
+
+
+  return `/api/msfwr/link/register`
+}
+
+/**
+ * The host re-registers its waiting session under an existing link id after each session ends, so the shared URL keeps accepting viewers until it expires or is revoked.
+ */
+export const registerMsfwrLink = async (msfwrLinkRegister: MsfwrLinkRegister, options?: Parameters<typeof customFetch>[1]): Promise<MsfwrInvite> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<MsfwrInvite>(getRegisterMsfwrLinkUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(msfwrLinkRegister)
+  }
+);}
+
+
+
+
+
+export const getRegisterMsfwrLinkMutationKey = () => ['registerMsfwrLink'] as const;
+
+export const getRegisterMsfwrLinkMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerMsfwrLink>>, TError,RegisterMsfwrLinkMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof registerMsfwrLink>>, TError,RegisterMsfwrLinkMutationVariables, TContext> => {
+
+const mutationKey = getRegisterMsfwrLinkMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof registerMsfwrLink>>, RegisterMsfwrLinkMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  registerMsfwrLink(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RegisterMsfwrLinkMutationResult = NonNullable<Awaited<ReturnType<typeof registerMsfwrLink>>>
+    export type RegisterMsfwrLinkMutationBody = BodyType<MsfwrLinkRegister>
+    export type RegisterMsfwrLinkMutationError = ErrorType<void>
+    export type RegisterMsfwrLinkMutationVariables = {data: BodyType<MsfwrLinkRegister>}
+
+    export const useRegisterMsfwrLink = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerMsfwrLink>>, TError,RegisterMsfwrLinkMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof registerMsfwrLink>>,
+        TError,
+        RegisterMsfwrLinkMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRegisterMsfwrLinkMutationOptions(options), queryClient);
+    }
+
+export const getGetMsfwrLinkStatusUrl = (params: GetMsfwrLinkStatusParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
@@ -2144,12 +677,15 @@ export const getGetDesklineFrameUrl = (params?: GetDesklineFrameParams,) => {
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/api/deskline/frame?${stringifiedParams}` : `/api/deskline/frame`
+  return stringifiedParams.length > 0 ? `/api/msfwr/link/status?${stringifiedParams}` : `/api/msfwr/link/status`
 }
 
-export const getDesklineFrame = async (params?: GetDesklineFrameParams, options?: Parameters<typeof customFetch>[1]): Promise<Blob | void> => {
+/**
+ * Current state of a link for the client app: validity, whether the host is registered and online, and how many sessions were opened.
+ */
+export const getMsfwrLinkStatus = async (params: GetMsfwrLinkStatusParams, options?: Parameters<typeof customFetch>[1]): Promise<MsfwrLinkStatus> => {
 
-  return customFetch<Blob | void>(getGetDesklineFrameUrl(params),
+  return customFetch<MsfwrLinkStatus>(getGetMsfwrLinkStatusUrl(params),
   {
     ...options,
     method: 'GET'
@@ -2162,66 +698,638 @@ export const getDesklineFrame = async (params?: GetDesklineFrameParams, options?
 
 
 
-export const getGetDesklineFrameQueryKey = (params?: GetDesklineFrameParams,) => {
+export const getGetMsfwrLinkStatusQueryKey = (params?: GetMsfwrLinkStatusParams,) => {
     return [
-    `/api/deskline/frame`, ...(params ? [params] : [])
+    `/api/msfwr/link/status`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetDesklineFrameQueryOptions = <TData = Awaited<ReturnType<typeof getDesklineFrame>>, TError = ErrorType<unknown>>(params?: GetDesklineFrameParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDesklineFrame>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+export const getGetMsfwrLinkStatusQueryOptions = <TData = Awaited<ReturnType<typeof getMsfwrLinkStatus>>, TError = ErrorType<unknown>>(params: GetMsfwrLinkStatusParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMsfwrLinkStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetDesklineFrameQueryKey(params);
+  const queryKey =  queryOptions?.queryKey ?? getGetMsfwrLinkStatusQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDesklineFrame>>> = ({ signal }) => getDesklineFrame(params, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMsfwrLinkStatus>>> = ({ signal }) => getMsfwrLinkStatus(params, { signal, ...requestOptions });
 
 
 
 
 
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDesklineFrame>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMsfwrLinkStatus>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
 }
 
-export type GetDesklineFrameQueryResult = NonNullable<Awaited<ReturnType<typeof getDesklineFrame>>>
-export type GetDesklineFrameQueryError = ErrorType<unknown>
+export type GetMsfwrLinkStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getMsfwrLinkStatus>>>
+export type GetMsfwrLinkStatusQueryError = ErrorType<unknown>
 
 
-export function useGetDesklineFrame<TData = Awaited<ReturnType<typeof getDesklineFrame>>, TError = ErrorType<unknown>>(
- params: undefined |  GetDesklineFrameParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDesklineFrame>>, TError, TData>> & Pick<
+export function useGetMsfwrLinkStatus<TData = Awaited<ReturnType<typeof getMsfwrLinkStatus>>, TError = ErrorType<unknown>>(
+ params: GetMsfwrLinkStatusParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMsfwrLinkStatus>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getDesklineFrame>>,
+          Awaited<ReturnType<typeof getMsfwrLinkStatus>>,
           TError,
-          Awaited<ReturnType<typeof getDesklineFrame>>
+          Awaited<ReturnType<typeof getMsfwrLinkStatus>>
         > , 'initialData'
       >, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetDesklineFrame<TData = Awaited<ReturnType<typeof getDesklineFrame>>, TError = ErrorType<unknown>>(
- params?: GetDesklineFrameParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDesklineFrame>>, TError, TData>> & Pick<
+export function useGetMsfwrLinkStatus<TData = Awaited<ReturnType<typeof getMsfwrLinkStatus>>, TError = ErrorType<unknown>>(
+ params: GetMsfwrLinkStatusParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMsfwrLinkStatus>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getDesklineFrame>>,
+          Awaited<ReturnType<typeof getMsfwrLinkStatus>>,
           TError,
-          Awaited<ReturnType<typeof getDesklineFrame>>
+          Awaited<ReturnType<typeof getMsfwrLinkStatus>>
         > , 'initialData'
       >, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetDesklineFrame<TData = Awaited<ReturnType<typeof getDesklineFrame>>, TError = ErrorType<unknown>>(
- params?: GetDesklineFrameParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDesklineFrame>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+export function useGetMsfwrLinkStatus<TData = Awaited<ReturnType<typeof getMsfwrLinkStatus>>, TError = ErrorType<unknown>>(
+ params: GetMsfwrLinkStatusParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMsfwrLinkStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useGetDesklineFrame<TData = Awaited<ReturnType<typeof getDesklineFrame>>, TError = ErrorType<unknown>>(
- params?: GetDesklineFrameParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDesklineFrame>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+export function useGetMsfwrLinkStatus<TData = Awaited<ReturnType<typeof getMsfwrLinkStatus>>, TError = ErrorType<unknown>>(
+ params: GetMsfwrLinkStatusParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMsfwrLinkStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getGetDesklineFrameQueryOptions(params,options)
+  const queryOptions = getGetMsfwrLinkStatusQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRevokeMsfwrLinkUrl = () => {
+
+
+
+
+  return `/api/msfwr/link/revoke`
+}
+
+/**
+ * Revoke a link at once; any live session under it is ended.
+ */
+export const revokeMsfwrLink = async (msfwrLinkRegister: MsfwrLinkRegister, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<void>(getRevokeMsfwrLinkUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(msfwrLinkRegister)
+  }
+);}
+
+
+
+
+
+export const getRevokeMsfwrLinkMutationKey = () => ['revokeMsfwrLink'] as const;
+
+export const getRevokeMsfwrLinkMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeMsfwrLink>>, TError,RevokeMsfwrLinkMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof revokeMsfwrLink>>, TError,RevokeMsfwrLinkMutationVariables, TContext> => {
+
+const mutationKey = getRevokeMsfwrLinkMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof revokeMsfwrLink>>, RevokeMsfwrLinkMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  revokeMsfwrLink(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RevokeMsfwrLinkMutationResult = NonNullable<Awaited<ReturnType<typeof revokeMsfwrLink>>>
+    export type RevokeMsfwrLinkMutationBody = BodyType<MsfwrLinkRegister>
+    export type RevokeMsfwrLinkMutationError = ErrorType<unknown>
+    export type RevokeMsfwrLinkMutationVariables = {data: BodyType<MsfwrLinkRegister>}
+
+    export const useRevokeMsfwrLink = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeMsfwrLink>>, TError,RevokeMsfwrLinkMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof revokeMsfwrLink>>,
+        TError,
+        RevokeMsfwrLinkMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRevokeMsfwrLinkMutationOptions(options), queryClient);
+    }
+
+export const getJoinMsfwrUrl = () => {
+
+
+
+
+  return `/api/msfwr/join`
+}
+
+export const joinMsfwr = async (msfwrCode: MsfwrCode, options?: Parameters<typeof customFetch>[1]): Promise<MsfwrViewer> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<MsfwrViewer>(getJoinMsfwrUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(msfwrCode)
+  }
+);}
+
+
+
+
+
+export const getJoinMsfwrMutationKey = () => ['joinMsfwr'] as const;
+
+export const getJoinMsfwrMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof joinMsfwr>>, TError,JoinMsfwrMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof joinMsfwr>>, TError,JoinMsfwrMutationVariables, TContext> => {
+
+const mutationKey = getJoinMsfwrMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof joinMsfwr>>, JoinMsfwrMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  joinMsfwr(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type JoinMsfwrMutationResult = NonNullable<Awaited<ReturnType<typeof joinMsfwr>>>
+    export type JoinMsfwrMutationBody = BodyType<MsfwrCode>
+    export type JoinMsfwrMutationError = ErrorType<unknown>
+    export type JoinMsfwrMutationVariables = {data: BodyType<MsfwrCode>}
+
+    export const useJoinMsfwr = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof joinMsfwr>>, TError,JoinMsfwrMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof joinMsfwr>>,
+        TError,
+        JoinMsfwrMutationVariables,
+        TContext
+      > => {
+      return useMutation(getJoinMsfwrMutationOptions(options), queryClient);
+    }
+
+export const getEndMsfwrUrl = () => {
+
+
+
+
+  return `/api/msfwr/end`
+}
+
+export const endMsfwr = async ( options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getEndMsfwrUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getEndMsfwrMutationKey = () => ['endMsfwr'] as const;
+
+export const getEndMsfwrMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof endMsfwr>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof endMsfwr>>, TError,void, TContext> => {
+
+const mutationKey = getEndMsfwrMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof endMsfwr>>, void> = () => {
+
+
+          return  endMsfwr(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type EndMsfwrMutationResult = NonNullable<Awaited<ReturnType<typeof endMsfwr>>>
+
+    export type EndMsfwrMutationError = ErrorType<unknown>
+
+
+    export const useEndMsfwr = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof endMsfwr>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof endMsfwr>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getEndMsfwrMutationOptions(options), queryClient);
+    }
+
+export const getSendMsfwrInputUrl = () => {
+
+
+
+
+  return `/api/msfwr/input`
+}
+
+export const sendMsfwrInput = async (msfwrInput: MsfwrInput, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<void>(getSendMsfwrInputUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(msfwrInput)
+  }
+);}
+
+
+
+
+
+export const getSendMsfwrInputMutationKey = () => ['sendMsfwrInput'] as const;
+
+export const getSendMsfwrInputMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendMsfwrInput>>, TError,SendMsfwrInputMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof sendMsfwrInput>>, TError,SendMsfwrInputMutationVariables, TContext> => {
+
+const mutationKey = getSendMsfwrInputMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendMsfwrInput>>, SendMsfwrInputMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  sendMsfwrInput(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SendMsfwrInputMutationResult = NonNullable<Awaited<ReturnType<typeof sendMsfwrInput>>>
+    export type SendMsfwrInputMutationBody = BodyType<MsfwrInput>
+    export type SendMsfwrInputMutationError = ErrorType<unknown>
+    export type SendMsfwrInputMutationVariables = {data: BodyType<MsfwrInput>}
+
+    export const useSendMsfwrInput = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendMsfwrInput>>, TError,SendMsfwrInputMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof sendMsfwrInput>>,
+        TError,
+        SendMsfwrInputMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSendMsfwrInputMutationOptions(options), queryClient);
+    }
+
+export const getApproveMsfwrUrl = () => {
+
+
+
+
+  return `/api/msfwr/approve`
+}
+
+export const approveMsfwr = async ( options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getApproveMsfwrUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getApproveMsfwrMutationKey = () => ['approveMsfwr'] as const;
+
+export const getApproveMsfwrMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveMsfwr>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof approveMsfwr>>, TError,void, TContext> => {
+
+const mutationKey = getApproveMsfwrMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof approveMsfwr>>, void> = () => {
+
+
+          return  approveMsfwr(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApproveMsfwrMutationResult = NonNullable<Awaited<ReturnType<typeof approveMsfwr>>>
+
+    export type ApproveMsfwrMutationError = ErrorType<unknown>
+
+
+    export const useApproveMsfwr = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveMsfwr>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof approveMsfwr>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getApproveMsfwrMutationOptions(options), queryClient);
+    }
+
+export const getTickMsfwrUrl = () => {
+
+
+
+
+  return `/api/msfwr/tick`
+}
+
+/**
+ * Host heartbeat; optional raw JPEG body when the approved screen changes.
+ */
+export const tickMsfwr = async (tickMsfwrBody?: Blob, options?: Parameters<typeof customFetch>[1]): Promise<MsfwrTick> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<MsfwrTick>(getTickMsfwrUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'image/jpeg', ...getHeaders(options?.headers) },
+    body: tickMsfwrBody
+  }
+);}
+
+
+
+
+
+export const getTickMsfwrMutationKey = () => ['tickMsfwr'] as const;
+
+export const getTickMsfwrMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof tickMsfwr>>, TError,TickMsfwrMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof tickMsfwr>>, TError,TickMsfwrMutationVariables, TContext> => {
+
+const mutationKey = getTickMsfwrMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof tickMsfwr>>, TickMsfwrMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  tickMsfwr(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TickMsfwrMutationResult = NonNullable<Awaited<ReturnType<typeof tickMsfwr>>>
+    export type TickMsfwrMutationBody = BodyType<Blob> | undefined
+    export type TickMsfwrMutationError = ErrorType<unknown>
+    export type TickMsfwrMutationVariables = {data?: BodyType<Blob>}
+
+    export const useTickMsfwr = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof tickMsfwr>>, TError,TickMsfwrMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof tickMsfwr>>,
+        TError,
+        TickMsfwrMutationVariables,
+        TContext
+      > => {
+      return useMutation(getTickMsfwrMutationOptions(options), queryClient);
+    }
+
+export const getGetMsfwrFrameUrl = (params?: GetMsfwrFrameParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/msfwr/frame?${stringifiedParams}` : `/api/msfwr/frame`
+}
+
+export const getMsfwrFrame = async (params?: GetMsfwrFrameParams, options?: Parameters<typeof customFetch>[1]): Promise<Blob | void> => {
+
+  return customFetch<Blob | void>(getGetMsfwrFrameUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMsfwrFrameQueryKey = (params?: GetMsfwrFrameParams,) => {
+    return [
+    `/api/msfwr/frame`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetMsfwrFrameQueryOptions = <TData = Awaited<ReturnType<typeof getMsfwrFrame>>, TError = ErrorType<unknown>>(params?: GetMsfwrFrameParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMsfwrFrame>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMsfwrFrameQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMsfwrFrame>>> = ({ signal }) => getMsfwrFrame(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMsfwrFrame>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetMsfwrFrameQueryResult = NonNullable<Awaited<ReturnType<typeof getMsfwrFrame>>>
+export type GetMsfwrFrameQueryError = ErrorType<unknown>
+
+
+export function useGetMsfwrFrame<TData = Awaited<ReturnType<typeof getMsfwrFrame>>, TError = ErrorType<unknown>>(
+ params: undefined |  GetMsfwrFrameParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMsfwrFrame>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getMsfwrFrame>>,
+          TError,
+          Awaited<ReturnType<typeof getMsfwrFrame>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetMsfwrFrame<TData = Awaited<ReturnType<typeof getMsfwrFrame>>, TError = ErrorType<unknown>>(
+ params?: GetMsfwrFrameParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMsfwrFrame>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getMsfwrFrame>>,
+          TError,
+          Awaited<ReturnType<typeof getMsfwrFrame>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetMsfwrFrame<TData = Awaited<ReturnType<typeof getMsfwrFrame>>, TError = ErrorType<unknown>>(
+ params?: GetMsfwrFrameParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMsfwrFrame>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetMsfwrFrame<TData = Awaited<ReturnType<typeof getMsfwrFrame>>, TError = ErrorType<unknown>>(
+ params?: GetMsfwrFrameParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMsfwrFrame>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetMsfwrFrameQueryOptions(params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

@@ -36,10 +36,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          file=artifacts/deskline/public/downloads/winss132r-Setup-x64.exe
+          file=artifacts/msfwr/public/downloads/msfwr-Setup-x64.exe
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$file" --clobber
           else
-            gh release create "$TAG" "$file" --target "$GITHUB_SHA" --title "winss132r $TAG" \
-              --notes "Windows 10/11 x64 installer for the winss132r host. This preview installer is unsigned, so Windows SmartScreen may warn before it runs."
+            gh release create "$TAG" "$file" --target "$GITHUB_SHA" --title "Msfwr $TAG" \
+              --notes "Windows 10/11 x64 installer for the Msfwr host. This preview installer is unsigned, so Windows SmartScreen may warn before it runs."
           fi

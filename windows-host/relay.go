@@ -10,12 +10,14 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 	"time"
 )
 
-var codeFormat = regexp.MustCompile(`^[A-F0-9]{12}$`)
+var codeFormat = regexp.MustCompile(`^(L[0-9A-F]|S[0-9A-F]{11}|[A-F0-9]{12})$`)
+var linkCodeFormat = regexp.MustCompile(`^L[0-9A-F]{11}$`)
 var tokenFormat = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
 var verifyFormat = regexp.MustCompile(`^[0-9]{6}$`)
 
@@ -23,11 +25,6 @@ type relay struct {
 	origin      string
 	base, token string
 	client      *http.Client
-	// long serves requests the relay holds open (input long polls).
-	long *http.Client
-	// pulls asks the relay to keep input for /pull instead of returning it
-	// with each tick.
-	pulls bool
 }
 
 type invite struct{ Code, Token string }
@@ -52,16 +49,13 @@ func newRelay(value string) (*relay, error) {
 	}
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	tr.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
-	// Frame uploads and the input long poll run side by side; keep both
-	// connections warm instead of reconnecting (TLS) for each request.
-	tr.MaxIdleConnsPerHost = 4
-	tr.IdleConnTimeout = 90 * time.Second
-	noRedirect := func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	return &relay{
 		origin: "https://" + u.Host,
-		base:   "https://" + u.Host + "/api/deskline/",
-		client: &http.Client{Transport: tr, Timeout: 8 * time.Second, CheckRedirect: noRedirect},
-		long:   &http.Client{Transport: tr, Timeout: 16 * time.Second, CheckRedirect: noRedirect},
+		base:   "https://" + u.Host + "/api/msfwr/",
+		client: &http.Client{
+			Transport: tr, Timeout: 5 * time.Second,
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		},
 	}, nil
 }
 
@@ -73,16 +67,6 @@ type statusError struct {
 }
 
 func (e *statusError) Error() string { return e.text }
-
-// transient reports errors worth retrying within a live session: network
-// failures, timeouts and relay overload, but not an ended session.
-func transient(err error) bool {
-	var s *statusError
-	if errors.As(err, &s) {
-		return s.status == 429 || s.status >= 500
-	}
-	return !errors.Is(err, context.Canceled)
-}
 
 func (r *relay) post(ctx context.Context, path string, jpeg []byte, response any) error {
 	return r.send(ctx, path, jpeg, "image/jpeg", response)
@@ -96,16 +80,112 @@ func (r *relay) postJSON(ctx context.Context, path string, body, response any) e
 	return r.send(ctx, path, data, "application/json", response)
 }
 
-// pull waits (up to about ten seconds) for viewer input.
-func (r *relay) pull(ctx context.Context, response *tick) error {
-	return r.do(ctx, r.long, "pull", nil, "", response)
+func (r *relay) get(ctx context.Context, path string, response any) error {
+	req, err := http.NewRequestWithContext(ctx, "GET", r.base+path, nil)
+	if err != nil {
+		return err
+	}
+	if r.token != "" {
+		req.Header.Set("Authorization", "Bearer "+r.token)
+	}
+	res, err := r.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(res.Body, 65537))
+	if err != nil {
+		return err
+	}
+	if len(body) > 65536 {
+		return errors.New("relay response exceeded limit")
+	}
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		return &statusError{status: res.StatusCode, text: fmt.Sprintf("relay rejected %s (HTTP %d)", path, res.StatusCode)}
+	}
+	if response != nil {
+		return json.Unmarshal(body, response)
+	}
+	return nil
+}
+
+// remoteLink is a shareable unattended-access URL. The id identifies the
+// link; key authorizes host operations (re-registration, status, revoke).
+type remoteLink struct {
+	ID        string `json:"id"`
+	Code      string `json:"code"`
+	Key       string `json:"key"`
+	Name      string `json:"name"`
+	CreatedAt int64  `json:"createdAt"`
+	ExpiresAt int64  `json:"expiresAt"`
+	Sessions  int    `json:"sessions"`
+}
+
+func (l *remoteLink) URL(origin string) string {
+	return origin + "/?access=" + l.Code
+}
+
+// linkOrigin is where viewers open a shared remote access URL. The relay
+// serves the viewer app itself, so its API host minus the /api/ prefix is
+// the right base; custom deployments can override it with the
+// MSFWR_VIEWER_ORIGIN environment variable.
+func linkOrigin(r *relay) string {
+	if v := strings.TrimSpace(os.Getenv("MSFWR_VIEWER_ORIGIN")); v != "" {
+		if u, err := url.Parse(v); err == nil && u.Scheme == "https" && u.Hostname() != "" {
+			return "https://" + u.Host
+		}
+	}
+	return r.origin
+}
+
+type linkCreateRequest struct {
+	Key      string `json:"key"`
+	Name     string `json:"name,omitempty"`
+	TTLHours int    `json:"ttlHours,omitempty"`
+}
+
+func (r *relay) createLink(ctx context.Context, key, name string, hours int) (*remoteLink, error) {
+	var out remoteLink
+	if err := r.postJSON(ctx, "link/create", linkCreateRequest{Key: key, Name: name, TTLHours: hours}, &out); err != nil {
+		return nil, err
+	}
+	if !linkCodeFormat.MatchString(out.Code) || out.ID == "" {
+		return nil, errors.New("relay returned an unusable link")
+	}
+	out.Key = key
+	return &out, nil
+}
+
+// registerLink re-arms a link host so another session can be opened through
+// the shared URL after the previous one ended.
+func (r *relay) registerLink(ctx context.Context, id, key string) (string, error) {
+	var out invite
+	if err := r.postJSON(ctx, "link/register", map[string]string{"id": id, "key": key}, &out); err != nil {
+		return "", err
+	}
+	return out.Token, nil
+}
+
+type linkStatusResult struct {
+	Link   remoteLink `json:"link"`
+	Online bool       `json:"online"`
+	Busy   bool       `json:"busy"`
+}
+
+func (r *relay) linkStatus(ctx context.Context, id, key string) (*linkStatusResult, error) {
+	var out linkStatusResult
+	path := "link/status?id=" + url.QueryEscape(id) + "&key=" + url.QueryEscape(key)
+	if err := r.get(ctx, path, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (r *relay) revokeLink(ctx context.Context, id, key string) error {
+	return r.postJSON(ctx, "link/revoke", map[string]string{"id": id, "key": key}, nil)
 }
 
 func (r *relay) send(ctx context.Context, path string, payload []byte, contentType string, response any) error {
-	return r.do(ctx, r.client, path, payload, contentType, response)
-}
-
-func (r *relay) do(ctx context.Context, client *http.Client, path string, payload []byte, contentType string, response any) error {
 	req, err := http.NewRequestWithContext(ctx, "POST", r.base+path, bytes.NewReader(payload))
 	if err != nil {
 		return err
@@ -116,10 +196,7 @@ func (r *relay) do(ctx context.Context, client *http.Client, path string, payloa
 	if r.token != "" {
 		req.Header.Set("Authorization", "Bearer "+r.token)
 	}
-	if r.pulls && path == "tick" {
-		req.Header.Set("X-Deskline-Pull", "1")
-	}
-	res, err := client.Do(req)
+	res, err := r.client.Do(req)
 	if err != nil {
 		return err
 	}

@@ -1,16 +1,16 @@
-# winss132r Windows host
+# Msfwr Windows host
 
-winss132r is for attended support on Windows 10/11 x64, with an optional
+Msfwr is for attended support on Windows 10/11 x64, with an optional
 unattended mode for designated company PCs (see below). The installer runs
 without administrator privileges and adds a Start menu shortcut and an
 uninstall entry for the current user. It is unsigned; follow your organization's
 software policy. There is no Windows service. Automatic startup is added only when unattended access is turned on.
-If you installed the older Deskline preview, uninstall it separately from Windows Settings.
+If you installed the older Msfwr preview, uninstall it separately from Windows Settings.
 
 ## Start a session
 
-1. Open the winss132r viewer in a browser at the relay's HTTPS origin.
-2. On the Windows PC, download and run the installer, then open **winss132r**
+1. Open the Msfwr viewer in a browser at the relay's HTTPS origin.
+2. On the Windows PC, download and run the installer, then open **Msfwr**
    from Start. Paste the HTTPS relay address displayed on the viewer page.
    Select **Save & Close** to remember just the address on your Windows account.
    Reopen the app to reuse it, or select **Clear saved relay** to remove it.
@@ -34,9 +34,9 @@ If you installed the older Deskline preview, uninstall it separately from Window
 For PCs that IT supports without someone at the keyboard, the Windows user
 can turn on a saved, pre-approved access code:
 
-1. Open winss132r, paste the relay address, and select **Unattended…**.
+1. Open Msfwr, paste the relay address, and select **Unattended…**.
    Confirm the prompt. This is the only prompt; there is none during a session.
-2. winss132r saves a random key in `%LOCALAPPDATA%\winss132r\unattended.json`
+2. Msfwr saves a random key in `%LOCALAPPDATA%\Msfwr\unattended.json`
    (not roaming) and adds itself to sign-in startup for this Windows user
    (`HKCU\...\CurrentVersion\Run`), so the same code works after restarts.
    The 12-character access code is derived from that key and shown in the
@@ -44,29 +44,12 @@ can turn on a saved, pre-approved access code:
 3. IT enters the access code in the viewer. The session goes live at once,
    with no verification number and no approval.
 
-### RA ID: send requests to one IT person
-
-Every portal account has an RA ID (such as **RA-123456**), shown in the
-portal header and in the admin console. Enter it in the app so Initiate goes
-straight to that person:
-
-- **Unattended:** click the tray icon, select **Set RA ID…**, and type it.
-  The menu shows **Requests go to RA ID: RA-123456** and Initiate reads
-  **Initiate — send a request to RA-123456**. The RA ID is saved next to the
-  access key, so it survives restarts, and changing it keeps the access code.
-- **Attended:** type it in **IT contact's RA ID** before **Start session**.
-  The request (with the PC name) appears in that person's portal; they accept
-  it and still read the verification number to the person at the PC.
-
-The relay checks the RA ID: an unknown or disabled one makes Initiate say so
-in the tray. Without an RA ID, Initiate works as before (below).
-
 ### Initiate from the PC
 
 The PC can also ask IT to connect. In the viewer's **Unattended PCs** tab, IT
 saves the PC's access code (it stays in that browser only); a PC is also saved
 automatically the first time IT connects to it with its access code.
-On the PC, click the winss132r icon and select **Initiate — ask IT to connect**
+On the PC, click the Msfwr icon and select **Initiate — ask IT to connect**
 (select it again to resend). The relay shows the request, with the PC's name,
 to any viewer that saved that code, for two minutes. IT gets an Accept banner,
 a chime and, if allowed, a desktop alert; **Accept** starts the session at once.
@@ -85,13 +68,13 @@ reached, and green while IT is connected. Its tooltip reads
 **Connect: +01** while a session is live, counting sessions since the app
 started (+02 for the second, and so on). Click the icon (left or right) for a
 small menu with the status, the access code, the connection count,
-**Copy access code**, **Set RA ID…**, **Initiate**, **Stop current session**, **Turn off unattended access…**
+**Copy access code**, **Initiate**, **Stop current session**, **Turn off unattended access…**
 (deletes the key and the startup entry), and **Exit** (unattended access
 starts again at next sign-in). Ctrl+2 and F12 still end a live session, and
 locking Windows still stops sharing. Windows 11 may put new notification-area
 icons in the overflow; pin it under Settings > Personalization > Taskbar >
 Other system tray icons. Short notification balloons say when a request was
-sent and when IT connects or disconnects. Starting winss132r again while it
+sent and when IT connects or disconnects. Starting Msfwr again while it
 runs only shows a balloon on the existing icon; it opens no window.
 
 Anyone with the access code can control the PC while it is signed in, so
@@ -112,22 +95,22 @@ At the repo root, with Go 1.26 and NSIS available, run:
 ```sh
 bash windows-host/build.sh
 (cd windows-host && go test ./...)
-node --test artifacts/api-server/tests/deskline.test.mjs
+node --test artifacts/api-server/tests/msfwr.test.mjs
 ```
 
 The build writes the installer to
-`artifacts/deskline/public/downloads/winss132r-Setup-x64.exe`.
+`artifacts/msfwr/public/downloads/msfwr-Setup-x64.exe`.
 
 ## Publishing a release
 
 The viewer's download button links to the installer on the latest GitHub
 release:
-`https://github.com/mailbhrp-1/Remote-Desktop-for-Windows/releases/latest/download/winss132r-Setup-x64.exe`.
+`https://github.com/mailbhrp-1/Remote-Desktop-for-Windows/releases/latest/download/msfwr-Setup-x64.exe`.
 To publish a new one, run the **Release installer** workflow from the Actions
 tab with a new tag (for example `v0.2.0`), or push that tag. The workflow runs
 the Go tests, builds the installer with the same `build.sh`, and attaches it to
-the release. Keep the asset name `winss132r-Setup-x64.exe` so the link stays valid. Keep the API and viewer on the same origin,
-with `/api/deskline/` routed to the API service behind HTTPS. On Windows,
+the release. Keep the asset name `msfwr-Setup-x64.exe` so the link stays valid. Keep the API and viewer on the same origin,
+with `/api/msfwr/` routed to the API service behind HTTPS. On Windows,
 verify install/uninstall, pairing on two devices, streaming, remote input,
 display scaling, Ctrl+2, F12, and locking Windows before distributing this preview.
 
@@ -162,14 +145,3 @@ preview. Before distribution, use Windows SDK SignTool (`signtool verify /pa /al
 on the installer, the installed host, and the installed uninstaller, check that
 the expected publisher appears, then test installation and launch with Smart
 App Control enabled. A signature check is not a substitute for that runtime test.
-
-### Streaming
-
-The host captures the screen up to about 30 times a second and only sends
-frames that changed. One frame is encoded while the previous one uploads, and
-the frame size and JPEG quality adapt to how fast uploads go (from 1024 px at
-quality 42 up to 2560 px at quality 80), so a slow link stays responsive and a
-fast one stays sharp. Viewer input arrives through a separate long poll and is
-applied the moment it reaches the relay, independent of screen uploads. Short
-network drops are retried for up to about 12 seconds instead of ending the
-session, and a live session can last up to 12 hours.

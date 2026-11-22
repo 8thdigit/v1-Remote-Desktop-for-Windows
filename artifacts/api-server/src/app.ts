@@ -5,13 +5,11 @@ import router from "./routes";
 import { logger } from "./lib/logger";
 
 const app: Express = express();
-// Replit (and most hosts) terminate TLS in one proxy in front of the app.
-app.set("trust proxy", 1);
 
 app.use(
   pinoHttp({
     logger,
-    autoLogging: { ignore: (req) => /^\/api\/deskline\/(?:tick|frame|inputs?|pull|calls|inbox)(?:\?|$)/.test(req.url ?? "") },
+    autoLogging: { ignore: (req) => /^\/api\/msfwr\/(?:tick|frame|input)(?:\?|$)/.test(req.url ?? "") },
     serializers: {
       req(req) {
         return {

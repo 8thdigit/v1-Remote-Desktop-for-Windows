@@ -26,7 +26,6 @@ var (
 	deleteObject  = gdi.NewProc("DeleteObject")
 	stretch       = gdi.NewProc("StretchBlt")
 	stretchMode   = gdi.NewProc("SetStretchBltMode")
-	setBrushOrg   = gdi.NewProc("SetBrushOrgEx")
 )
 
 func setDPI() {
@@ -74,15 +73,33 @@ type dibInfo struct {
 	Compression, ImageSize, X, Y, Colors, Important uint32
 }
 
-// snapshot captures the primary screen, scaled down to fit the level. It
-// returns the image and the real screen size (for mapping input).
-func snapshot(level qualityLevel) (*image.RGBA, int, int, error) {
+// max returns the larger of two ints (kept local for Go toolchain parity).
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func fitted(w, h int) (int, int) {
+	if w > 1280 {
+		h = max(1, h*1280/w)
+		w = 1280
+	}
+	if h > 800 {
+		w = max(1, w*800/h)
+		h = 800
+	}
+	return w, h
+}
+
+func snapshot() (*image.RGBA, int, int, error) {
 	fail := errors.New("could not capture the primary screen")
 	w, h := metric(0), metric(1)
 	if w <= 0 || h <= 0 || w > 32768 || h > 32768 {
 		return nil, 0, 0, fail
 	}
-	dw, dh := level.fitted(w, h)
+	dw, dh := fitted(w, h)
 	src, _, _ := getDC.Call(0)
 	if src == 0 {
 		return nil, 0, 0, fail
@@ -105,12 +122,7 @@ func snapshot(level qualityLevel) (*image.RGBA, int, int, error) {
 		return nil, 0, 0, fail
 	}
 	defer selectObject.Call(dst, old)
-	if dw == w && dh == h {
-		stretchMode.Call(dst, 3) // COLORONCOLOR: a 1:1 copy, no filtering needed.
-	} else {
-		stretchMode.Call(dst, 4) // HALFTONE: keeps small text readable when scaled.
-		setBrushOrg.Call(dst, 0, 0, 0)
-	}
+	stretchMode.Call(dst, 3)
 	ret, _, _ := stretch.Call(dst, 0, 0, uintptr(dw), uintptr(dh), src, 0, 0, uintptr(w), uintptr(h), 0x40cc0020)
 	if ret == 0 {
 		return nil, 0, 0, fail
@@ -124,20 +136,13 @@ func snapshot(level qualityLevel) (*image.RGBA, int, int, error) {
 	return img, w, h, nil
 }
 
-// maxFrame stays under the relay's 1536 KB upload limit.
-const maxFrame = 1400 * 1024
-
-func encodeJPEG(img image.Image, quality int) ([]byte, error) {
-	for _, q := range []int{quality, quality - 15, 35, 22} {
-		if q < 10 {
-			continue
-		}
+func encodeJPEG(img image.Image) ([]byte, error) {
+	for _, quality := range []int{58, 40, 25} {
 		var buf bytes.Buffer
-		buf.Grow(256 * 1024)
-		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: q}); err != nil {
+		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: quality}); err != nil {
 			return nil, err
 		}
-		if buf.Len() <= maxFrame {
+		if buf.Len() <= 768*1024 {
 			return buf.Bytes(), nil
 		}
 	}

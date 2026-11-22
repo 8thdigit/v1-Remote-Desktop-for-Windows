@@ -51,7 +51,7 @@ func main() {
 	err := startHost()
 	if err != nil {
 		user.NewProc("MessageBoxW").Call(0, uintptr(unsafe.Pointer(textPtr(err.Error()))),
-			uintptr(unsafe.Pointer(textPtr("winss132r"))), 0x10)
+			uintptr(unsafe.Pointer(textPtr("Msfwr"))), 0x10)
 	}
 }
 
@@ -62,7 +62,7 @@ func unattendedPath() string {
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(dir, "winss132r", unattendedFile)
+	return filepath.Join(dir, "Msfwr", unattendedFile)
 }
 
 // startHost opens unattended mode when it is set up on this PC (including
@@ -101,15 +101,13 @@ func runClient(unattendedConfigPath string) (*unattendedConfig, error) {
 		stopMenu = 0x210
 	)
 	const idleText = "Start a session to get a fresh one-time code. Nothing is shared until you approve."
-	const idleTitle = "winss132r — Windows support"
-	const liveTitle = "winss132r — LIVE: sharing and remote control"
+	const idleTitle = "Msfwr — Windows support"
+	const liveTitle = "Msfwr — LIVE: sharing and remote control"
 	configDir, configErr := os.UserConfigDir()
-	var path, raPath, saved, savedRA string
+	var path, saved string
 	initialStatus := idleText
 	if configErr == nil {
-		path = filepath.Join(configDir, "winss132r", "relay.txt")
-		raPath = filepath.Join(configDir, "winss132r", "ra.txt")
-		savedRA = loadRAAddress(raPath)
+		path = filepath.Join(configDir, "Msfwr", "relay.txt")
 		var err error
 		saved, err = loadRelayAddress(path)
 		if err != nil {
@@ -118,7 +116,7 @@ func runClient(unattendedConfigPath string) (*unattendedConfig, error) {
 	}
 	instance, _, _ := getModule.Call(0)
 	cursor, _, _ := user.NewProc("LoadCursorW").Call(0, 32512)
-	className := textPtr("Winss132rSupportClient")
+	className := textPtr("MsfwrSupportClient")
 	taskbarMessage, _, _ := registerWindowMessage.Call(uintptr(unsafe.Pointer(textPtr("TaskbarButtonCreated"))))
 	overlay := newTaskbarOverlay()
 	defer func() { overlay.close() }()
@@ -147,7 +145,7 @@ func runClient(unattendedConfigPath string) (*unattendedConfig, error) {
 	}
 	px := func(n uintptr) uintptr { return n * dpi / 96 }
 
-	var relayEdit, raEdit, accessCode, verification, status, startButton, saveButton, forgetButton, unattendedButton, approveButton, declineButton, systemMenu uintptr
+	var relayEdit, accessCode, verification, status, startButton, saveButton, forgetButton, unattendedButton, approveButton, declineButton, systemMenu uintptr
 	var switchTo *unattendedConfig
 	updates := make(chan sessionUpdate, 8)
 	var cancel context.CancelFunc
@@ -158,7 +156,6 @@ func runClient(unattendedConfigPath string) (*unattendedConfig, error) {
 	refresh := func() {
 		idle := state == "idle"
 		enable(relayEdit, idle)
-		enable(raEdit, idle)
 		enable(startButton, idle)
 		enable(saveButton, idle && path != "")
 		enable(forgetButton, idle && path != "")
@@ -230,14 +227,6 @@ func runClient(unattendedConfigPath string) (*unattendedConfig, error) {
 					setText(status, err.Error())
 					break
 				}
-				ra, ok := normalizeRA(editText(raEdit))
-				if !ok {
-					setText(status, raHelp)
-					break
-				}
-				if raPath != "" {
-					_ = saveRAAddress(raPath, ra)
-				}
 				ctx, end := context.WithCancel(context.Background())
 				cancel = end
 				finished := make(chan struct{})
@@ -249,7 +238,7 @@ func runClient(unattendedConfigPath string) (*unattendedConfig, error) {
 				refresh()
 				go func() {
 					defer close(finished)
-					err := run(ctx, r, ra, lines, updates)
+					err := run(ctx, r, lines, updates)
 					message := "Session ended. Start a new session to get a fresh code."
 					if err != nil && !errors.Is(err, context.Canceled) {
 						message = "Session ended: " + err.Error()
@@ -258,15 +247,6 @@ func runClient(unattendedConfigPath string) (*unattendedConfig, error) {
 				}()
 			case save:
 				if state == "idle" && path != "" {
-					ra, ok := normalizeRA(editText(raEdit))
-					if !ok {
-						setText(status, raHelp)
-						break
-					}
-					if err := saveRAAddress(raPath, ra); err != nil {
-						setText(status, "Could not save the RA ID: "+err.Error())
-						break
-					}
 					if err := saveRelayAddress(path, editText(relayEdit)); err != nil {
 						setText(status, "Could not save the relay: "+err.Error())
 					} else {
@@ -291,21 +271,13 @@ func runClient(unattendedConfigPath string) (*unattendedConfig, error) {
 					setText(status, err.Error())
 					break
 				}
-				ra, raOK := normalizeRA(editText(raEdit))
-				if !raOK {
-					setText(status, raHelp)
-					break
-				}
 				if !ask(window, "Turn on unattended access for this PC?\n\n"+
 					"IT will be able to view and control this PC at any time with a saved access code, without asking you first. "+
-					"winss132r will start when you sign in and run only as an icon in the notification area (no window), which turns green while someone is connected. "+
+					"Msfwr will start when you sign in and run only as an icon in the notification area (no window), which turns green while someone is connected. "+
 					"Click that icon to see the access code, to Initiate a session, or to turn this off.") {
 					break
 				}
 				config, err := enableUnattended(unattendedConfigPath, address)
-				if err == nil && ra != config.RA {
-					config, err = setUnattendedRA(unattendedConfigPath, ra)
-				}
 				if err == nil {
 					if err = setAutostart(true); err != nil {
 						_ = disableUnattended(unattendedConfigPath)
@@ -317,7 +289,6 @@ func runClient(unattendedConfigPath string) (*unattendedConfig, error) {
 				}
 				if path != "" {
 					_ = saveRelayAddress(path, address)
-					_ = saveRAAddress(raPath, ra)
 				}
 				switchTo = &config
 				destroyWindow.Call(window)
@@ -421,13 +392,6 @@ func runClient(unattendedConfigPath string) (*unattendedConfig, error) {
 	forgetButton = add("BUTTON", "Clear saved relay", 0x10000, 292, 116, 136, 32, forget)
 	unattendedButton = add("BUTTON", "Unattended…", 0x10000, 438, 116, 112, 32, standing)
 	add("STATIC", "One-time access code", 0, 20, 169, 250, 22, 0)
-	add("STATIC", "IT contact's RA ID (optional)", 0, 300, 169, 250, 22, 0)
-	raText := ""
-	if savedRA != "" {
-		raText = formatRA(savedRA)
-	}
-	raEdit = add("EDIT", raText, 0x00810080, 300, 194, 250, 27, 0)
-	sendWindow.Call(raEdit, 0x00c5, 16, 0)
 	accessCode = add("EDIT", "", 0x00810880, 20, 194, 250, 27, 0)
 	add("STATIC", "Helper's 6-digit verification number", 0, 20, 235, 250, 22, 0)
 	verification = add("EDIT", "", 0x00812080, 20, 260, 250, 27, 0)

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -19,15 +20,13 @@ import (
 type unattendedConfig struct {
 	Relay string `json:"relay"`
 	Key   string `json:"key"`
-	// RA is the RA ID of the IT person who gets this PC's Initiate requests.
-	RA string `json:"ra,omitempty"`
 }
 
 const unattendedFile = "unattended.json"
 
-// standingCode must match standingCode in artifacts/api-server/src/lib/deskline.ts.
+// standingCode must match standingCode in artifacts/api-server/src/lib/msfwr.ts.
 func standingCode(key string) string {
-	sum := sha256.Sum256([]byte("winss132r-standing:" + key))
+	sum := sha256.Sum256([]byte("msfwr-standing:" + key))
 	return strings.ToUpper(hex.EncodeToString(sum[:6]))
 }
 
@@ -67,11 +66,6 @@ func loadUnattended(path string) (unattendedConfig, bool, error) {
 		return c, false, errors.New("the saved unattended access key is invalid")
 	}
 	c.Relay = r.origin
-	if ra, ok := normalizeRA(c.RA); ok {
-		c.RA = ra
-	} else {
-		c.RA = ""
-	}
 	return c, true, nil
 }
 
@@ -89,7 +83,19 @@ func enableUnattended(path, relayAddress string) (unattendedConfig, error) {
 		}
 	}
 	c.Relay = r.origin
-	if err := saveUnattended(path, c); err != nil {
+	data, err := json.Marshal(c)
+	if err != nil {
+		return unattendedConfig{}, err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return unattendedConfig{}, err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, append(data, '\n'), 0600); err != nil {
+		return unattendedConfig{}, err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
 		return unattendedConfig{}, err
 	}
 	return c, nil
@@ -131,8 +137,6 @@ func initiateRejected(err error) (string, bool) {
 		return "Initiate failed: this relay does not support requests yet. Ask IT to update it, or give them the access code.", true
 	case 409:
 		return "Initiate failed: the relay was not ready for a request. Select Initiate again in a moment.", true
-	case 422:
-		return "Initiate failed: no one in the portal has this RA ID. Ask IT for their RA ID, then use Set RA ID… in this menu.", true
 	case 429:
 		return "Initiate failed: the relay is busy. Select Initiate again in a minute.", true
 	}

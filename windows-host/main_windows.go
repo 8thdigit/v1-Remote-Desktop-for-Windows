@@ -2,12 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
-	"hash/crc32"
-	"os"
 	"runtime"
-	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -15,10 +12,7 @@ type sessionUpdate struct {
 	state, text, code string
 }
 
-// run is one attended session. With an RA ID, the request also goes
-// straight to that IT person's portal, who still needs the person at the PC
-// to type the verification number.
-func run(parent context.Context, r *relay, ra string, lines <-chan string, updates chan<- sessionUpdate) error {
+func run(parent context.Context, r *relay, lines <-chan string, updates chan<- sessionUpdate) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	ctx, cancel := context.WithCancel(parent)
@@ -51,21 +45,7 @@ func run(parent context.Context, r *relay, ra string, lines <-chan string, updat
 		defer stop()
 		_ = r.post(endCtx, "end", nil, nil)
 	}()
-	display := invitation.Code[:4] + "-" + invitation.Code[4:8] + "-" + invitation.Code[8:]
-	waitingText := "Share this one-time code with your helper. It expires in 3 minutes."
-	if ra != "" {
-		host, _ := os.Hostname()
-		if err := r.postJSON(ctx, "call", map[string]string{"name": host, "ra": ra}, nil); err != nil {
-			if text, ok := initiateRejected(err); ok {
-				waitingText = text + " You can still share this one-time code."
-			} else {
-				return err
-			}
-		} else {
-			waitingText = "Request sent to " + formatRA(ra) + ". They can accept it in the portal, or you can share this code. It expires in 3 minutes."
-		}
-	}
-	updates <- sessionUpdate{state: "waiting", text: waitingText, code: display}
+	updates <- sessionUpdate{state: "waiting", text: "Share this one-time code with your helper. It expires in 3 minutes.", code: invitation.Code[:4] + "-" + invitation.Code[4:8] + "-" + invitation.Code[8:]}
 	wait := time.NewTicker(650 * time.Millisecond)
 	defer wait.Stop()
 	challenge := ""
@@ -111,232 +91,66 @@ func run(parent context.Context, r *relay, ra string, lines <-chan string, updat
 	}
 }
 
-// maxSession matches maxLive in artifacts/api-server/src/lib/deskline.ts.
-const maxSession = 12 * time.Hour
-
-// stream shares the screen until the session ends. Three loops run side by
-// side so neither direction waits for the other:
-//   - capture: grabs the screen, skips unchanged frames, encodes the rest;
-//   - upload: sends the newest encoded frame (one frame is encoded while the
-//     previous one uploads) and adapts size and quality to upload speed;
-//   - input: a long poll that applies clicks and keys the moment they arrive.
 func stream(ctx context.Context, r *relay) error {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	var inputMu sync.Mutex
 	input := newControls()
-	defer func() { inputMu.Lock(); input.release(); inputMu.Unlock() }()
-	var screenW, screenH atomic.Int64
-	screenW.Store(int64(metric(0)))
-	screenH.Store(int64(metric(1)))
-	apply := func(events []event) error {
-		if len(events) == 0 {
-			return nil
+	defer input.release()
+	cadence := time.NewTicker(200 * time.Millisecond)
+	defer cadence.Stop()
+	deadline := time.Now().Add(30 * time.Minute)
+	var digest [32]byte
+	var lastUpload time.Time
+	for {
+		if ctx.Err() != nil {
+			return ctx.Err()
 		}
-		inputMu.Lock()
-		defer inputMu.Unlock()
-		w, h := int(screenW.Load()), int(screenH.Load())
-		for _, a := range events {
+		if time.Now().After(deadline) {
+			return errors.New("the 30-minute session limit was reached")
+		}
+		if !onDefaultDesktop() {
+			return errors.New("Windows switched to a locked or protected desktop")
+		}
+		frame, w, h, err := snapshot()
+		if err != nil {
+			return err
+		}
+		hash := sha256.Sum256(frame.Pix)
+		var data []byte
+		if hash != digest || time.Since(lastUpload) > 10*time.Second {
+			data, err = encodeJPEG(frame)
+			if err != nil {
+				return err
+			}
+		}
+		var reply tick
+		if err := r.post(ctx, "tick", data, &reply); err != nil {
+			return err
+		}
+		if reply.State != "live" {
+			return errors.New("relay ended the approved session")
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if !onDefaultDesktop() || !sameScreen(w, h) {
+			return errors.New("Windows desktop or display configuration changed")
+		}
+		if len(data) > 0 {
+			digest, lastUpload = hash, time.Now()
+		}
+		for _, a := range reply.Input {
 			if ctx.Err() != nil || stopPressed() {
 				return context.Canceled
 			}
 			input.apply(a, w, h)
 		}
-		return nil
-	}
-	fail := make(chan error, 3)
-	stop := func(err error) {
-		select {
-		case fail <- err:
-		default:
+		if time.Since(input.lastPointer) > 3*time.Second {
+			input.release()
 		}
-		cancel()
-	}
-	pause := func(d time.Duration) bool {
-		t := time.NewTimer(d)
-		defer t.Stop()
 		select {
 		case <-ctx.Done():
-			return false
-		case <-t.C:
-			return true
+			return ctx.Err()
+		case <-cadence.C:
 		}
-	}
-	// A tick that retries through short network trouble, so a dropped
-	// packet or a relay restart does not end the session.
-	sendTick := func(data []byte) (tick, error) {
-		var reply tick
-		started := time.Now()
-		for attempt := 0; ; attempt++ {
-			err := r.post(ctx, "tick", data, &reply)
-			if err == nil {
-				return reply, nil
-			}
-			if ctx.Err() != nil || !transient(err) || time.Since(started) > 12*time.Second {
-				return reply, err
-			}
-			if !pause(time.Duration(min(attempt+1, 8)) * 250 * time.Millisecond) {
-				return reply, ctx.Err()
-			}
-		}
-	}
-
-	r.pulls = true
-	var pullWorks atomic.Bool
-	go func() {
-		failures := 0
-		for ctx.Err() == nil {
-			var reply tick
-			err := r.pull(ctx, &reply)
-			if err != nil {
-				if ctx.Err() != nil {
-					return
-				}
-				var s *statusError
-				if errors.As(err, &s) && (s.status == 404 || s.status == 405) {
-					return // An older relay: input arrives with each tick instead.
-				}
-				if !transient(err) {
-					stop(err)
-					return
-				}
-				failures++
-				if !pause(time.Duration(min(failures, 8)) * 250 * time.Millisecond) {
-					return
-				}
-				continue
-			}
-			failures = 0
-			pullWorks.Store(true)
-			if reply.State != "live" {
-				stop(errors.New("relay ended the approved session"))
-				return
-			}
-			if err := apply(reply.Input); err != nil {
-				stop(err)
-				return
-			}
-		}
-	}()
-	// Release a held mouse button if the viewer goes quiet.
-	go func() {
-		t := time.NewTicker(time.Second)
-		defer t.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-t.C:
-				inputMu.Lock()
-				if time.Since(input.lastPointer) > 3*time.Second {
-					input.release()
-				}
-				inputMu.Unlock()
-			}
-		}
-	}()
-
-	quality := newAdaptiveQuality()
-	var levelMu sync.Mutex
-	level := func() qualityLevel { levelMu.Lock(); defer levelMu.Unlock(); return quality.current() }
-	frames := make(chan []byte) // unbuffered: hand-off to the uploader
-	go func() {
-		for ctx.Err() == nil {
-			var data []byte
-			// Heartbeat at least once a second; four times a second on an
-			// older relay, which only hands input out with ticks.
-			beat := time.Second
-			if !pullWorks.Load() {
-				beat = 250 * time.Millisecond
-			}
-			t := time.NewTimer(beat)
-			select {
-			case <-ctx.Done():
-				t.Stop()
-				return
-			case data = <-frames:
-			case <-t.C:
-			}
-			t.Stop()
-			started := time.Now()
-			reply, err := sendTick(data)
-			if err != nil {
-				stop(err)
-				return
-			}
-			if len(data) > 0 {
-				levelMu.Lock()
-				quality.observe(time.Since(started))
-				levelMu.Unlock()
-			}
-			if reply.State != "live" {
-				stop(errors.New("relay ended the approved session"))
-				return
-			}
-			if err := apply(reply.Input); err != nil {
-				stop(err)
-				return
-			}
-		}
-	}()
-
-	deadline := time.Now().Add(maxSession)
-	table := crc32.MakeTable(crc32.Castagnoli)
-	var digest uint32
-	var sentLevel qualityLevel
-	idle := 0
-	for {
-		if ctx.Err() != nil {
-			break
-		}
-		if time.Now().After(deadline) {
-			return errors.New("the 12-hour session limit was reached")
-		}
-		if !onDefaultDesktop() {
-			return errors.New("Windows switched to a locked or protected desktop")
-		}
-		lvl := level()
-		frame, w, h, err := snapshot(lvl)
-		if err != nil {
-			return err
-		}
-		screenW.Store(int64(w))
-		screenH.Store(int64(h))
-		sum := crc32.Checksum(frame.Pix, table)
-		if sum != digest || lvl != sentLevel {
-			data, err := encodeJPEG(frame, lvl.jpeg)
-			if err != nil {
-				return err
-			}
-			select {
-			case frames <- data:
-				digest, sentLevel, idle = sum, lvl, 0
-			case <-ctx.Done():
-			}
-		} else {
-			idle++
-		}
-		if ctx.Err() != nil {
-			break
-		}
-		if !onDefaultDesktop() || !sameScreen(w, h) {
-			return errors.New("Windows desktop or display configuration changed")
-		}
-		// Look for changes about 30 times a second; after a second of a still
-		// screen, check less often to save CPU.
-		wait := 33 * time.Millisecond
-		if idle > 30 {
-			wait = 100 * time.Millisecond
-		}
-		if !pause(wait) {
-			break
-		}
-	}
-	select {
-	case err := <-fail:
-		return err
-	default:
-		return ctx.Err()
 	}
 }
 
@@ -344,7 +158,7 @@ type unattendedUpdate struct {
 	state, text string // state is ready, calling, connected, offline or locked
 }
 
-// callTTL matches callTTL in artifacts/api-server/src/lib/deskline.ts.
+// callTTL matches callTTL in artifacts/api-server/src/lib/msfwr.ts.
 const callTTL = 2 * time.Minute
 
 // serveUnattended keeps a pre-approved registration open on the relay and
@@ -354,7 +168,10 @@ const callTTL = 2 * time.Minute
 // end a live session; the host then registers again for the next one.
 // Initiate asks viewers that saved this PC's code to connect; IT accepts in
 // the browser and the session starts at once.
-func serveUnattended(ctx context.Context, origin, key, name string, ra func() string, stopSession, initiate <-chan struct{}, updates chan<- unattendedUpdate) {
+// linksPath is where saved remote access links live ("" when unavailable).
+// After a session opened through a shared link ends, the host re-registers
+// under that link so the same URL can open more sessions until it expires.
+func serveUnattended(ctx context.Context, origin, key, name, linksPath string, stopSession, initiate <-chan struct{}, newLink <-chan linkRequest, updates chan<- unattendedUpdate) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	backoff := 2 * time.Second
@@ -369,6 +186,11 @@ func serveUnattended(ctx context.Context, origin, key, name string, ra func() st
 		}
 	}
 	var callUntil time.Time
+	// pending holds a link the user asked the UI to create whose relay
+	// creation has not been confirmed yet; it survives a round restart so the
+	// request is retried instead of being lost. The UI reads len(pending) > 0
+	// to know a create is still in flight (dedupe).
+	pending := make(chan linkRequest, 1)
 	for ctx.Err() == nil {
 		if !onDefaultDesktop() {
 			callUntil = time.Time{}
@@ -378,7 +200,40 @@ func serveUnattended(ctx context.Context, origin, key, name string, ra func() st
 			}
 			continue
 		}
-		served, err := unattendedRound(ctx, origin, key, name, ra, stopSession, initiate, &callUntil, updates)
+		// Retry a link whose creation did not finish before the last round
+		// ended (relay offline, error, or session raced ahead of it). The UI
+		// dedupes clicks with its own in-flight marker; this keeps retrying
+		// every few seconds until the relay confirms the link exists.
+	retry:
+		for {
+			select {
+			case req := <-pending:
+				rc, err := newRelay(origin)
+				var created *remoteLink
+				if err == nil {
+					cctx, ccancel := context.WithTimeout(context.Background(), 8*time.Second)
+					created, err = rc.createLink(cctx, key, req.name, req.hours)
+					ccancel()
+				}
+				if err != nil {
+					updates <- unattendedUpdate{state: "ready", text: "Could not create the remote access URL: " + err.Error() + ". Retrying…"}
+					if !pause(3 * time.Second) {
+						return
+					}
+					continue retry
+				}
+				stored := savedLink{ID: created.ID, Code: created.Code, Key: key, Name: req.name, Relay: origin, CreatedAt: created.CreatedAt, ExpiresAt: created.ExpiresAt}
+				if linksPath != "" {
+					current, _ := loadLinks(linksPath, time.Now())
+					_ = saveLinks(linksPath, addLink(current, stored, time.Now()))
+				}
+				updates <- unattendedUpdate{state: "ready", text: "Remote access link is live: share " + stored.shareURL() + " (" + timeLeft(stored.ExpiresAt, time.Now()) + ")"}
+				continue retry
+			default:
+				break retry
+			}
+		}
+		served, err := unattendedRound(ctx, origin, key, name, stopSession, initiate, linksPath, newLink, pending, &callUntil, updates)
 		if ctx.Err() != nil {
 			return
 		}
@@ -413,7 +268,10 @@ func serveUnattended(ctx context.Context, origin, key, name string, ra func() st
 // whether a viewer connected.
 // callUntil is when the current Initiate request lapses; it survives the
 // registration refresh so a request is not lost when the round restarts.
-func unattendedRound(parent context.Context, origin, key, name string, ra func() string, stopSession, initiate <-chan struct{}, callUntil *time.Time, updates chan<- unattendedUpdate) (served bool, err error) {
+// newLink carries links the user asked the UI to create; pendingLink holds
+// one whose relay creation has not been confirmed yet, so it is retried
+// instead of being lost across rounds.
+func unattendedRound(parent context.Context, origin, key, name string, stopSession, initiate <-chan struct{}, linksPath string, newLink <-chan linkRequest, pendingLink chan linkRequest, callUntil *time.Time, updates chan<- unattendedUpdate) (served bool, err error) {
 	r, err := newRelay(origin)
 	if err != nil {
 		return false, err
@@ -432,12 +290,7 @@ func unattendedRound(parent context.Context, origin, key, name string, ra func()
 		_ = r.post(endCtx, "end", nil, nil)
 	}()
 	call := func(until time.Time) error {
-		target := ra()
-		body := map[string]string{"name": name}
-		if target != "" {
-			body["ra"] = target
-		}
-		if err := r.postJSON(parent, "call", body, nil); err != nil {
+		if err := r.postJSON(parent, "call", map[string]string{"name": name}, nil); err != nil {
 			// A relay that answers but rejects the request (an older build
 			// without Initiate, or the session is no longer waiting) is not
 			// a network failure: say so and keep the registration.
@@ -449,12 +302,49 @@ func unattendedRound(parent context.Context, origin, key, name string, ra func()
 			return err
 		}
 		*callUntil = until
-		text := "Request sent. Waiting for IT to accept in the browser…"
-		if target != "" {
-			text = "Request sent to " + formatRA(target) + ". Waiting for them to accept in the portal…"
-		}
-		updates <- unattendedUpdate{state: "calling", text: text}
+		updates <- unattendedUpdate{state: "calling", text: "Request sent. Waiting for IT to accept in the browser…"}
 		return nil
+	}
+	// registerLinkNow asks the relay to open this link's code for viewers.
+	// The host stays registered under the standing code as well, so both
+	// entry points work while the link is alive.
+	registerLinkNow := func(l savedLink) {
+		ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+		defer cancel()
+		if _, err := r.registerLink(ctx, l.ID, l.Key); err != nil {
+			updates <- unattendedUpdate{state: "ready", text: "Remote access link could not be armed: " + err.Error()}
+			return
+		}
+		updates <- unattendedUpdate{state: "ready", text: "Remote access link is live: share " + l.shareURL() + " (" + timeLeft(l.ExpiresAt, time.Now()) + ")"}
+	}
+	createLink := func(req linkRequest) {
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		defer cancel()
+		created, err := r.createLink(ctx, key, req.name, req.hours)
+		if err != nil {
+			updates <- unattendedUpdate{state: "ready", text: "Could not create the remote access URL: " + err.Error()}
+			return
+		}
+		stored := savedLink{ID: created.ID, Code: created.Code, Key: key, Name: req.name, Relay: origin, CreatedAt: created.CreatedAt, ExpiresAt: created.ExpiresAt}
+		if linksPath != "" {
+			current, _ := loadLinks(linksPath, time.Now())
+			if err := saveLinks(linksPath, addLink(current, stored, time.Now())); err != nil {
+				updates <- unattendedUpdate{state: "ready", text: "The link was created but could not be saved on this PC: " + err.Error()}
+			}
+		}
+		registerLinkNow(stored)
+	}
+	armActiveLinks := func() {
+		if linksPath == "" {
+			return
+		}
+		active, err := loadLinks(linksPath, time.Now())
+		if err != nil || len(active) == 0 {
+			return
+		}
+		for _, l := range active {
+			registerLinkNow(l)
+		}
 	}
 	if time.Now().Before(*callUntil) {
 		if err := call(*callUntil); err != nil {
@@ -462,10 +352,10 @@ func unattendedRound(parent context.Context, origin, key, name string, ra func()
 		}
 	} else {
 		updates <- unattendedUpdate{state: "ready", text: "Ready. IT can connect with this PC's access code, or select Initiate."}
+		armActiveLinks()
 	}
 	refresh := time.Now().Add(2 * time.Minute)
-	// Check for a viewer every 400 ms so an accepted request starts quickly.
-	wait := time.NewTicker(400 * time.Millisecond)
+	wait := time.NewTicker(650 * time.Millisecond)
 	defer wait.Stop()
 	for time.Now().Before(refresh) {
 		var reply tick
@@ -517,8 +407,29 @@ func unattendedRound(parent context.Context, origin, key, name string, ra func()
 			if err := call(time.Now().Add(callTTL)); err != nil {
 				return false, err
 			}
+		case req := <-newLink:
+			select {
+			case <-pendingLink: // drop any older unconfirmed request; this one wins
+			default:
+			}
+			pendingLink <- req // remembered if creation below fails or errors
+			createLink(req)
+			drainRequest(pendingLink, req)
 		case <-wait.C:
 		}
 	}
 	return false, nil
+}
+
+// drainRequest removes req from a full pending channel, if it is still the
+// request at the head (createLink finished handling it). A different request
+// that raced in is put back for the next round.
+func drainRequest(pending chan linkRequest, req linkRequest) {
+	select {
+	case got := <-pending:
+		if got != req {
+			pending <- got
+		}
+	default:
+	}
 }

@@ -1,6 +1,5 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-import { accountsReady } from "./lib/portal";
 
 const rawPort = process.env["PORT"];
 
@@ -23,6 +22,4 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
-  // Load the portal accounts now so the setup code (if any) is logged at start.
-  accountsReady().catch((err) => logger.error({ err }, "Could not load portal accounts"));
 });

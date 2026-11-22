@@ -1,0 +1,152 @@
+import { Router, raw, type Request, type Response } from "express";
+import {
+  JoinMsfwrBody, JoinMsfwrResponse, CreateMsfwrInviteResponse,
+  SendMsfwrInputBody, RegisterMsfwrStandingBody, RegisterMsfwrStandingResponse, CallMsfwrBody, ListMsfwrCallsBody, ListMsfwrCallsResponse, TickMsfwrResponse, GetMsfwrFrameQueryParams,
+  CreateMsfwrLinkBody, MsfwrLinkSchema, RegisterMsfwrLinkBody, GetMsfwrLinkStatusQueryParams, MsfwrLinkStatusSchema, RevokeMsfwrLinkBody,
+} from "@workspace/api-zod";
+import { createMsfwrStore } from "../lib/msfwr";
+
+const router = Router();
+const store = createMsfwrStore();
+setInterval(store.sweep, 5000).unref();
+
+function throttle(max: number) {
+  let since = 0;
+  let count = 0;
+  return () => {
+    const now = Date.now();
+    if (now - since >= 60_000) { since = now; count = 0; }
+    return ++count > max;
+  };
+}
+const tooManyInvites = throttle(90);
+const tooManyJoins = throttle(240);
+const tooManyStanding = throttle(240);
+const tooManyCallChecks = throttle(1200);
+
+function auth(req: Request, res: Response, role?: "host" | "viewer") {
+  const found = store.authenticate(req.get("authorization"), role);
+  if (!found) res.status(410).json({error: "This session ended or expired. Ask for a new code."});
+  return found;
+}
+router.use((_req, res, next) => {
+  res.set({"Cache-Control": "no-store, private", "X-Content-Type-Options": "nosniff"});
+  next();
+});
+router.post("/invite", (_req, res) => {
+  const invite = !tooManyInvites() && store.invite();
+  if (!invite) { res.status(429).json({error: "Relay busy. Try again in a minute."}); return; }
+  res.status(201).json(CreateMsfwrInviteResponse.parse(invite));
+});
+router.post("/standing", (req, res) => {
+  if (tooManyStanding()) { res.status(429).json({error: "Relay busy. Try again in a minute."}); return; }
+  const body = RegisterMsfwrStandingBody.safeParse(req.body);
+  if (!body.success) { res.status(400).json({error: "Invalid unattended access key."}); return; }
+  const standing = store.standing(body.data.key, body.data.name);
+  if (!standing) { res.status(409).json({error: "Relay busy, or the code is in use by another session."}); return; }
+  res.status(201).json(RegisterMsfwrStandingResponse.parse(standing));
+});
+router.post("/call", (req, res) => {
+  const s = auth(req, res, "host");
+  if (!s) return;
+  const body = CallMsfwrBody.safeParse(req.body ?? {});
+  if (!body.success) { res.status(400).json({error: "Invalid request."}); return; }
+  if (!store.call(s, body.data.name ?? "")) { res.status(409).json({error: "Only a waiting unattended host can initiate."}); return; }
+  res.sendStatus(204);
+});
+router.post("/calls", (req, res) => {
+  if (tooManyCallChecks()) { res.status(429).json({error: "Too many checks. Try again in a minute."}); return; }
+  const body = ListMsfwrCallsBody.safeParse(req.body);
+  if (!body.success) { res.status(400).json({error: "Send up to 50 saved access codes."}); return; }
+  res.json(ListMsfwrCallsResponse.parse({calls: store.calls(body.data.codes), presence: store.presence(body.data.codes)}));
+});
+// --- Remote access links (created from the client app) ---
+router.post("/link/create", (req, res) => {
+  if (tooManyStanding()) { res.status(429).json({error: "Relay busy. Try again in a minute."}); return; }
+  const body = CreateMsfwrLinkBody.safeParse(req.body);
+  if (!body.success) { res.status(400).json({error: "Invalid unattended access key."}); return; }
+  const link = store.linkCreate(body.data.key, body.data.name ?? "", body.data.ttlHours);
+  if (!link) { res.status(409).json({error: "Relay busy. Try again in a minute."}); return; }
+  res.status(201).json(MsfwrLinkSchema.parse(link));
+});
+router.post("/link/register", (req, res) => {
+  if (tooManyStanding()) { res.status(429).json({error: "Relay busy. Try again in a minute."}); return; }
+  const body = RegisterMsfwrLinkBody.safeParse(req.body);
+  if (!body.success) { res.status(400).json({error: "Invalid link registration."}); return; }
+  const invite = store.linkRegister(body.data.id, body.data.key);
+  if (!invite) { res.status(410).json({error: "This remote access link expired or was revoked."}); return; }
+  res.status(201).json(RegisterMsfwrStandingResponse.parse(invite));
+});
+router.get("/link/status", (req, res) => {
+  const query = GetMsfwrLinkStatusQueryParams.safeParse(req.query);
+  if (!query.success) { res.status(400).json({error: "Invalid link lookup."}); return; }
+  const status = store.linkStatus(query.data.id, query.data.key);
+  if (!status) { res.status(404).json({error: "Link not found, expired, or revoked."}); return; }
+  res.json(MsfwrLinkStatusSchema.parse(status));
+});
+router.post("/link/revoke", (req, res) => {
+  const body = RevokeMsfwrLinkBody.safeParse(req.body);
+  if (!body.success) { res.status(400).json({error: "Invalid link revocation."}); return; }
+  if (!store.linkRevoke(body.data.id, body.data.key)) { res.status(404).json({error: "Link not found, expired, or revoked."}); return; }
+  res.sendStatus(204);
+});
+router.post("/join", (req, res) => {
+  if (tooManyJoins()) { res.status(429).json({error: "Too many attempts. Try again in a minute."}); return; }
+  const body = JoinMsfwrBody.safeParse(req.body);
+  if (!body.success) { res.status(400).json({error: "Enter a 12-character code from the host."}); return; }
+  const viewer = store.join(body.data.code);
+  if (!viewer) { res.status(404).json({error: "Code not found, already used, or expired."}); return; }
+  res.json(JoinMsfwrResponse.parse(viewer));
+});
+router.post("/approve", (req, res) => {
+  const s = auth(req, res, "host");
+  if (!s) return;
+  if (!store.approve(s)) { res.status(409).json({error: "No viewer is waiting for approval."}); return; }
+  res.sendStatus(204);
+});
+router.post("/end", (req, res) => {
+  const s = auth(req, res);
+  if (!s) return;
+  store.end(s);
+  res.sendStatus(204);
+});
+router.post("/tick", raw({type:"image/jpeg", limit:"768kb", inflate:false}), (req, res) => {
+  const s = auth(req, res, "host");
+  if (!s) return;
+  const frame: unknown = req.body;
+  if (frame !== undefined && (!Buffer.isBuffer(frame) || frame.length < 4 || frame.readUInt16BE(0) !== 0xffd8 || frame.readUInt16BE(frame.length - 2) !== 0xffd9)) {
+    res.status(400).json({error: "Expected a binary JPEG frame."}); return;
+  }
+  if (frame && s.state !== "live") {
+    res.status(409).json({error: "No screen can be uploaded before host approval."}); return;
+  }
+  res.json(TickMsfwrResponse.parse(store.tick(s, frame)));
+});
+router.get("/frame", (req, res) => {
+  const s = auth(req, res, "viewer");
+  if (!s) return;
+  const query = GetMsfwrFrameQueryParams.safeParse(req.query);
+  if (!query.success) { res.status(400).json({error: "Invalid frame sequence."}); return; }
+  res.set("X-Msfwr-State", s.state);
+  if (s.state !== "live" || !s.frame || s.sequence <= (query.data.after ?? 0)) { res.sendStatus(204); return; }
+  res.set("X-Msfwr-Frame", String(s.sequence));
+  res.type("image/jpeg").send(s.frame);
+});
+router.post("/input", (req, res) => {
+  const s = auth(req, res, "viewer");
+  if (!s) return;
+  if (s.state !== "live") { res.status(409).json({error: "Wait for the host to approve the session."}); return; }
+  const parsed = SendMsfwrInputBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({error: "Invalid remote input."}); return; }
+  const a = parsed.data;
+  if ((["move", "down", "up", "wheel"].includes(a.kind) && (a.x === undefined || a.y === undefined)) ||
+      ((a.kind === "down" || a.kind === "up") && a.button === undefined) ||
+      (a.kind === "wheel" && a.delta === undefined) ||
+      (a.kind === "key" && !a.key)) {
+    res.status(400).json({error: "Incomplete remote input."}); return;
+  }
+  if (!store.enqueue(s, a)) { res.status(429).json({error: "Remote input was too fast."}); return; }
+  res.sendStatus(204);
+});
+
+export default router;

@@ -24,195 +24,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
-  /auth/status:
-    get:
-      operationId: getAuthStatus
-      tags: [auth]
-      description: The signed-in portal user, or whether the first admin still has to be created.
-      responses:
-        "200":
-          description: Login state
-          content:
-            application/json:
-              schema: {$ref: "#/components/schemas/AuthStatus"}
-  /auth/setup:
+  /msfwr/invite:
     post:
-      operationId: setupAdmin
-      tags: [auth]
-      description: >-
-        Creates the first admin account. Only works while no account exists,
-        and needs the one-time setup code the relay writes to its log.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: "#/components/schemas/AuthSetup"}
-      responses:
-        "201":
-          description: Admin created and signed in
-          content:
-            application/json:
-              schema: {$ref: "#/components/schemas/Account"}
-  /auth/login:
-    post:
-      operationId: login
-      tags: [auth]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: "#/components/schemas/AuthLogin"}
-      responses:
-        "200":
-          description: Signed in; the session is an HttpOnly cookie
-          content:
-            application/json:
-              schema: {$ref: "#/components/schemas/Account"}
-  /auth/logout:
-    post:
-      operationId: logout
-      tags: [auth]
-      responses:
-        "204": {description: Signed out}
-  /auth/password:
-    post:
-      operationId: changePassword
-      tags: [auth]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: "#/components/schemas/PasswordChange"}
-      responses:
-        "204": {description: Password changed; other logins are signed out}
-  /admin/users:
-    get:
-      operationId: listUsers
-      tags: [admin]
-      responses:
-        "200":
-          description: Every portal account
-          content:
-            application/json:
-              schema: {$ref: "#/components/schemas/AccountList"}
-    post:
-      operationId: createUser
-      tags: [admin]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: "#/components/schemas/AccountCreate"}
-      responses:
-        "201":
-          description: Account created with a new RA ID
-          content:
-            application/json:
-              schema: {$ref: "#/components/schemas/Account"}
-  /admin/users/{id}:
-    patch:
-      operationId: updateUser
-      tags: [admin]
-      parameters:
-        - {in: path, name: id, required: true, schema: {type: string}}
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: "#/components/schemas/AccountUpdate"}
-      responses:
-        "200":
-          description: Updated account
-          content:
-            application/json:
-              schema: {$ref: "#/components/schemas/Account"}
-    delete:
-      operationId: deleteUser
-      tags: [admin]
-      parameters:
-        - {in: path, name: id, required: true, schema: {type: string}}
-      responses:
-        "204": {description: Account deleted}
-  /admin/overview:
-    get:
-      operationId: getAdminOverview
-      tags: [admin]
-      responses:
-        "200":
-          description: Live sessions, requests and recent activity
-          content:
-            application/json:
-              schema: {$ref: "#/components/schemas/AdminOverview"}
-  /admin/sessions/{id}/end:
-    post:
-      operationId: endSessionAsAdmin
-      tags: [admin]
-      parameters:
-        - {in: path, name: id, required: true, schema: {type: string}}
-      responses:
-        "204": {description: Session ended}
-  /deskline/inbox:
-    get:
-      operationId: getDesklineInbox
-      description: Initiate requests that PCs sent to the signed-in user's RA ID.
-      responses:
-        "200":
-          description: Open and recent requests
-          content:
-            application/json:
-              schema: {$ref: "#/components/schemas/DesklineInbox"}
-  /deskline/accept:
-    post:
-      operationId: acceptDesklineRequest
-      description: Accepts a request sent to the signed-in user's RA ID and joins that PC.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: "#/components/schemas/DesklineAccept"}
-      responses:
-        "200":
-          description: Viewer capability
-          content:
-            application/json:
-              schema: {$ref: "#/components/schemas/DesklineViewer"}
-  /deskline/inputs:
-    post:
-      operationId: sendDesklineInputs
-      security: [{sessionToken: []}]
-      description: Several viewer input events in order, in one request.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: "#/components/schemas/DesklineInputBatch"}
-      responses:
-        "204": {description: Accepted}
-  /deskline/pull:
-    post:
-      operationId: pullDesklineInput
-      security: [{sessionToken: []}]
-      description: >-
-        Host long poll for viewer input. Returns as soon as input is queued,
-        or after about ten seconds with none.
-      responses:
-        "200":
-          description: Session state and input
-          content:
-            application/json:
-              schema: {$ref: "#/components/schemas/DesklineTick"}
-  /deskline/invite:
-    post:
-      operationId: createDesklineInvite
+      operationId: createMsfwrInvite
       responses:
         "201":
           description: One-time host invite
           content:
             application/json:
-              schema: {$ref: "#/components/schemas/DesklineInvite"}
-  /deskline/standing:
+              schema: {$ref: "#/components/schemas/MsfwrInvite"}
+  /msfwr/standing:
     post:
-      operationId: registerDesklineStanding
+      operationId: registerMsfwrStanding
       description: >-
         Unattended host registration. The access code is derived from the
         host's saved key; a viewer that joins it is live without approval.
@@ -220,16 +43,16 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: "#/components/schemas/DesklineStandingKey"}
+            schema: {$ref: "#/components/schemas/MsfwrStandingKey"}
       responses:
         "201":
           description: Pre-approved host invite for the derived code
           content:
             application/json:
-              schema: {$ref: "#/components/schemas/DesklineInvite"}
-  /deskline/call:
+              schema: {$ref: "#/components/schemas/MsfwrInvite"}
+  /msfwr/call:
     post:
-      operationId: callDeskline
+      operationId: callMsfwr
       security: [{sessionToken: []}]
       description: >-
         An unattended host presses Initiate. Viewers that already know its
@@ -237,12 +60,12 @@ paths:
       requestBody:
         content:
           application/json:
-            schema: {$ref: "#/components/schemas/DesklineCall"}
+            schema: {$ref: "#/components/schemas/MsfwrCall"}
       responses:
         "204": {description: Request is visible to viewers that know the code}
-  /deskline/calls:
+  /msfwr/calls:
     post:
-      operationId: listDesklineCalls
+      operationId: listMsfwrCalls
       description: >-
         Which of the viewer's saved access codes have a pending Initiate
         request, and which of them are online (waiting) or in a session.
@@ -251,53 +74,118 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: "#/components/schemas/DesklineCallQuery"}
+            schema: {$ref: "#/components/schemas/MsfwrCallQuery"}
       responses:
         "200":
           description: Pending requests among the given codes
           content:
             application/json:
-              schema: {$ref: "#/components/schemas/DesklineCallList"}
-  /deskline/join:
+              schema: {$ref: "#/components/schemas/MsfwrCallList"}
+  /msfwr/link/create:
     post:
-      operationId: joinDeskline
+      operationId: createMsfwrLink
+      description: >-
+        Create a shareable remote access URL from the client app. The host PC
+        registers a waiting session under the link's code; every viewer that
+        opens the shared URL starts a new session without approval, until the
+        link expires (24 hours by default) or is revoked. Requires the
+        unattended access key of the PC.
       requestBody:
         required: true
         content:
           application/json:
-            schema: {$ref: "#/components/schemas/DesklineCode"}
+            schema: {$ref: "#/components/schemas/MsfwrLinkCreate"}
+      responses:
+        "201":
+          description: The created link
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MsfwrLink"}
+  /msfwr/link/register:
+    post:
+      operationId: registerMsfwrLink
+      description: >-
+        The host re-registers its waiting session under an existing link id
+        after each session ends, so the shared URL keeps accepting viewers
+        until it expires or is revoked.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/MsfwrLinkRegister"}
+      responses:
+        "201":
+          description: Pre-approved host invite for the link's code
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MsfwrInvite"}
+        "410": {description: The link expired or was revoked}
+  /msfwr/link/status:
+    get:
+      operationId: getMsfwrLinkStatus
+      description: >-
+        Current state of a link for the client app: validity, whether the
+        host is registered and online, and how many sessions were opened.
+      parameters:
+        - {in: query, name: id, required: true, schema: {type: string}}
+        - {in: query, name: key, required: true, schema: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}}
+      responses:
+        "200":
+          description: Link status
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MsfwrLinkStatus"}
+  /msfwr/link/revoke:
+    post:
+      operationId: revokeMsfwrLink
+      description: Revoke a link at once; any live session under it is ended.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/MsfwrLinkRegister"}
+      responses:
+        "204": {description: Link revoked}
+  /msfwr/join:
+    post:
+      operationId: joinMsfwr
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/MsfwrCode"}
       responses:
         "200":
           description: Viewer capability and verification number
           content:
             application/json:
-              schema: {$ref: "#/components/schemas/DesklineViewer"}
-  /deskline/end:
+              schema: {$ref: "#/components/schemas/MsfwrViewer"}
+  /msfwr/end:
     post:
-      operationId: endDeskline
+      operationId: endMsfwr
       security: [{sessionToken: []}]
       responses:
         "204": {description: Session ended}
-  /deskline/input:
+  /msfwr/input:
     post:
-      operationId: sendDesklineInput
+      operationId: sendMsfwrInput
       security: [{sessionToken: []}]
       requestBody:
         required: true
         content:
           application/json:
-            schema: {$ref: "#/components/schemas/DesklineInput"}
+            schema: {$ref: "#/components/schemas/MsfwrInput"}
       responses:
         "204": {description: Accepted}
-  /deskline/approve:
+  /msfwr/approve:
     post:
-      operationId: approveDeskline
+      operationId: approveMsfwr
       security: [{sessionToken: []}]
       responses:
         "204": {description: Host approved the session}
-  /deskline/tick:
+  /msfwr/tick:
     post:
-      operationId: tickDeskline
+      operationId: tickMsfwr
       security: [{sessionToken: []}]
       description: Host heartbeat; optional raw JPEG body when the approved screen changes.
       requestBody:
@@ -309,27 +197,26 @@ paths:
           description: Host status and pending input
           content:
             application/json:
-              schema: {$ref: "#/components/schemas/DesklineTick"}
-  /deskline/frame:
+              schema: {$ref: "#/components/schemas/MsfwrTick"}
+  /msfwr/frame:
     get:
-      operationId: getDesklineFrame
+      operationId: getMsfwrFrame
       security: [{sessionToken: []}]
       parameters:
         - {in: query, name: after, schema: {type: integer, minimum: 0}}
-        - {in: query, name: wait, description: Hold the request up to this many milliseconds for a new frame., schema: {type: integer, minimum: 0, maximum: 10000}}
       responses:
         "200":
-          description: New JPEG frame; X-Deskline-Frame is its sequence number.
+          description: New JPEG frame; X-Msfwr-Frame is its sequence number.
           content:
             image/jpeg:
               schema: {type: string, format: binary}
         "204":
-          description: No new frame. X-Deskline-State is pending or live.
+          description: No new frame. X-Msfwr-State is pending or live.
 components:
   securitySchemes:
     sessionToken: { type: http, scheme: bearer }
   schemas:
-    DesklineTick:
+    MsfwrTick:
       type: object
       required: [state, input]
       properties:
@@ -337,24 +224,23 @@ components:
         verification: {type: string}
         input:
           type: array
-          items: {$ref: "#/components/schemas/DesklineInput"}
-    DesklineCode:
+          items: {$ref: "#/components/schemas/MsfwrInput"}
+    MsfwrCode:
       type: object
       required: [code]
       properties:
         code: {type: string, pattern: '^[A-F0-9]{12}$'}
-    DesklineStandingKey:
+    MsfwrStandingKey:
       type: object
       required: [key]
       properties:
         key: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
         name: {type: string, maxLength: 64}
-    DesklineCall:
+    MsfwrCall:
       type: object
       properties:
         name: {type: string, maxLength: 64}
-        ra: {type: string, maxLength: 16, description: RA ID of the portal user who should get the request}
-    DesklineCallQuery:
+    MsfwrCallQuery:
       type: object
       required: [codes]
       properties:
@@ -362,7 +248,7 @@ components:
           type: array
           maxItems: 50
           items: {type: string, pattern: '^[A-F0-9]{12}$'}
-    DesklineCallList:
+    MsfwrCallList:
       type: object
       required: [calls]
       properties:
@@ -383,20 +269,50 @@ components:
               code: {type: string}
               name: {type: string}
               state: {type: string, enum: [online, busy]}
-    DesklineInvite:
+    MsfwrInvite:
       type: object
       required: [code, token]
       properties:
         code: {type: string}
         token: {type: string}
-    DesklineViewer:
+    MsfwrLinkCreate:
+      type: object
+      required: [key]
+      properties:
+        key: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
+        name: {type: string, maxLength: 64}
+        ttlHours: {type: integer, enum: [1, 2, 4, 5, 8, 12, 24, 48, 72, 120], default: 24}
+    MsfwrLinkRegister:
+      type: object
+      required: [id, key]
+      properties:
+        id: {type: string, maxLength: 64}
+        key: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
+    MsfwrLink:
+      type: object
+      required: [id, code, name, createdAt, expiresAt, sessions]
+      properties:
+        id: {type: string}
+        code: {type: string, pattern: '^L[0-9A-F]{11}$'}
+        name: {type: string}
+        createdAt: {type: number}
+        expiresAt: {type: number}
+        sessions: {type: integer, minimum: 0}
+    MsfwrLinkStatus:
+      type: object
+      required: [link, online, busy]
+      properties:
+        link: {$ref: "#/components/schemas/MsfwrLink"}
+        online: {type: boolean}
+        busy: {type: boolean}
+    MsfwrViewer:
       type: object
       required: [token, verification, preapproved]
       properties:
         token: {type: string}
         verification: {type: string}
         preapproved: {type: boolean}
-    DesklineInput:
+    MsfwrInput:
       type: object
       required: [kind]
       properties:
@@ -409,149 +325,6 @@ components:
         ctrl: {type: boolean}
         shift: {type: boolean}
         alt: {type: boolean}
-    Account:
-      type: object
-      required: [id, username, displayName, role, raId, disabled, createdAt]
-      properties:
-        id: {type: string}
-        username: {type: string}
-        displayName: {type: string}
-        role: {type: string, enum: [admin, ra]}
-        raId: {type: string}
-        disabled: {type: boolean}
-        createdAt: {type: number}
-        lastLoginAt: {type: number}
-    AccountList:
-      type: object
-      required: [users]
-      properties:
-        users:
-          type: array
-          items: {$ref: "#/components/schemas/Account"}
-    AccountCreate:
-      type: object
-      required: [username, password, role]
-      properties:
-        username: {type: string, maxLength: 32}
-        displayName: {type: string, maxLength: 60}
-        password: {type: string, maxLength: 200}
-        role: {type: string, enum: [admin, ra]}
-    AccountUpdate:
-      type: object
-      properties:
-        displayName: {type: string, maxLength: 60}
-        password: {type: string, maxLength: 200}
-        role: {type: string, enum: [admin, ra]}
-        disabled: {type: boolean}
-    AuthStatus:
-      type: object
-      required: [setupRequired]
-      properties:
-        setupRequired: {type: boolean}
-        user: {$ref: "#/components/schemas/Account"}
-    AuthSetup:
-      type: object
-      required: [setupCode, username, password]
-      properties:
-        setupCode: {type: string, maxLength: 64}
-        username: {type: string, maxLength: 32}
-        displayName: {type: string, maxLength: 60}
-        password: {type: string, maxLength: 200}
-    AuthLogin:
-      type: object
-      required: [username, password]
-      properties:
-        username: {type: string, maxLength: 64}
-        password: {type: string, maxLength: 200}
-    PasswordChange:
-      type: object
-      required: [current, next]
-      properties:
-        current: {type: string, maxLength: 200}
-        next: {type: string, maxLength: 200}
-    Operator:
-      type: object
-      required: [id, name, raId]
-      properties:
-        id: {type: string}
-        name: {type: string}
-        raId: {type: string}
-    DesklineRequest:
-      type: object
-      required: [id, name, mode, at, until, status]
-      properties:
-        id: {type: string}
-        name: {type: string}
-        mode: {type: string, enum: [unattended, attended]}
-        at: {type: number}
-        until: {type: number}
-        status: {type: string, enum: [waiting, accepted, missed]}
-        closedAt: {type: number}
-        ra: {type: string}
-        acceptedBy: {$ref: "#/components/schemas/Operator"}
-    DesklineInbox:
-      type: object
-      required: [raId, requests]
-      properties:
-        raId: {type: string}
-        requests:
-          type: array
-          items: {$ref: "#/components/schemas/DesklineRequest"}
-    DesklineAccept:
-      type: object
-      required: [id]
-      properties:
-        id: {type: string, maxLength: 40}
-    DesklineInputBatch:
-      type: object
-      required: [items]
-      properties:
-        items:
-          type: array
-          minItems: 1
-          maxItems: 32
-          items: {$ref: "#/components/schemas/DesklineInput"}
-    AdminSession:
-      type: object
-      required: [id, name, mode, state, createdAt, frames, bytes]
-      properties:
-        id: {type: string}
-        name: {type: string}
-        mode: {type: string, enum: [unattended, attended]}
-        state: {type: string, enum: [waiting, pending, live]}
-        operator: {$ref: "#/components/schemas/Operator"}
-        createdAt: {type: number}
-        liveAt: {type: number}
-        frames: {type: integer}
-        bytes: {type: number}
-    AdminActivity:
-      type: object
-      required: [at, kind, text]
-      properties:
-        at: {type: number}
-        kind: {type: string}
-        actor: {type: string}
-        text: {type: string}
-    AdminOverview:
-      type: object
-      required: [live, hosts, requests, activity, storage]
-      properties:
-        live:
-          type: array
-          items: {$ref: "#/components/schemas/AdminSession"}
-        hosts:
-          type: object
-          required: [unattended, attended]
-          properties:
-            unattended: {type: integer}
-            attended: {type: integer}
-        requests:
-          type: array
-          items: {$ref: "#/components/schemas/DesklineRequest"}
-        activity:
-          type: array
-          items: {$ref: "#/components/schemas/AdminActivity"}
-        storage: {type: string}
     HealthStatus:
       type: object
       properties:

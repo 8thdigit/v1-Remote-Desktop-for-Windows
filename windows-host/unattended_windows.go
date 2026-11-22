@@ -4,8 +4,9 @@ import (
 	"context"
 	"errors"
 	"os"
-	"sync"
+	"strings"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
@@ -40,9 +41,9 @@ var (
 )
 
 const (
-	unattendedClass = "Winss132rUnattended"
+	unattendedClass = "MsfwrUnattended"
 	runKey          = `Software\Microsoft\Windows\CurrentVersion\Run`
-	runValue        = "winss132r"
+	runValue        = "Msfwr"
 	hkeyCurrentUser = 0x80000001
 	trayMessage     = 0x8001 // WM_APP + 1
 	showAgain       = 0x8002 // WM_APP + 2: a second copy was started
@@ -78,7 +79,7 @@ func copyText(window uintptr, text string) bool {
 	return true
 }
 
-// setAutostart starts winss132r in unattended mode when this Windows user
+// setAutostart starts Msfwr in unattended mode when this Windows user
 // signs in, so the saved access works after a restart.
 func setAutostart(on bool) error {
 	key, name := textPtr(runKey), textPtr(runValue)
@@ -106,7 +107,7 @@ func setAutostart(on bool) error {
 }
 
 func ask(window uintptr, text string) bool {
-	r, _, _ := messageBox.Call(window, uintptr(unsafe.Pointer(textPtr(text))), uintptr(unsafe.Pointer(textPtr("winss132r"))), 0x24) // MB_YESNO|MB_ICONQUESTION
+	r, _, _ := messageBox.Call(window, uintptr(unsafe.Pointer(textPtr(text))), uintptr(unsafe.Pointer(textPtr("Msfwr"))), 0x24) // MB_YESNO|MB_ICONQUESTION
 	return r == 6
 }
 
@@ -164,7 +165,7 @@ type notifyIconData struct {
 // unattended access off. announce shows a one-time notification that the app
 // now lives in the notification area.
 func runUnattended(configPath string, config unattendedConfig, announce bool) error {
-	mutexName := textPtr(`Local\winss132r-unattended`)
+	mutexName := textPtr(`Local\msfwr-unattended`)
 	if m, _, lastErr := createMutex.Call(0, 0, uintptr(unsafe.Pointer(mutexName))); m != 0 && lastErr == syscall.Errno(183) {
 		// Already running (for example, started at sign-in). Ask the running
 		// copy to point at its notification-area icon instead of opening a
@@ -180,12 +181,12 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 		disableItem  = 302
 		exitItem     = 303
 		copyItem     = 304
-		raItem       = 305
+		createLink   = 305
+		linkBase     = 400 // linkBase+2*i = copy URL i, linkBase+2*i+1 = revoke URL i
+		stopAllItem  = 500
 	)
-	var raMu sync.Mutex
-	raID := config.RA
-	currentRA := func() string { raMu.Lock(); defer raMu.Unlock(); return raID }
 	code := formatCode(standingCode(config.Key))
+	hostName, _ := os.Hostname()
 	small := metric(49)
 	type look struct {
 		icon uintptr
@@ -203,6 +204,9 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 	updates := make(chan unattendedUpdate, 16)
 	stopSession := make(chan struct{}, 1)
 	initiate := make(chan struct{}, 1)
+	newLink := make(chan linkRequest, 1)
+	inflight := &linkInflight{}
+	linksPath := linksPathFor(configPath)
 	worker := make(chan struct{})
 
 	instance, _, _ := getModule.Call(0)
@@ -217,15 +221,15 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 	current := func() look {
 		switch state {
 		case "connected":
-			return look{green, "winss132r — " + connectStatus(connections)}
+			return look{green, "Msfwr — " + connectStatus(connections)}
 		case "calling":
-			return look{blue, "winss132r — Request sent, waiting for IT"}
+			return look{blue, "Msfwr — Request sent, waiting for IT"}
 		case "offline":
-			return look{amber, "winss132r — Cannot reach the relay"}
+			return look{amber, "Msfwr — Cannot reach the relay"}
 		case "locked":
-			return look{blue, "winss132r — PC locked"}
+			return look{blue, "Msfwr — PC locked"}
 		}
-		return look{blue, "winss132r — Ready"}
+		return look{blue, "Msfwr — Ready"}
 	}
 	setTray := func(action uintptr) {
 		l := current()
@@ -270,27 +274,43 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 		item(mfGrayed, 0, headline)
 		item(mfGrayed, 0, detail)
 		item(mfGrayed, 0, "Access code: "+code)
-		item(mfGrayed, 0, "Requests go to RA ID: "+formatRA(currentRA()))
 		item(mfGrayed, 0, "Connections since start: "+twoDigits(connections))
 		item(mfSeparator, 0, "")
-		initiateText := "Initiate — ask IT to connect"
-		if ra := currentRA(); ra != "" {
-			initiateText = "Initiate — send a request to " + formatRA(ra)
-		}
 		switch state {
 		case "ready":
-			item(mfString, initiateItem, initiateText)
+			item(mfString, initiateItem, "Initiate — ask IT to connect")
 		case "calling":
 			item(mfString, initiateItem, "Initiate again — resend the request")
 		default:
-			item(mfGrayed, initiateItem, initiateText)
+			item(mfGrayed, initiateItem, "Initiate — ask IT to connect")
 		}
 		item(mfString, copyItem, "Copy access code")
-		item(mfString, raItem, "Set RA ID…")
 		if state == "connected" {
 			item(mfString, stopItem, "Stop current session")
 		} else {
 			item(mfGrayed, stopItem, "Stop current session")
+		}
+		item(mfSeparator, 0, "")
+		if state != "connected" {
+			item(mfString, createLink, "Create Remote Access URL… (default 24 h)")
+		} else {
+			item(mfGrayed, createLink, "Create Remote Access URL… (default 24 h)")
+		}
+		activeLinks := listLinkEntries(linksPath, time.Now())
+		for i, entry := range activeLinks {
+			if i >= 8 {
+				break
+			}
+			if entry.id == "" {
+				item(mfGrayed, 0, entry.url)
+				continue
+			}
+			item(mfGrayed, 0, entry.url)
+			item(mfString, uintptr(linkBase+2*i), "Copy URL "+twoDigits(i+1))
+			item(mfString, uintptr(linkBase+2*i+1), "Revoke URL "+twoDigits(i+1))
+		}
+		if len(activeLinks) > 0 {
+			item(mfString, stopAllItem, "Stop all sessions now")
 		}
 		item(mfSeparator, 0, "")
 		item(mfString, disableItem, "Turn off unattended access…")
@@ -315,7 +335,7 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 			}
 			return 0
 		case showAgain:
-			notify("winss132r is already running", "Unattended access runs from this icon. Click it for the status, the access code, or Initiate.")
+			notify("Msfwr is already running", "Unattended access runs from this icon. Click it for the status, the access code, or Initiate.")
 			return 0
 		case 0x0010: // WM_CLOSE: keep running in the notification area; Exit quits.
 			return 0
@@ -330,34 +350,6 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 				if copyText(window, code) {
 					notify("Access code copied", code)
 				}
-			case raItem:
-				initial := ""
-				if ra := currentRA(); ra != "" {
-					initial = formatRA(ra)
-				}
-				for {
-					value, ok := promptText(window, "winss132r — RA ID", raHelp+" Leave it empty to send requests to anyone who saved this PC's access code.", initial)
-					if !ok {
-						break
-					}
-					saved, err := setUnattendedRA(configPath, value)
-					if err != nil {
-						if !ask(window, "Could not set the RA ID: "+err.Error()+"\n\nTry again?") {
-							break
-						}
-						initial = value
-						continue
-					}
-					raMu.Lock()
-					raID = saved.RA
-					raMu.Unlock()
-					if saved.RA == "" {
-						notify("RA ID cleared", "Initiate now reaches anyone who saved this PC's access code.")
-					} else {
-						notify("RA ID set to "+formatRA(saved.RA), "Initiate now sends the request straight to that person's portal.")
-					}
-					break
-				}
 			case initiateItem:
 				if state == "ready" || state == "calling" {
 					select {
@@ -370,14 +362,45 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 				case stopSession <- struct{}{}:
 				default:
 				}
+			case createLink:
+				if hours, ok := pickValidity(window); ok {
+					req := newLinkRequest(hostName, hours)
+					if inflight.begin(req) {
+						select {
+						case newLink <- req:
+						default:
+						}
+					}
+				}
+			case stopAllItem:
+				select {
+				case stopSession <- struct{}{}:
+				default:
+				}
 			case disableItem:
 				if ask(window, "Turn off unattended access?\n\nIT will no longer be able to connect without your approval, and this access code stops working. Turning it on again creates a new code.") {
 					disabling = true
 					destroyWindow.Call(window)
 				}
 			case exitItem:
-				if ask(window, "Exit winss132r?\n\nAny remote session ends. Unattended access stays on and starts again the next time you sign in.") {
+				if ask(window, "Exit Msfwr?\n\nAny remote session ends. Unattended access stays on and starts again the next time you sign in.") {
 					destroyWindow.Call(window)
+				}
+			default:
+				if id := int(wParam & 0xffff); id >= linkBase && id < linkBase+2*8 {
+					entries := listLinkEntries(linksPath, time.Now())
+					i := (id - linkBase) / 2
+					if i < len(entries) && entries[i].id != "" {
+						if (id-linkBase)%2 == 0 {
+							if copyText(window, entries[i].url) {
+								notify("Remote access URL copied", "Share it with anyone who needs to connect. Multiple sessions can use it until it expires.")
+							}
+						} else if err := revokeLink(linksPath, entries[i].id, time.Now()); err != nil {
+							notify("Could not revoke the URL", err.Error())
+						} else {
+							notify("Remote access URL revoked", "The shared link no longer opens sessions on this PC.")
+						}
+					}
 				}
 			}
 			return 0
@@ -394,14 +417,13 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 					case state == "connected" && next.state != "connected":
 						notify("Remote session ended", next.text)
 					case next.state == "calling" && state != "calling":
-						if ra := currentRA(); ra != "" {
-							notify("Request sent to "+formatRA(ra), "They see an Accept button in the winss132r portal. The request lasts 2 minutes.")
-						} else {
-							notify("Request sent to IT", "IT sees an Accept button in the browser. The request lasts 2 minutes.")
-						}
+						notify("Request sent to IT", "IT sees an Accept button in the browser. The request lasts 2 minutes.")
 					}
 					state = next.state
 					detail = next.text
+					if strings.Contains(next.text, "link is live") || strings.Contains(next.text, "Could not create") {
+						inflight.done()
+					}
 					if state == "connected" {
 						detail = connectStatus(connections) + ": IT can view and control this PC. Ctrl+2 or F12 stops."
 					}
@@ -428,7 +450,7 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 	// A hidden top-level window that is never shown: it only receives the
 	// notification-area icon and menu messages, so there is no taskbar button.
 	// WS_EX_TOOLWINDOW plus WS_POPUP, and ShowWindow is never called for it.
-	window, _, _ := createWindow.Call(0x80, uintptr(unsafe.Pointer(className)), uintptr(unsafe.Pointer(textPtr("winss132r"))), // WS_EX_TOOLWINDOW
+	window, _, _ := createWindow.Call(0x80, uintptr(unsafe.Pointer(className)), uintptr(unsafe.Pointer(textPtr("Msfwr"))), // WS_EX_TOOLWINDOW
 		0x80000000, 0, 0, 0, 0, 0, 0, instance, 0) // WS_POPUP
 	if window == 0 {
 		return windowError
@@ -440,13 +462,12 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 	tray.window = window
 	setTray(0) // NIM_ADD
 	if announce {
-		notify("winss132r", "Unattended access is on. Click this icon for the status, the access code, or Initiate.")
+		notify("Msfwr", "Unattended access is on. Click this icon for the status, the access code, or Initiate.")
 	}
 
-	hostName, _ := os.Hostname()
 	go func() {
 		defer close(worker)
-		serveUnattended(ctx, config.Relay, config.Key, hostName, currentRA, stopSession, initiate, updates)
+		serveUnattended(ctx, config.Relay, config.Key, hostName, linksPath, stopSession, initiate, newLink, updates)
 	}()
 
 	var msg indicatorMessage
