@@ -9,11 +9,14 @@ If you installed the older Msfwr preview, uninstall it separately from Windows S
 
 ## Start a session
 
-1. Open the Msfwr viewer in a browser at the relay's HTTPS origin.
+1. Open the Msfwr viewer in a browser at https://msfwr.vercel.app (or your
+   own relay's HTTPS origin).
 2. On the Windows PC, download and run the installer, then open **Msfwr**
-   from Start. Paste the HTTPS relay address displayed on the viewer page.
+   from Start. The relay box is prefilled with `https://msfwr.vercel.app`.
+   To use another relay, paste the HTTPS address displayed on its viewer page.
    Select **Save & Close** to remember just the address on your Windows account.
-   Reopen the app to reuse it, or select **Clear saved relay** to remove it.
+   Reopen the app to reuse it, or select **Clear saved relay** to go back to
+   the default.
    A saved address does not authorize access or replace one-time pairing.
 3. Select **Start session** and give the one-time code to a trusted helper. The helper enters it in their
    browser and reads the six-digit verification number back to you. Enter that

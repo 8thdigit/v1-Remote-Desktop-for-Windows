@@ -120,6 +120,9 @@ func runClient(unattendedConfigPath string) (*unattendedConfig, error) {
 			initialStatus = "Could not read the saved address. Enter a new one or clear it."
 		}
 	}
+	if saved == "" && initialStatus == idleText {
+		saved = defaultRelayAddress
+	}
 	instance, _, _ := getModule.Call(0)
 	cursor, _, _ := user.NewProc("LoadCursorW").Call(0, 32512)
 	className := textPtr("MsfwrSupportClient")
@@ -255,8 +258,8 @@ func runClient(unattendedConfigPath string) (*unattendedConfig, error) {
 					if err := forgetRelayAddress(path); err != nil {
 						setText(status, "Could not clear the relay: "+err.Error())
 					} else {
-						setText(relayEdit, "")
-						setText(status, "Saved relay cleared. Paste a relay address to start a session.")
+						setText(relayEdit, defaultRelayAddress)
+						setText(status, "Saved relay cleared. Using the default relay; paste another address to change it.")
 					}
 				}
 			case standing:
