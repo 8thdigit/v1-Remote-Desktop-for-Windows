@@ -66,6 +66,13 @@ export type Link = {
   sessions: number;
 };
 
+// What the client app gets back about a link: everything except the secret
+// key, which only the host PC holds.
+function publicLink(link: Link) {
+  const {key: _key, ...rest} = link;
+  return rest;
+}
+
 export function createDesklineStore(clock = Date.now) {
   const codes = new Map<string, Session>();
   const peers = new Map<string, { session: Session; role: "host" | "viewer" }>();

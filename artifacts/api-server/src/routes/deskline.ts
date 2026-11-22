@@ -2,6 +2,7 @@ import { Router, raw, type Request, type Response } from "express";
 import {
   JoinDesklineBody, JoinDesklineResponse, CreateDesklineInviteResponse,
   SendDesklineInputBody, RegisterDesklineStandingBody, RegisterDesklineStandingResponse, CallDesklineBody, ListDesklineCallsBody, ListDesklineCallsResponse, TickDesklineResponse, GetDesklineFrameQueryParams,
+  CreateDesklineLinkBody, DesklineLinkSchema, RegisterDesklineLinkBody, GetDesklineLinkStatusQueryParams, DesklineLinkStatusSchema, RevokeDesklineLinkBody,
 } from "@workspace/api-zod";
 import { createDesklineStore } from "../lib/deskline";
 
@@ -58,6 +59,36 @@ router.post("/calls", (req, res) => {
   const body = ListDesklineCallsBody.safeParse(req.body);
   if (!body.success) { res.status(400).json({error: "Send up to 50 saved access codes."}); return; }
   res.json(ListDesklineCallsResponse.parse({calls: store.calls(body.data.codes), presence: store.presence(body.data.codes)}));
+});
+// --- Remote access links (created from the client app) ---
+router.post("/link/create", (req, res) => {
+  if (tooManyStanding()) { res.status(429).json({error: "Relay busy. Try again in a minute."}); return; }
+  const body = CreateDesklineLinkBody.safeParse(req.body);
+  if (!body.success) { res.status(400).json({error: "Invalid unattended access key."}); return; }
+  const link = store.linkCreate(body.data.key, body.data.name ?? "", body.data.ttlHours);
+  if (!link) { res.status(409).json({error: "Relay busy. Try again in a minute."}); return; }
+  res.status(201).json(DesklineLinkSchema.parse(link));
+});
+router.post("/link/register", (req, res) => {
+  if (tooManyStanding()) { res.status(429).json({error: "Relay busy. Try again in a minute."}); return; }
+  const body = RegisterDesklineLinkBody.safeParse(req.body);
+  if (!body.success) { res.status(400).json({error: "Invalid link registration."}); return; }
+  const invite = store.linkRegister(body.data.id, body.data.key);
+  if (!invite) { res.status(410).json({error: "This remote access link expired or was revoked."}); return; }
+  res.status(201).json(RegisterDesklineStandingResponse.parse(invite));
+});
+router.get("/link/status", (req, res) => {
+  const query = GetDesklineLinkStatusQueryParams.safeParse(req.query);
+  if (!query.success) { res.status(400).json({error: "Invalid link lookup."}); return; }
+  const status = store.linkStatus(query.data.id, query.data.key);
+  if (!status) { res.status(404).json({error: "Link not found, expired, or revoked."}); return; }
+  res.json(DesklineLinkStatusSchema.parse(status));
+});
+router.post("/link/revoke", (req, res) => {
+  const body = RevokeDesklineLinkBody.safeParse(req.body);
+  if (!body.success) { res.status(400).json({error: "Invalid link revocation."}); return; }
+  if (!store.linkRevoke(body.data.id, body.data.key)) { res.status(404).json({error: "Link not found, expired, or revoked."}); return; }
+  res.sendStatus(204);
 });
 router.post("/join", (req, res) => {
   if (tooManyJoins()) { res.status(429).json({error: "Too many attempts. Try again in a minute."}); return; }
