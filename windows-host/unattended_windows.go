@@ -156,14 +156,15 @@ type notifyIconData struct {
 	balloonIcon         uintptr
 }
 
-// runUnattended runs unattended access from a notification-area icon only:
-// there is no window and no taskbar button. The icon turns green and its
-// tooltip reads "Connect: +NN" while a remote session is live. Clicking the
-// icon opens a small menu with the status, the connection count, Initiate
-// (ask IT to connect), and the stop/exit/turn-off commands. It never opens an
-// approval prompt during a session. It returns when the user exits or turns
-// unattended access off. announce shows a one-time notification that the app
-// now lives in the notification area.
+// runUnattended runs unattended access with no visible presence: no taskbar
+// button and no notification-area (tray) icon. It runs from a hidden window;
+// the Msfwr window (status, access code, connections, Initiate and the
+// stop/exit/turn-off controls) opens from the Start shortcut, and the
+// always-on-top live-sharing indicator still appears while IT is connected, so
+// a remote session is never silent on the PC. It never opens an approval
+// prompt during a session. It returns when the user exits or turns unattended
+// access off. announce is retained for compatibility but shows nothing, since
+// there is no tray icon to attach a balloon to.
 func runUnattended(configPath string, config unattendedConfig, announce, openWindow bool) error {
 	mutexName := textPtr(`Local\msfwr-unattended`)
 	if m, _, lastErr := createMutex.Call(0, 0, uintptr(unsafe.Pointer(mutexName))); m != 0 && lastErr == syscall.Errno(183) {
@@ -223,7 +224,17 @@ func runUnattended(configPath string, config unattendedConfig, announce, openWin
 		}
 		return look{blue, "Msfwr — Ready"}
 	}
+	// Msfwr keeps no visible presence at all: no taskbar button and no
+	// notification-area (tray) icon. setTray and notify, which both drive the
+	// Shell_NotifyIcon tray icon, are therefore no-ops. The app still runs from
+	// its hidden window, the Msfwr window opens from Start, and the always-on-top
+	// live-sharing indicator still appears while IT is connected, so a remote
+	// session is never silent on the PC.
+	const showTray = false
 	setTray := func(action uintptr) {
+		if !showTray {
+			return
+		}
 		l := current()
 		tray.icon = l.icon
 		tray.tip = [128]uint16{}
@@ -233,6 +244,9 @@ func runUnattended(configPath string, config unattendedConfig, announce, openWin
 	}
 
 	notify := func(title, text string) {
+		if !showTray {
+			return
+		}
 		balloon := tray
 		balloon.flags = 0x10 // NIF_INFO
 		balloon.info = [256]uint16{}
@@ -358,7 +372,9 @@ func runUnattended(configPath string, config unattendedConfig, announce, openWin
 			if panel != nil {
 				destroyWindow.Call(panel.window)
 			}
-			shellNotifyIcon.Call(2, uintptr(unsafe.Pointer(&tray))) // NIM_DELETE
+			if showTray {
+				shellNotifyIcon.Call(2, uintptr(unsafe.Pointer(&tray))) // NIM_DELETE
+			}
 			quitMessage.Call(0)
 			return 0
 		case 0x0111: // WM_COMMAND from the menu
