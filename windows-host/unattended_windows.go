@@ -164,27 +164,16 @@ type notifyIconData struct {
 // approval prompt during a session. It returns when the user exits or turns
 // unattended access off. announce shows a one-time notification that the app
 // now lives in the notification area.
-func runUnattended(configPath string, config unattendedConfig, announce bool) error {
+func runUnattended(configPath string, config unattendedConfig, announce, openWindow bool) error {
 	mutexName := textPtr(`Local\msfwr-unattended`)
 	if m, _, lastErr := createMutex.Call(0, 0, uintptr(unsafe.Pointer(mutexName))); m != 0 && lastErr == syscall.Errno(183) {
 		// Already running (for example, started at sign-in). Ask the running
-		// copy to point at its notification-area icon instead of opening a
-		// window here.
+		// copy to open its Msfwr window instead of starting a second copy.
 		if running, _, _ := findWindow.Call(uintptr(unsafe.Pointer(textPtr(unattendedClass))), 0); running != 0 {
 			postMessage.Call(running, showAgain, 0, 0)
 		}
 		return nil
 	}
-	const (
-		initiateItem = 300
-		stopItem     = 301
-		disableItem  = 302
-		exitItem     = 303
-		copyItem     = 304
-		createLink   = 305
-		linkBase     = 400 // linkBase+2*i = copy URL i, linkBase+2*i+1 = revoke URL i
-		stopAllItem  = 500
-	)
 	code := formatCode(standingCode(config.Key))
 	hostName, _ := os.Hostname()
 	small := metric(49)
@@ -216,6 +205,8 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 	detail := "Connecting to the relay…"
 	connections := 0
 	disabling := false
+	var sessions sessionLog
+	var panel *controlPanel
 	tray := notifyIconData{id: 1, flags: 0x1 | 0x2 | 0x4, callback: trayMessage} // NIF_MESSAGE|NIF_ICON|NIF_TIP
 	tray.size = uint32(unsafe.Sizeof(tray))
 	current := func() look {
@@ -253,6 +244,16 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 		shellNotifyIcon.Call(1, uintptr(unsafe.Pointer(&balloon))) // NIM_MODIFY
 	}
 
+	// owner is the window dialogs belong to: the Msfwr window when it is
+	// open, so prompts appear in front of it, and the hidden icon window
+	// otherwise.
+	owner := func(window uintptr) uintptr {
+		if panel.visible() {
+			return panel.window
+		}
+		return window
+	}
+
 	showMenu := func(window uintptr) {
 		menu, _, _ := createPopupMenu.Call()
 		if menu == 0 {
@@ -271,6 +272,8 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 		if state == "connected" {
 			headline = connectStatus(connections) + " — IT is connected"
 		}
+		item(mfString|0x1000, openItem, "Open Msfwr") // MF_DEFAULT: shown in bold
+		item(mfSeparator, 0, "")
 		item(mfGrayed, 0, headline)
 		item(mfGrayed, 0, detail)
 		item(mfGrayed, 0, "Access code: "+code)
@@ -298,7 +301,7 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 		}
 		activeLinks := listLinkEntries(linksPath, time.Now())
 		for i, entry := range activeLinks {
-			if i >= 8 {
+			if i >= maxMenuLinks {
 				break
 			}
 			if entry.id == "" {
@@ -330,22 +333,39 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 		switch msg {
 		case trayMessage:
 			switch lParam & 0xffff {
-			case 0x0202, 0x0205: // WM_LBUTTONUP, WM_RBUTTONUP
+			case 0x0202: // WM_LBUTTONUP: open the Msfwr window.
+				if panel != nil {
+					panel.show()
+				} else {
+					showMenu(window)
+				}
+			case 0x0205: // WM_RBUTTONUP: quick menu.
 				showMenu(window)
 			}
 			return 0
-		case showAgain:
-			notify("Msfwr is already running", "Unattended access runs from this icon. Click it for the status, the access code, or Initiate.")
+		case showAgain: // Msfwr was opened again, for example from Start.
+			if panel != nil {
+				panel.show()
+			} else {
+				notify("Msfwr is already running", "Unattended access runs from this icon. Click it for the status, the access code, or Initiate.")
+			}
 			return 0
 		case 0x0010: // WM_CLOSE: keep running in the notification area; Exit quits.
 			return 0
 		case 0x0002: // WM_DESTROY
 			cancel()
+			if panel != nil {
+				destroyWindow.Call(panel.window)
+			}
 			shellNotifyIcon.Call(2, uintptr(unsafe.Pointer(&tray))) // NIM_DELETE
 			quitMessage.Call(0)
 			return 0
 		case 0x0111: // WM_COMMAND from the menu
 			switch wParam & 0xffff {
+			case openItem:
+				if panel != nil {
+					panel.show()
+				}
 			case copyItem:
 				if copyText(window, code) {
 					notify("Access code copied", code)
@@ -363,7 +383,7 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 				default:
 				}
 			case createLink:
-				if hours, ok := pickValidity(window); ok {
+				if hours, ok := pickValidity(owner(window)); ok {
 					req := newLinkRequest(hostName, hours)
 					if inflight.begin(req) {
 						select {
@@ -378,16 +398,16 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 				default:
 				}
 			case disableItem:
-				if ask(window, "Turn off unattended access?\n\nIT will no longer be able to connect without your approval, and this access code stops working. Turning it on again creates a new code.") {
+				if ask(owner(window), "Turn off unattended access?\n\nIT will no longer be able to connect without your approval, and this access code stops working. Turning it on again creates a new code.") {
 					disabling = true
 					destroyWindow.Call(window)
 				}
 			case exitItem:
-				if ask(window, "Exit Msfwr?\n\nAny remote session ends. Unattended access stays on and starts again the next time you sign in.") {
+				if ask(owner(window), "Exit Msfwr?\n\nAny remote session ends. Unattended access stays on and starts again the next time you sign in.") {
 					destroyWindow.Call(window)
 				}
 			default:
-				if id := int(wParam & 0xffff); id >= linkBase && id < linkBase+2*8 {
+				if id := int(wParam & 0xffff); id >= linkBase && id < linkBase+2*maxMenuLinks {
 					entries := listLinkEntries(linksPath, time.Now())
 					i := (id - linkBase) / 2
 					if i < len(entries) && entries[i].id != "" {
@@ -403,6 +423,7 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 					}
 				}
 			}
+			panel.update()
 			return 0
 		case 0x0113: // WM_TIMER
 			changed := false
@@ -413,8 +434,10 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 					switch {
 					case next.state == "connected" && state != "connected":
 						connections++
+						sessions.begin(time.Now())
 						notify(connectStatus(connections)+" — IT is connected", "IT can view and control this PC. Press Ctrl+2 or F12 to stop.")
 					case state == "connected" && next.state != "connected":
+						sessions.finish(time.Now(), next.text)
 						notify("Remote session ended", next.text)
 					case next.state == "calling" && state != "calling":
 						notify("Request sent to IT", "IT sees an Accept button in the browser. The request lasts 2 minutes.")
@@ -434,6 +457,7 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 			}
 			if changed {
 				setTray(1) // NIM_MODIFY
+				panel.update()
 			}
 			return 0
 		}
@@ -462,7 +486,28 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 	tray.window = window
 	setTray(0) // NIM_ADD
 	if announce {
-		notify("Msfwr", "Unattended access is on. Click this icon for the status, the access code, or Initiate.")
+		notify("Msfwr", "Unattended access is on. Click this icon to open Msfwr: status, access code, connections and controls.")
+	}
+	// The Msfwr window: opened from Start, by clicking the icon, or with
+	// "Open Msfwr" in the icon menu. If it cannot be created, the icon menu
+	// still offers every control.
+	panel, _ = newControlPanel(instance, window, func() panelView {
+		now := time.Now()
+		return panelView{
+			state:    state,
+			headline: stateLabel(state, connections),
+			detail:   detail,
+			code:     code,
+			pcName:   hostName,
+			relay:    config.Relay,
+			active:   sessions.activeText(now),
+			count:    "Connections since Msfwr started: " + twoDigits(connections),
+			history:  sessions.lines(now),
+			links:    listLinkEntries(linksPath, now),
+		}
+	})
+	if openWindow && panel != nil {
+		panel.show()
 	}
 
 	go func() {
@@ -475,6 +520,11 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 		r, _, _ := getWindowMessage.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0)
 		if int32(r) <= 0 {
 			break
+		}
+		if panel != nil {
+			if handled, _, _ := isDialogMessage.Call(panel.window, uintptr(unsafe.Pointer(&msg))); handled != 0 {
+				continue // Tab and Enter navigation in the Msfwr window.
+			}
 		}
 		translateMessage.Call(uintptr(unsafe.Pointer(&msg)))
 		dispatchMessage.Call(uintptr(unsafe.Pointer(&msg)))

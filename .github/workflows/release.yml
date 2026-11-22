@@ -31,6 +31,8 @@ jobs:
         working-directory: windows-host
         run: go test ./...
       - name: Build installer
+        env:
+          MSFWR_VERSION: ${{ env.TAG }}
         run: bash windows-host/build.sh
       - name: Publish release
         env:

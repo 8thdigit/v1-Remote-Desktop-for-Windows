@@ -68,24 +68,30 @@ func unattendedPath() string {
 // startHost opens unattended mode when it is set up on this PC (including
 // when started at sign-in), and the attended client otherwise.
 func startHost() error {
+	atSignIn := false
+	for _, arg := range os.Args[1:] {
+		if arg == "--unattended" {
+			atSignIn = true
+		}
+	}
 	path := unattendedPath()
 	if path != "" {
 		if config, ok, _ := loadUnattended(path); ok {
-			return runUnattended(path, config, false)
+			// Opened from Start: show the Msfwr window. Started at sign-in:
+			// stay in the notification area until the user opens it.
+			return runUnattended(path, config, false, !atSignIn)
 		}
 	}
-	for _, arg := range os.Args[1:] {
-		if arg == "--unattended" {
-			// Started at sign-in, but unattended access was turned off or its
-			// settings are gone: clean up quietly instead of opening a window.
-			return setAutostart(false)
-		}
+	if atSignIn {
+		// Started at sign-in, but unattended access was turned off or its
+		// settings are gone: clean up quietly instead of opening a window.
+		return setAutostart(false)
 	}
 	switchTo, err := runClient(path)
 	if err != nil || switchTo == nil {
 		return err
 	}
-	return runUnattended(path, *switchTo, true)
+	return runUnattended(path, *switchTo, true, true)
 }
 
 // runClient runs attended support. It returns a config when the user turned
@@ -356,7 +362,7 @@ func runClient(unattendedConfigPath string) (*unattendedConfig, error) {
 	}
 	title := textPtr(idleTitle)
 	window, _, _ := createWindow.Call(0x10000, uintptr(unsafe.Pointer(className)), uintptr(unsafe.Pointer(title)),
-		0x00ca0000, 0x80000000, 0x80000000, px(580), px(420), 0, 0, instance, 0)
+		0x00ca0000, 0x80000000, 0x80000000, px(580), px(450), 0, 0, instance, 0)
 	if window == 0 {
 		return nil, windowError
 	}
@@ -399,6 +405,7 @@ func runClient(unattendedConfigPath string) (*unattendedConfig, error) {
 	approveButton = add("BUTTON", "Approve", 0x10000, 280, 257, 120, 32, approve)
 	declineButton = add("BUTTON", "Cancel session", 0x10000, 410, 257, 140, 32, decline)
 	status = add("STATIC", initialStatus, 0, 20, 310, 530, 62, 0)
+	add("STATIC", versionText(), 0, 20, 378, 530, 20, 0)
 	timer, _, _ := setWindowTimer.Call(window, 1, 100, 0)
 	if failed || timer == 0 {
 		destroyWindow.Call(window)
