@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"sync"
 	"syscall"
 	"unsafe"
 )
@@ -179,7 +180,11 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 		disableItem  = 302
 		exitItem     = 303
 		copyItem     = 304
+		raItem       = 305
 	)
+	var raMu sync.Mutex
+	raID := config.RA
+	currentRA := func() string { raMu.Lock(); defer raMu.Unlock(); return raID }
 	code := formatCode(standingCode(config.Key))
 	small := metric(49)
 	type look struct {
@@ -265,17 +270,23 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 		item(mfGrayed, 0, headline)
 		item(mfGrayed, 0, detail)
 		item(mfGrayed, 0, "Access code: "+code)
+		item(mfGrayed, 0, "Requests go to RA ID: "+formatRA(currentRA()))
 		item(mfGrayed, 0, "Connections since start: "+twoDigits(connections))
 		item(mfSeparator, 0, "")
+		initiateText := "Initiate — ask IT to connect"
+		if ra := currentRA(); ra != "" {
+			initiateText = "Initiate — send a request to " + formatRA(ra)
+		}
 		switch state {
 		case "ready":
-			item(mfString, initiateItem, "Initiate — ask IT to connect")
+			item(mfString, initiateItem, initiateText)
 		case "calling":
 			item(mfString, initiateItem, "Initiate again — resend the request")
 		default:
-			item(mfGrayed, initiateItem, "Initiate — ask IT to connect")
+			item(mfGrayed, initiateItem, initiateText)
 		}
 		item(mfString, copyItem, "Copy access code")
+		item(mfString, raItem, "Set RA ID…")
 		if state == "connected" {
 			item(mfString, stopItem, "Stop current session")
 		} else {
@@ -319,6 +330,34 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 				if copyText(window, code) {
 					notify("Access code copied", code)
 				}
+			case raItem:
+				initial := ""
+				if ra := currentRA(); ra != "" {
+					initial = formatRA(ra)
+				}
+				for {
+					value, ok := promptText(window, "winss132r — RA ID", raHelp+" Leave it empty to send requests to anyone who saved this PC's access code.", initial)
+					if !ok {
+						break
+					}
+					saved, err := setUnattendedRA(configPath, value)
+					if err != nil {
+						if !ask(window, "Could not set the RA ID: "+err.Error()+"\n\nTry again?") {
+							break
+						}
+						initial = value
+						continue
+					}
+					raMu.Lock()
+					raID = saved.RA
+					raMu.Unlock()
+					if saved.RA == "" {
+						notify("RA ID cleared", "Initiate now reaches anyone who saved this PC's access code.")
+					} else {
+						notify("RA ID set to "+formatRA(saved.RA), "Initiate now sends the request straight to that person's portal.")
+					}
+					break
+				}
 			case initiateItem:
 				if state == "ready" || state == "calling" {
 					select {
@@ -355,7 +394,11 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 					case state == "connected" && next.state != "connected":
 						notify("Remote session ended", next.text)
 					case next.state == "calling" && state != "calling":
-						notify("Request sent to IT", "IT sees an Accept button in the browser. The request lasts 2 minutes.")
+						if ra := currentRA(); ra != "" {
+							notify("Request sent to "+formatRA(ra), "They see an Accept button in the winss132r portal. The request lasts 2 minutes.")
+						} else {
+							notify("Request sent to IT", "IT sees an Accept button in the browser. The request lasts 2 minutes.")
+						}
 					}
 					state = next.state
 					detail = next.text
@@ -403,7 +446,7 @@ func runUnattended(configPath string, config unattendedConfig, announce bool) er
 	hostName, _ := os.Hostname()
 	go func() {
 		defer close(worker)
-		serveUnattended(ctx, config.Relay, config.Key, hostName, stopSession, initiate, updates)
+		serveUnattended(ctx, config.Relay, config.Key, hostName, currentRA, stopSession, initiate, updates)
 	}()
 
 	var msg indicatorMessage

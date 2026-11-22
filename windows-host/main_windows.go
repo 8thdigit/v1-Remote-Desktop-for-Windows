@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
+	"hash/crc32"
+	"os"
 	"runtime"
+	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -12,7 +15,10 @@ type sessionUpdate struct {
 	state, text, code string
 }
 
-func run(parent context.Context, r *relay, lines <-chan string, updates chan<- sessionUpdate) error {
+// run is one attended session. With an RA ID, the request also goes
+// straight to that IT person's portal, who still needs the person at the PC
+// to type the verification number.
+func run(parent context.Context, r *relay, ra string, lines <-chan string, updates chan<- sessionUpdate) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	ctx, cancel := context.WithCancel(parent)
@@ -45,7 +51,21 @@ func run(parent context.Context, r *relay, lines <-chan string, updates chan<- s
 		defer stop()
 		_ = r.post(endCtx, "end", nil, nil)
 	}()
-	updates <- sessionUpdate{state: "waiting", text: "Share this one-time code with your helper. It expires in 3 minutes.", code: invitation.Code[:4] + "-" + invitation.Code[4:8] + "-" + invitation.Code[8:]}
+	display := invitation.Code[:4] + "-" + invitation.Code[4:8] + "-" + invitation.Code[8:]
+	waitingText := "Share this one-time code with your helper. It expires in 3 minutes."
+	if ra != "" {
+		host, _ := os.Hostname()
+		if err := r.postJSON(ctx, "call", map[string]string{"name": host, "ra": ra}, nil); err != nil {
+			if text, ok := initiateRejected(err); ok {
+				waitingText = text + " You can still share this one-time code."
+			} else {
+				return err
+			}
+		} else {
+			waitingText = "Request sent to " + formatRA(ra) + ". They can accept it in the portal, or you can share this code. It expires in 3 minutes."
+		}
+	}
+	updates <- sessionUpdate{state: "waiting", text: waitingText, code: display}
 	wait := time.NewTicker(650 * time.Millisecond)
 	defer wait.Stop()
 	challenge := ""
@@ -91,66 +111,232 @@ func run(parent context.Context, r *relay, lines <-chan string, updates chan<- s
 	}
 }
 
+// maxSession matches maxLive in artifacts/api-server/src/lib/deskline.ts.
+const maxSession = 12 * time.Hour
+
+// stream shares the screen until the session ends. Three loops run side by
+// side so neither direction waits for the other:
+//   - capture: grabs the screen, skips unchanged frames, encodes the rest;
+//   - upload: sends the newest encoded frame (one frame is encoded while the
+//     previous one uploads) and adapts size and quality to upload speed;
+//   - input: a long poll that applies clicks and keys the moment they arrive.
 func stream(ctx context.Context, r *relay) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var inputMu sync.Mutex
 	input := newControls()
-	defer input.release()
-	cadence := time.NewTicker(200 * time.Millisecond)
-	defer cadence.Stop()
-	deadline := time.Now().Add(30 * time.Minute)
-	var digest [32]byte
-	var lastUpload time.Time
-	for {
-		if ctx.Err() != nil {
-			return ctx.Err()
+	defer func() { inputMu.Lock(); input.release(); inputMu.Unlock() }()
+	var screenW, screenH atomic.Int64
+	screenW.Store(int64(metric(0)))
+	screenH.Store(int64(metric(1)))
+	apply := func(events []event) error {
+		if len(events) == 0 {
+			return nil
 		}
-		if time.Now().After(deadline) {
-			return errors.New("the 30-minute session limit was reached")
-		}
-		if !onDefaultDesktop() {
-			return errors.New("Windows switched to a locked or protected desktop")
-		}
-		frame, w, h, err := snapshot()
-		if err != nil {
-			return err
-		}
-		hash := sha256.Sum256(frame.Pix)
-		var data []byte
-		if hash != digest || time.Since(lastUpload) > 10*time.Second {
-			data, err = encodeJPEG(frame)
-			if err != nil {
-				return err
-			}
-		}
-		var reply tick
-		if err := r.post(ctx, "tick", data, &reply); err != nil {
-			return err
-		}
-		if reply.State != "live" {
-			return errors.New("relay ended the approved session")
-		}
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		if !onDefaultDesktop() || !sameScreen(w, h) {
-			return errors.New("Windows desktop or display configuration changed")
-		}
-		if len(data) > 0 {
-			digest, lastUpload = hash, time.Now()
-		}
-		for _, a := range reply.Input {
+		inputMu.Lock()
+		defer inputMu.Unlock()
+		w, h := int(screenW.Load()), int(screenH.Load())
+		for _, a := range events {
 			if ctx.Err() != nil || stopPressed() {
 				return context.Canceled
 			}
 			input.apply(a, w, h)
 		}
-		if time.Since(input.lastPointer) > 3*time.Second {
-			input.release()
+		return nil
+	}
+	fail := make(chan error, 3)
+	stop := func(err error) {
+		select {
+		case fail <- err:
+		default:
 		}
+		cancel()
+	}
+	pause := func(d time.Duration) bool {
+		t := time.NewTimer(d)
+		defer t.Stop()
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
-		case <-cadence.C:
+			return false
+		case <-t.C:
+			return true
 		}
+	}
+	// A tick that retries through short network trouble, so a dropped
+	// packet or a relay restart does not end the session.
+	sendTick := func(data []byte) (tick, error) {
+		var reply tick
+		started := time.Now()
+		for attempt := 0; ; attempt++ {
+			err := r.post(ctx, "tick", data, &reply)
+			if err == nil {
+				return reply, nil
+			}
+			if ctx.Err() != nil || !transient(err) || time.Since(started) > 12*time.Second {
+				return reply, err
+			}
+			if !pause(time.Duration(min(attempt+1, 8)) * 250 * time.Millisecond) {
+				return reply, ctx.Err()
+			}
+		}
+	}
+
+	r.pulls = true
+	var pullWorks atomic.Bool
+	go func() {
+		failures := 0
+		for ctx.Err() == nil {
+			var reply tick
+			err := r.pull(ctx, &reply)
+			if err != nil {
+				if ctx.Err() != nil {
+					return
+				}
+				var s *statusError
+				if errors.As(err, &s) && (s.status == 404 || s.status == 405) {
+					return // An older relay: input arrives with each tick instead.
+				}
+				if !transient(err) {
+					stop(err)
+					return
+				}
+				failures++
+				if !pause(time.Duration(min(failures, 8)) * 250 * time.Millisecond) {
+					return
+				}
+				continue
+			}
+			failures = 0
+			pullWorks.Store(true)
+			if reply.State != "live" {
+				stop(errors.New("relay ended the approved session"))
+				return
+			}
+			if err := apply(reply.Input); err != nil {
+				stop(err)
+				return
+			}
+		}
+	}()
+	// Release a held mouse button if the viewer goes quiet.
+	go func() {
+		t := time.NewTicker(time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				inputMu.Lock()
+				if time.Since(input.lastPointer) > 3*time.Second {
+					input.release()
+				}
+				inputMu.Unlock()
+			}
+		}
+	}()
+
+	quality := newAdaptiveQuality()
+	var levelMu sync.Mutex
+	level := func() qualityLevel { levelMu.Lock(); defer levelMu.Unlock(); return quality.current() }
+	frames := make(chan []byte) // unbuffered: hand-off to the uploader
+	go func() {
+		for ctx.Err() == nil {
+			var data []byte
+			// Heartbeat at least once a second; four times a second on an
+			// older relay, which only hands input out with ticks.
+			beat := time.Second
+			if !pullWorks.Load() {
+				beat = 250 * time.Millisecond
+			}
+			t := time.NewTimer(beat)
+			select {
+			case <-ctx.Done():
+				t.Stop()
+				return
+			case data = <-frames:
+			case <-t.C:
+			}
+			t.Stop()
+			started := time.Now()
+			reply, err := sendTick(data)
+			if err != nil {
+				stop(err)
+				return
+			}
+			if len(data) > 0 {
+				levelMu.Lock()
+				quality.observe(time.Since(started))
+				levelMu.Unlock()
+			}
+			if reply.State != "live" {
+				stop(errors.New("relay ended the approved session"))
+				return
+			}
+			if err := apply(reply.Input); err != nil {
+				stop(err)
+				return
+			}
+		}
+	}()
+
+	deadline := time.Now().Add(maxSession)
+	table := crc32.MakeTable(crc32.Castagnoli)
+	var digest uint32
+	var sentLevel qualityLevel
+	idle := 0
+	for {
+		if ctx.Err() != nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			return errors.New("the 12-hour session limit was reached")
+		}
+		if !onDefaultDesktop() {
+			return errors.New("Windows switched to a locked or protected desktop")
+		}
+		lvl := level()
+		frame, w, h, err := snapshot(lvl)
+		if err != nil {
+			return err
+		}
+		screenW.Store(int64(w))
+		screenH.Store(int64(h))
+		sum := crc32.Checksum(frame.Pix, table)
+		if sum != digest || lvl != sentLevel {
+			data, err := encodeJPEG(frame, lvl.jpeg)
+			if err != nil {
+				return err
+			}
+			select {
+			case frames <- data:
+				digest, sentLevel, idle = sum, lvl, 0
+			case <-ctx.Done():
+			}
+		} else {
+			idle++
+		}
+		if ctx.Err() != nil {
+			break
+		}
+		if !onDefaultDesktop() || !sameScreen(w, h) {
+			return errors.New("Windows desktop or display configuration changed")
+		}
+		// Look for changes about 30 times a second; after a second of a still
+		// screen, check less often to save CPU.
+		wait := 33 * time.Millisecond
+		if idle > 30 {
+			wait = 100 * time.Millisecond
+		}
+		if !pause(wait) {
+			break
+		}
+	}
+	select {
+	case err := <-fail:
+		return err
+	default:
+		return ctx.Err()
 	}
 }
 
@@ -168,7 +354,7 @@ const callTTL = 2 * time.Minute
 // end a live session; the host then registers again for the next one.
 // Initiate asks viewers that saved this PC's code to connect; IT accepts in
 // the browser and the session starts at once.
-func serveUnattended(ctx context.Context, origin, key, name string, stopSession, initiate <-chan struct{}, updates chan<- unattendedUpdate) {
+func serveUnattended(ctx context.Context, origin, key, name string, ra func() string, stopSession, initiate <-chan struct{}, updates chan<- unattendedUpdate) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	backoff := 2 * time.Second
@@ -192,7 +378,7 @@ func serveUnattended(ctx context.Context, origin, key, name string, stopSession,
 			}
 			continue
 		}
-		served, err := unattendedRound(ctx, origin, key, name, stopSession, initiate, &callUntil, updates)
+		served, err := unattendedRound(ctx, origin, key, name, ra, stopSession, initiate, &callUntil, updates)
 		if ctx.Err() != nil {
 			return
 		}
@@ -227,7 +413,7 @@ func serveUnattended(ctx context.Context, origin, key, name string, stopSession,
 // whether a viewer connected.
 // callUntil is when the current Initiate request lapses; it survives the
 // registration refresh so a request is not lost when the round restarts.
-func unattendedRound(parent context.Context, origin, key, name string, stopSession, initiate <-chan struct{}, callUntil *time.Time, updates chan<- unattendedUpdate) (served bool, err error) {
+func unattendedRound(parent context.Context, origin, key, name string, ra func() string, stopSession, initiate <-chan struct{}, callUntil *time.Time, updates chan<- unattendedUpdate) (served bool, err error) {
 	r, err := newRelay(origin)
 	if err != nil {
 		return false, err
@@ -246,7 +432,12 @@ func unattendedRound(parent context.Context, origin, key, name string, stopSessi
 		_ = r.post(endCtx, "end", nil, nil)
 	}()
 	call := func(until time.Time) error {
-		if err := r.postJSON(parent, "call", map[string]string{"name": name}, nil); err != nil {
+		target := ra()
+		body := map[string]string{"name": name}
+		if target != "" {
+			body["ra"] = target
+		}
+		if err := r.postJSON(parent, "call", body, nil); err != nil {
 			// A relay that answers but rejects the request (an older build
 			// without Initiate, or the session is no longer waiting) is not
 			// a network failure: say so and keep the registration.
@@ -258,7 +449,11 @@ func unattendedRound(parent context.Context, origin, key, name string, stopSessi
 			return err
 		}
 		*callUntil = until
-		updates <- unattendedUpdate{state: "calling", text: "Request sent. Waiting for IT to accept in the browser…"}
+		text := "Request sent. Waiting for IT to accept in the browser…"
+		if target != "" {
+			text = "Request sent to " + formatRA(target) + ". Waiting for them to accept in the portal…"
+		}
+		updates <- unattendedUpdate{state: "calling", text: text}
 		return nil
 	}
 	if time.Now().Before(*callUntil) {
@@ -269,7 +464,8 @@ func unattendedRound(parent context.Context, origin, key, name string, stopSessi
 		updates <- unattendedUpdate{state: "ready", text: "Ready. IT can connect with this PC's access code, or select Initiate."}
 	}
 	refresh := time.Now().Add(2 * time.Minute)
-	wait := time.NewTicker(650 * time.Millisecond)
+	// Check for a viewer every 400 ms so an accepted request starts quickly.
+	wait := time.NewTicker(400 * time.Millisecond)
 	defer wait.Stop()
 	for time.Now().Before(refresh) {
 		var reply tick

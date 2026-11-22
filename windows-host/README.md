@@ -44,6 +44,23 @@ can turn on a saved, pre-approved access code:
 3. IT enters the access code in the viewer. The session goes live at once,
    with no verification number and no approval.
 
+### RA ID: send requests to one IT person
+
+Every portal account has an RA ID (such as **RA-123456**), shown in the
+portal header and in the admin console. Enter it in the app so Initiate goes
+straight to that person:
+
+- **Unattended:** click the tray icon, select **Set RA ID…**, and type it.
+  The menu shows **Requests go to RA ID: RA-123456** and Initiate reads
+  **Initiate — send a request to RA-123456**. The RA ID is saved next to the
+  access key, so it survives restarts, and changing it keeps the access code.
+- **Attended:** type it in **IT contact's RA ID** before **Start session**.
+  The request (with the PC name) appears in that person's portal; they accept
+  it and still read the verification number to the person at the PC.
+
+The relay checks the RA ID: an unknown or disabled one makes Initiate say so
+in the tray. Without an RA ID, Initiate works as before (below).
+
 ### Initiate from the PC
 
 The PC can also ask IT to connect. In the viewer's **Unattended PCs** tab, IT
@@ -68,7 +85,7 @@ reached, and green while IT is connected. Its tooltip reads
 **Connect: +01** while a session is live, counting sessions since the app
 started (+02 for the second, and so on). Click the icon (left or right) for a
 small menu with the status, the access code, the connection count,
-**Copy access code**, **Initiate**, **Stop current session**, **Turn off unattended access…**
+**Copy access code**, **Set RA ID…**, **Initiate**, **Stop current session**, **Turn off unattended access…**
 (deletes the key and the startup entry), and **Exit** (unattended access
 starts again at next sign-in). Ctrl+2 and F12 still end a live session, and
 locking Windows still stops sharing. Windows 11 may put new notification-area
@@ -145,3 +162,14 @@ preview. Before distribution, use Windows SDK SignTool (`signtool verify /pa /al
 on the installer, the installed host, and the installed uninstaller, check that
 the expected publisher appears, then test installation and launch with Smart
 App Control enabled. A signature check is not a substitute for that runtime test.
+
+### Streaming
+
+The host captures the screen up to about 30 times a second and only sends
+frames that changed. One frame is encoded while the previous one uploads, and
+the frame size and JPEG quality adapt to how fast uploads go (from 1024 px at
+quality 42 up to 2560 px at quality 80), so a slow link stays responsive and a
+fast one stays sharp. Viewer input arrives through a separate long poll and is
+applied the moment it reaches the relay, independent of screen uploads. Short
+network drops are retried for up to about 12 seconds instead of ending the
+session, and a live session can last up to 12 hours.

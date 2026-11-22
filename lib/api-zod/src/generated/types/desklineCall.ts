@@ -9,4 +9,9 @@
 export interface DesklineCall {
   /** @maxLength 64 */
   name?: string;
+  /**
+     * RA ID of the portal user who should get the request
+     * @maxLength 16
+     */
+  ra?: string;
 }

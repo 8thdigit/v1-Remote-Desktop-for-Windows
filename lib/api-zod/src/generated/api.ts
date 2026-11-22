@@ -17,6 +17,334 @@ export const HealthCheckResponse = zod.object({
 })
 
 
+/**
+ * The signed-in portal user, or whether the first admin still has to be created.
+ */
+export const GetAuthStatusResponse = zod.object({
+  "setupRequired": zod.boolean(),
+  "user": zod.object({
+  "id": zod.string(),
+  "username": zod.string(),
+  "displayName": zod.string(),
+  "role": zod.enum(['admin', 'ra']),
+  "raId": zod.string(),
+  "disabled": zod.boolean(),
+  "createdAt": zod.number(),
+  "lastLoginAt": zod.number().optional()
+}).optional()
+})
+
+
+/**
+ * Creates the first admin account. Only works while no account exists, and needs the one-time setup code the relay writes to its log.
+ */
+export const setupAdminBodySetupCodeMax = 64;
+
+export const setupAdminBodyUsernameMax = 32;
+
+export const setupAdminBodyDisplayNameMax = 60;
+
+export const setupAdminBodyPasswordMax = 200;
+
+
+
+export const SetupAdminBody = zod.object({
+  "setupCode": zod.string().max(setupAdminBodySetupCodeMax),
+  "username": zod.string().max(setupAdminBodyUsernameMax),
+  "displayName": zod.string().max(setupAdminBodyDisplayNameMax).optional(),
+  "password": zod.string().max(setupAdminBodyPasswordMax)
+})
+
+export const SetupAdminResponse = zod.object({
+  "id": zod.string(),
+  "username": zod.string(),
+  "displayName": zod.string(),
+  "role": zod.enum(['admin', 'ra']),
+  "raId": zod.string(),
+  "disabled": zod.boolean(),
+  "createdAt": zod.number(),
+  "lastLoginAt": zod.number().optional()
+})
+
+
+export const loginBodyUsernameMax = 64;
+
+export const loginBodyPasswordMax = 200;
+
+
+
+export const LoginBody = zod.object({
+  "username": zod.string().max(loginBodyUsernameMax),
+  "password": zod.string().max(loginBodyPasswordMax)
+})
+
+export const LoginResponse = zod.object({
+  "id": zod.string(),
+  "username": zod.string(),
+  "displayName": zod.string(),
+  "role": zod.enum(['admin', 'ra']),
+  "raId": zod.string(),
+  "disabled": zod.boolean(),
+  "createdAt": zod.number(),
+  "lastLoginAt": zod.number().optional()
+})
+
+
+export const LogoutResponse = zod.void()
+
+
+export const changePasswordBodyCurrentMax = 200;
+
+export const changePasswordBodyNextMax = 200;
+
+
+
+export const ChangePasswordBody = zod.object({
+  "current": zod.string().max(changePasswordBodyCurrentMax),
+  "next": zod.string().max(changePasswordBodyNextMax)
+})
+
+export const ChangePasswordResponse = zod.void()
+
+
+export const ListUsersResponse = zod.object({
+  "users": zod.array(zod.object({
+  "id": zod.string(),
+  "username": zod.string(),
+  "displayName": zod.string(),
+  "role": zod.enum(['admin', 'ra']),
+  "raId": zod.string(),
+  "disabled": zod.boolean(),
+  "createdAt": zod.number(),
+  "lastLoginAt": zod.number().optional()
+}))
+})
+
+
+export const createUserBodyUsernameMax = 32;
+
+export const createUserBodyDisplayNameMax = 60;
+
+export const createUserBodyPasswordMax = 200;
+
+
+
+export const CreateUserBody = zod.object({
+  "username": zod.string().max(createUserBodyUsernameMax),
+  "displayName": zod.string().max(createUserBodyDisplayNameMax).optional(),
+  "password": zod.string().max(createUserBodyPasswordMax),
+  "role": zod.enum(['admin', 'ra'])
+})
+
+export const CreateUserResponse = zod.object({
+  "id": zod.string(),
+  "username": zod.string(),
+  "displayName": zod.string(),
+  "role": zod.enum(['admin', 'ra']),
+  "raId": zod.string(),
+  "disabled": zod.boolean(),
+  "createdAt": zod.number(),
+  "lastLoginAt": zod.number().optional()
+})
+
+
+export const UpdateUserParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const updateUserBodyDisplayNameMax = 60;
+
+export const updateUserBodyPasswordMax = 200;
+
+
+
+export const UpdateUserBody = zod.object({
+  "displayName": zod.string().max(updateUserBodyDisplayNameMax).optional(),
+  "password": zod.string().max(updateUserBodyPasswordMax).optional(),
+  "role": zod.enum(['admin', 'ra']).optional(),
+  "disabled": zod.boolean().optional()
+})
+
+export const UpdateUserResponse = zod.object({
+  "id": zod.string(),
+  "username": zod.string(),
+  "displayName": zod.string(),
+  "role": zod.enum(['admin', 'ra']),
+  "raId": zod.string(),
+  "disabled": zod.boolean(),
+  "createdAt": zod.number(),
+  "lastLoginAt": zod.number().optional()
+})
+
+
+export const DeleteUserParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeleteUserResponse = zod.void()
+
+
+export const GetAdminOverviewResponse = zod.object({
+  "live": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "mode": zod.enum(['unattended', 'attended']),
+  "state": zod.enum(['waiting', 'pending', 'live']),
+  "operator": zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "raId": zod.string()
+}).optional(),
+  "createdAt": zod.number(),
+  "liveAt": zod.number().optional(),
+  "frames": zod.int(),
+  "bytes": zod.number()
+})),
+  "hosts": zod.object({
+  "unattended": zod.int(),
+  "attended": zod.int()
+}),
+  "requests": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "mode": zod.enum(['unattended', 'attended']),
+  "at": zod.number(),
+  "until": zod.number(),
+  "status": zod.enum(['waiting', 'accepted', 'missed']),
+  "closedAt": zod.number().optional(),
+  "ra": zod.string().optional(),
+  "acceptedBy": zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "raId": zod.string()
+}).optional()
+})),
+  "activity": zod.array(zod.object({
+  "at": zod.number(),
+  "kind": zod.string(),
+  "actor": zod.string().optional(),
+  "text": zod.string()
+})),
+  "storage": zod.string()
+})
+
+
+export const EndSessionAsAdminParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const EndSessionAsAdminResponse = zod.void()
+
+
+/**
+ * Initiate requests that PCs sent to the signed-in user's RA ID.
+ */
+export const GetDesklineInboxResponse = zod.object({
+  "raId": zod.string(),
+  "requests": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "mode": zod.enum(['unattended', 'attended']),
+  "at": zod.number(),
+  "until": zod.number(),
+  "status": zod.enum(['waiting', 'accepted', 'missed']),
+  "closedAt": zod.number().optional(),
+  "ra": zod.string().optional(),
+  "acceptedBy": zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "raId": zod.string()
+}).optional()
+}))
+})
+
+
+/**
+ * Accepts a request sent to the signed-in user's RA ID and joins that PC.
+ */
+export const acceptDesklineRequestBodyIdMax = 40;
+
+
+
+export const AcceptDesklineRequestBody = zod.object({
+  "id": zod.string().max(acceptDesklineRequestBodyIdMax)
+})
+
+export const AcceptDesklineRequestResponse = zod.object({
+  "token": zod.string(),
+  "verification": zod.string(),
+  "preapproved": zod.boolean()
+})
+
+
+/**
+ * Several viewer input events in order, in one request.
+ */
+export const sendDesklineInputsBodyItemsItemXMin = 0;
+export const sendDesklineInputsBodyItemsItemXMax = 1;
+
+export const sendDesklineInputsBodyItemsItemYMin = 0;
+export const sendDesklineInputsBodyItemsItemYMax = 1;
+
+export const sendDesklineInputsBodyItemsItemButtonMin = 0;
+export const sendDesklineInputsBodyItemsItemButtonMax = 2;
+
+export const sendDesklineInputsBodyItemsItemKeyMax = 24;
+
+export const sendDesklineInputsBodyItemsMax = 32;
+
+
+
+export const SendDesklineInputsBody = zod.object({
+  "items": zod.array(zod.object({
+  "kind": zod.enum(['key', 'wheel', 'down', 'up', 'move', 'release']),
+  "x": zod.number().min(sendDesklineInputsBodyItemsItemXMin).max(sendDesklineInputsBodyItemsItemXMax).optional(),
+  "y": zod.number().min(sendDesklineInputsBodyItemsItemYMin).max(sendDesklineInputsBodyItemsItemYMax).optional(),
+  "button": zod.int().min(sendDesklineInputsBodyItemsItemButtonMin).max(sendDesklineInputsBodyItemsItemButtonMax).optional(),
+  "delta": zod.union([zod.literal(-1),zod.literal(1)]).optional(),
+  "key": zod.string().max(sendDesklineInputsBodyItemsItemKeyMax).optional(),
+  "ctrl": zod.boolean().optional(),
+  "shift": zod.boolean().optional(),
+  "alt": zod.boolean().optional()
+})).min(1).max(sendDesklineInputsBodyItemsMax)
+})
+
+export const SendDesklineInputsResponse = zod.void()
+
+
+/**
+ * Host long poll for viewer input. Returns as soon as input is queued, or after about ten seconds with none.
+ */
+export const pullDesklineInputResponseInputItemXMin = 0;
+export const pullDesklineInputResponseInputItemXMax = 1;
+
+export const pullDesklineInputResponseInputItemYMin = 0;
+export const pullDesklineInputResponseInputItemYMax = 1;
+
+export const pullDesklineInputResponseInputItemButtonMin = 0;
+export const pullDesklineInputResponseInputItemButtonMax = 2;
+
+export const pullDesklineInputResponseInputItemKeyMax = 24;
+
+
+
+export const PullDesklineInputResponse = zod.object({
+  "state": zod.enum(['waiting', 'pending', 'live']),
+  "verification": zod.string().optional(),
+  "input": zod.array(zod.object({
+  "kind": zod.enum(['key', 'wheel', 'down', 'up', 'move', 'release']),
+  "x": zod.number().min(pullDesklineInputResponseInputItemXMin).max(pullDesklineInputResponseInputItemXMax).optional(),
+  "y": zod.number().min(pullDesklineInputResponseInputItemYMin).max(pullDesklineInputResponseInputItemYMax).optional(),
+  "button": zod.int().min(pullDesklineInputResponseInputItemButtonMin).max(pullDesklineInputResponseInputItemButtonMax).optional(),
+  "delta": zod.union([zod.literal(-1),zod.literal(1)]).optional(),
+  "key": zod.string().max(pullDesklineInputResponseInputItemKeyMax).optional(),
+  "ctrl": zod.boolean().optional(),
+  "shift": zod.boolean().optional(),
+  "alt": zod.boolean().optional()
+}))
+})
+
+
 export const CreateDesklineInviteResponse = zod.object({
   "code": zod.string(),
   "token": zod.string()
@@ -47,10 +375,13 @@ export const RegisterDesklineStandingResponse = zod.object({
  */
 export const callDesklineBodyNameMax = 64;
 
+export const callDesklineBodyRaMax = 16;
+
 
 
 export const CallDesklineBody = zod.object({
-  "name": zod.string().max(callDesklineBodyNameMax).optional()
+  "name": zod.string().max(callDesklineBodyNameMax).optional(),
+  "ra": zod.string().max(callDesklineBodyRaMax).optional().describe('RA ID of the portal user who should get the request')
 })
 
 export const CallDesklineResponse = zod.void()
@@ -164,10 +495,14 @@ export const TickDesklineResponse = zod.object({
 
 export const getDesklineFrameQueryAfterMin = 0;
 
+export const getDesklineFrameQueryWaitMin = 0;
+export const getDesklineFrameQueryWaitMax = 10000;
+
 
 
 export const GetDesklineFrameQueryParams = zod.object({
-  "after": zod.coerce.number().int().min(getDesklineFrameQueryAfterMin).optional()
+  "after": zod.coerce.number().int().min(getDesklineFrameQueryAfterMin).optional(),
+  "wait": zod.coerce.number().int().min(getDesklineFrameQueryWaitMin).max(getDesklineFrameQueryWaitMax).optional().describe('Hold the request up to this many milliseconds for a new frame.')
 })
 
 export const GetDesklineFrameResponse = zod.unknown()

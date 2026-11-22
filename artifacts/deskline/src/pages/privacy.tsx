@@ -9,7 +9,7 @@ const sections = [
   },
   {
     title: 'What the relay keeps',
-    text: 'The relay keeps temporary session details, the latest screen image, and queued input in memory. It does not record sessions or save their contents to a database. Ending a session or letting it expire clears its relay data. Pairing codes expire after three minutes, and approved sessions last no more than 30 minutes.',
+    text: 'The relay keeps temporary session details, the latest screen image, and queued input in memory. It does not record sessions or save their contents to a database. Ending a session or letting it expire clears its relay data. Pairing codes expire after three minutes. A live session stays open while both sides are connected, for at most 12 hours.',
   },
   {
     title: 'HTTPS and who can see the screen',
@@ -17,11 +17,11 @@ const sections = [
   },
   {
     title: 'Website requests and logs',
-    text: 'No account is required. App request logs can include technical details such as the request path, method, status, and response time. The infrastructure serving the site and relay may also process connection details such as IP addresses. The site loads fonts from Google Fonts, which receives your browser’s request.',
+    text: 'Helpers sign in with an account an admin creates. The relay stores each account’s username, display name, role, RA ID, a salted password hash and the last sign-in time; signing in sets a session cookie. App request logs can include technical details such as the request path, method, status, and response time. The infrastructure serving the site and relay may also process connection details such as IP addresses. The site loads fonts from Google Fonts, which receives your browser’s request.',
   },
   {
     title: 'Your controls',
-    text: 'The Windows host does not share its screen before you approve. The host displays a live sharing indicator. Click Stop sharing on it or press Ctrl+2 or F12 on the Windows PC to stop. The helper can end the session in the browser. The app does not include audio streaming, clipboard sync, file transfer, or unattended access.',
+    text: 'The Windows host does not share its screen before you approve. The host displays a live sharing indicator. Click Stop sharing on it or press Ctrl+2 or F12 on the Windows PC to stop. The helper can end the session in the browser. With unattended access turned on, IT can connect without asking; the notification-area icon turns green while someone is connected. The app does not include audio streaming, clipboard sync or file transfer.',
   },
   {
     title: 'Privacy questions',
