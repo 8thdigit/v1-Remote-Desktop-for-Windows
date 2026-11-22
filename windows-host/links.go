@@ -4,12 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -33,7 +30,11 @@ func (l savedLink) expired(now time.Time) bool {
 
 func (l savedLink) shareURL() string {
 	link := remoteLink{Code: l.Code}
-	return link.URL(l.Relay)
+	r, err := newRelay(l.Relay)
+	if err != nil {
+		return l.Relay + "/?access=" + l.Code
+	}
+	return link.URL(linkOrigin(r))
 }
 
 const linksFile = "links.json"
@@ -328,52 +329,24 @@ func listLinkEntries(linksPath string, now time.Time) []linkEntry {
 // URL: 24 hours, per product requirements.
 const defaultLinkHours = 24
 
-// pickValidity asks how long a new remote access link stays valid. The
-// default is 24 hours; the user can choose other values such as 4 or 5 by
-// typing the number. It returns false if the user cancels.
-func pickValidity(window uintptr) (int, bool) {
-	text, ok := inputDialog(window, "Remote access URL validity",
-		"How long should this link stay valid?\n\n"+
-			"Pick hours: 1, 2, 4, 5, 8, 12, 24, 48, 72 or 120.\n"+
-			"(Default: 24 hours)")
-	if !ok {
-		return 0, false
-	}
-	trimmed := strings.TrimSpace(strings.ToLower(text))
-	if trimmed == "" {
-		return defaultLinkHours, true
-	}
-	hours, err := strconv.Atoi(trimmed)
-	if err != nil || !validLinkHours(hours) {
-		messageBox.Call(window, uintptr(unsafe.Pointer(textPtr("Choose one of: 1, 2, 4, 5, 8, 12, 24, 48, 72, 120 hours."))),
-			uintptr(unsafe.Pointer(textPtr("winss132r"))), 0x30) // MB_ICONWARNING
-		return 0, false
-	}
-	return hours, true
+// linkInflight tracks whether a create-link request is still being handled,
+// so repeated menu clicks are deduplicated instead of piling up requests.
+type linkInflight struct {
+	on bool
+	id uint64
 }
 
-// inputDialog asks for one line of text with a prefilled default. It uses a
-// Windows Forms InputBox through PowerShell so no custom dialog code is
-// needed; when PowerShell is unavailable the default is accepted silently.
-func inputDialog(window uintptr, title, prompt string) (string, bool) {
-	_ = window
-	script := "Add-Type -AssemblyName Microsoft.VisualBasic | Out-Null; " +
-		"$v = [Microsoft.VisualBasic.Interaction]::InputBox(" +
-		quotePS(prompt) + ", " + quotePS(title) + ", '" + defaultLinkHoursLabel() + "'); " +
-		"[Console]::Out.Write($v)"
-	cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-STA", "-Command", script)
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	out, err := cmd.Output()
-	if err != nil && len(out) == 0 {
-		return "", true // fall back to the default when there is no dialog host
+// begin records a new in-flight request and reports whether it should be
+// sent: false when an earlier request with the same id is still pending.
+func (f *linkInflight) begin(req linkRequest) bool {
+	if f.on && f.id == req.id {
+		return false
 	}
-	return strings.TrimSpace(string(out)), true
+	f.on, f.id = true, req.id
+	return true
 }
 
-func quotePS(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
-}
-
-func defaultLinkHoursLabel() string {
-	return strconv.Itoa(defaultLinkHours)
+// done clears the in-flight marker once serveUnattended confirms creation.
+func (f *linkInflight) done() {
+	f.on, f.id = false, 0
 }

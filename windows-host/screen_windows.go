@@ -73,6 +73,14 @@ type dibInfo struct {
 	Compression, ImageSize, X, Y, Colors, Important uint32
 }
 
+// max returns the larger of two ints (kept local for Go toolchain parity).
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 func fitted(w, h int) (int, int) {
 	if w > 1280 {
 		h = max(1, h*1280/w)
