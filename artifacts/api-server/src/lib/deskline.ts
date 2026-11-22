@@ -6,12 +6,22 @@ const sessionTTL = 30 * 60_000;
 const peerTTL = 20_000;
 // How long an unattended host's "Initiate" request stays visible to viewers.
 export const callTTL = 2 * 60_000;
+// Remote access links created from the client app are valid for 24 hours by
+// default. They allow multiple sessions until they expire or are revoked.
+export const linkTTL = 24 * 60 * 60_000;
+export const linkTTLs = [1, 2, 4, 5, 8, 12, 24, 48, 72, 120];
 
 // Unattended (pre-approved) hosts keep a long random key on the PC. The
 // public access code is derived from it, so only the holder of the key can
 // register under that code, and the relay does not need to store anything.
 export function standingCode(key: string) {
   return createHash("sha256").update("winss132r-standing:" + key).digest("hex").slice(0, 12).toUpperCase();
+}
+
+// Link codes start with "L" so they never collide with an attended invite or
+// a standing access code (those use hex characters only).
+export function linkCode(id: string) {
+  return ("L" + createHash("sha256").update("winss132r-link:" + id).digest("hex").slice(0, 11)).toUpperCase();
 }
 
 export type Session = {
@@ -21,6 +31,8 @@ export type Session = {
   verification?: string;
   state: "waiting" | "pending" | "live";
   preapproved: boolean;
+  // Set when this session was started through a shared remote access link.
+  link?: Link;
   // The PC name an unattended host reports, shown to viewers that know its code.
   name?: string;
   // Set when an unattended host pressed Initiate: viewers that already know
@@ -40,29 +52,67 @@ function cleanName(name: string) {
   return name.replace(/[^\w .-]/g, "").trim().slice(0, 40);
 }
 
+// A remote access link created from the client app ("Create Remote Access
+// URL"). The host registers a waiting session under the link's code; every
+// viewer that opens the shared link starts a new session until the link
+// expires (24 hours by default) or the host revokes it.
+export type Link = {
+  id: string;
+  key: string;
+  code: string;
+  name: string;
+  createdAt: number;
+  expiresAt: number;
+  ttlHours: number;
+  sessions: number;
+};
+
+// What the client app gets back about a link: everything except the secret
+// key, which only the host PC holds.
+function publicLink(link: Link) {
+  const {key: _key, ...rest} = link;
+  return rest;
+}
+
 export function createDesklineStore(clock = Date.now) {
   const codes = new Map<string, Session>();
   const peers = new Map<string, { session: Session; role: "host" | "viewer" }>();
   // Unattended sessions by access code, including live ones (which are no
   // longer joinable, so they are not in codes). Used for presence only.
   const standings = new Map<string, Session>();
-  const end = (s: Session) => {
-    if (codes.get(s.code) === s) codes.delete(s.code);
-    if (standings.get(s.code) === s) standings.delete(s.code);
-    peers.delete(s.host);
-    if (s.viewer) peers.delete(s.viewer);
-    s.frame = undefined;
-    s.input = [];
-  };
+  // Live link registrations and link history by link id. Links survive the
+  // end of their session so the host can see how many were opened.
+  const links = new Map<string, Link>();
+  const linkSessions = new Map<string, Session>();
   const expired = (s: Session) => {
     const now = clock();
     return s.expires <= now || now - s.hostSeen > peerTTL ||
       (!!s.viewer && now - s.viewerSeen > peerTTL);
   };
+  const end = (s: Session) => {
+    if (codes.get(s.code) === s) codes.delete(s.code);
+    if (standings.get(s.code) === s) standings.delete(s.code);
+    if (s.link && linkSessions.get(s.link.id) === s) linkSessions.delete(s.link.id);
+    peers.delete(s.host);
+    if (s.viewer) peers.delete(s.viewer);
+    s.frame = undefined;
+    s.input = [];
+  };
+  const sweepLinks = () => {
+    const now = clock();
+    for (const [id, link] of links) {
+      if (link.expiresAt > now) continue;
+      const s = linkSessions.get(id);
+      if (s && !expired(s)) continue; // let a live session finish naturally
+      links.delete(id);
+      if (s) end(s);
+    }
+  };
   const sweep = () => {
     for (const {session, role} of peers.values()) {
       if (role === "host" && expired(session)) end(session);
     }
+    sweepLinks();
   };
   return {
     sweep,
@@ -134,6 +184,67 @@ export function createDesklineStore(clock = Date.now) {
       }
       return found;
     },
+    // --- Remote access links (created from the client app) ---
+    // Creates a shareable link that opens sessions on this host's PC without
+    // approval. ttlHours defaults to 24. Only hosts with an unattended key
+    // can create links; the key proves ownership of the PC. The link also
+    // carries its validity in hours so clients can display it.
+    linkCreate(key: string, name: string, ttlHours?: number) {
+      sweep();
+      if (!/^[\w-]{43}$/.test(key)) return;
+      const hours = ttlHours && linkTTLs.includes(ttlHours) ? ttlHours : 24;
+      let id: string;
+      do { id = randomBytes(9).toString("base64url"); } while (links.has(id));
+      const now = clock();
+      const link: Link = {id, key, code: linkCode(id), name: cleanName(name), createdAt: now, expiresAt: now + hours * 3_600_000, ttlHours: hours, sessions: 0};
+      links.set(id, link);
+      return publicLink(link);
+    },
+    // The host re-registers its waiting link session under the same link id
+    // after each session ends, so the shared URL keeps working until the
+    // link expires or is revoked. A live session under the link is ended
+    // first when the host explicitly re-registers.
+    linkRegister(idOrCode: string, key: string) {
+      sweep();
+      const link = links.get(idOrCode) ?? [...links.values()].find((l) => l.code === idOrCode.toUpperCase());
+      if (!link || link.key !== key) return;
+      if (link.expiresAt <= clock()) { links.delete(link.id); return; }
+      const previous = linkSessions.get(link.id);
+      if (previous) end(previous);
+      if (codes.get(link.code) || standings.get(link.code)) return;
+      if (peers.size >= 96) return;
+      const host = randomBytes(32).toString("base64url");
+      const now = clock();
+      const session: Session = {
+        code: link.code, host, state: "waiting", preapproved: true, link,
+        name: link.name, expires: now + inviteTTL,
+        hostSeen: now, viewerSeen: 0, sequence: 0, lastFrame: 0, input: [],
+      };
+      codes.set(link.code, session);
+      standings.set(link.code, session);
+      linkSessions.set(link.id, session);
+      peers.set(host, {session, role: "host"});
+      return {code: link.code, token: host};
+    },
+    linkStatus(id: string, key: string) {
+      sweep();
+      const link = links.get(id);
+      if (!link || link.key !== key) return;
+      const s = linkSessions.get(link.id);
+      return {
+        link: publicLink(link),
+        online: !!s && !expired(s),
+        busy: !!s && !expired(s) && s.state !== "waiting",
+      };
+    },
+    linkRevoke(id: string, key: string) {
+      const link = links.get(id);
+      if (!link || link.key !== key) return false;
+      const s = linkSessions.get(id);
+      if (s) end(s);
+      links.delete(id);
+      return true;
+    },
     join(code: string) {
       const s = codes.get(code);
       if (!s || expired(s) || s.state !== "waiting") return;
@@ -144,6 +255,7 @@ export function createDesklineStore(clock = Date.now) {
       s.viewer = token;
       s.viewerSeen = now;
       peers.set(token, {session: s, role: "viewer"});
+      if (s.link) s.link.sessions += 1;
       if (s.preapproved) {
         s.state = "live";
         s.expires = now + sessionTTL;

@@ -168,7 +168,10 @@ const callTTL = 2 * time.Minute
 // end a live session; the host then registers again for the next one.
 // Initiate asks viewers that saved this PC's code to connect; IT accepts in
 // the browser and the session starts at once.
-func serveUnattended(ctx context.Context, origin, key, name string, stopSession, initiate <-chan struct{}, updates chan<- unattendedUpdate) {
+// linksPath is where saved remote access links live ("" when unavailable).
+// After a session opened through a shared link ends, the host re-registers
+// under that link so the same URL can open more sessions until it expires.
+func serveUnattended(ctx context.Context, origin, key, name, linksPath string, stopSession, initiate <-chan struct{}, newLink <-chan linkRequest, updates chan<- unattendedUpdate) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	backoff := 2 * time.Second
@@ -183,6 +186,11 @@ func serveUnattended(ctx context.Context, origin, key, name string, stopSession,
 		}
 	}
 	var callUntil time.Time
+	// pending holds a link the user asked the UI to create whose relay
+	// creation has not been confirmed yet; it survives a round restart so the
+	// request is retried instead of being lost. The UI reads len(pending) > 0
+	// to know a create is still in flight (dedupe).
+	pending := make(chan linkRequest, 1)
 	for ctx.Err() == nil {
 		if !onDefaultDesktop() {
 			callUntil = time.Time{}
@@ -192,7 +200,34 @@ func serveUnattended(ctx context.Context, origin, key, name string, stopSession,
 			}
 			continue
 		}
-		served, err := unattendedRound(ctx, origin, key, name, stopSession, initiate, &callUntil, updates)
+		// Retry a link whose creation did not finish before the last round
+		// ended (relay offline, error, or session raced ahead of it).
+		for {
+			select {
+			case req := <-pending:
+				rc, err := newRelay(origin)
+				var created *remoteLink
+				if err == nil {
+					ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+					created, err = rc.createLink(ctx, key, req.name, req.hours)
+					cancel()
+				}
+				if err != nil {
+					updates <- unattendedUpdate{state: "ready", text: "Could not create the remote access URL: " + err.Error()}
+					continue
+				}
+				stored := savedLink{ID: created.ID, Code: created.Code, Key: key, Name: req.name, Relay: origin, CreatedAt: created.CreatedAt, ExpiresAt: created.ExpiresAt}
+				if linksPath != "" {
+					current, _ := loadLinks(linksPath, time.Now())
+					_ = saveLinks(linksPath, addLink(current, stored, time.Now()))
+				}
+				updates <- unattendedUpdate{state: "ready", text: "Remote access link is live: share " + stored.shareURL() + " (" + timeLeft(stored.ExpiresAt, time.Now()) + ")"}
+				continue
+			default:
+			}
+			break
+		}
+		served, err := unattendedRound(ctx, origin, key, name, stopSession, initiate, linksPath, newLink, pending, &callUntil, updates)
 		if ctx.Err() != nil {
 			return
 		}
@@ -227,7 +262,10 @@ func serveUnattended(ctx context.Context, origin, key, name string, stopSession,
 // whether a viewer connected.
 // callUntil is when the current Initiate request lapses; it survives the
 // registration refresh so a request is not lost when the round restarts.
-func unattendedRound(parent context.Context, origin, key, name string, stopSession, initiate <-chan struct{}, callUntil *time.Time, updates chan<- unattendedUpdate) (served bool, err error) {
+// newLink carries links the user asked the UI to create; pendingLink holds
+// one whose relay creation has not been confirmed yet, so it is retried
+// instead of being lost across rounds.
+func unattendedRound(parent context.Context, origin, key, name string, stopSession, initiate <-chan struct{}, linksPath string, newLink <-chan linkRequest, pendingLink chan linkRequest, callUntil *time.Time, updates chan<- unattendedUpdate) (served bool, err error) {
 	r, err := newRelay(origin)
 	if err != nil {
 		return false, err
@@ -261,12 +299,54 @@ func unattendedRound(parent context.Context, origin, key, name string, stopSessi
 		updates <- unattendedUpdate{state: "calling", text: "Request sent. Waiting for IT to accept in the browser…"}
 		return nil
 	}
+	// registerLinkNow asks the relay to open this link's code for viewers.
+	// The host stays registered under the standing code as well, so both
+	// entry points work while the link is alive.
+	registerLinkNow := func(l savedLink) {
+		ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+		defer cancel()
+		if _, err := r.registerLink(ctx, l.ID, l.Key); err != nil {
+			updates <- unattendedUpdate{state: "ready", text: "Remote access link could not be armed: " + err.Error()}
+			return
+		}
+		updates <- unattendedUpdate{state: "ready", text: "Remote access link is live: share " + l.shareURL() + " (" + timeLeft(l.ExpiresAt, time.Now()) + ")"}
+	}
+	createLink := func(req linkRequest) {
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		defer cancel()
+		created, err := r.createLink(ctx, key, req.name, req.hours)
+		if err != nil {
+			updates <- unattendedUpdate{state: "ready", text: "Could not create the remote access URL: " + err.Error()}
+			return
+		}
+		stored := savedLink{ID: created.ID, Code: created.Code, Key: key, Name: req.name, Relay: origin, CreatedAt: created.CreatedAt, ExpiresAt: created.ExpiresAt}
+		if linksPath != "" {
+			current, _ := loadLinks(linksPath, time.Now())
+			if err := saveLinks(linksPath, addLink(current, stored, time.Now())); err != nil {
+				updates <- unattendedUpdate{state: "ready", text: "The link was created but could not be saved on this PC: " + err.Error()}
+			}
+		}
+		registerLinkNow(stored)
+	}
+	armActiveLinks := func() {
+		if linksPath == "" {
+			return
+		}
+		active, err := loadLinks(linksPath, time.Now())
+		if err != nil || len(active) == 0 {
+			return
+		}
+		for _, l := range active {
+			registerLinkNow(l)
+		}
+	}
 	if time.Now().Before(*callUntil) {
 		if err := call(*callUntil); err != nil {
 			return false, err
 		}
 	} else {
 		updates <- unattendedUpdate{state: "ready", text: "Ready. IT can connect with this PC's access code, or select Initiate."}
+		armActiveLinks()
 	}
 	refresh := time.Now().Add(2 * time.Minute)
 	wait := time.NewTicker(650 * time.Millisecond)
@@ -321,8 +401,25 @@ func unattendedRound(parent context.Context, origin, key, name string, stopSessi
 			if err := call(time.Now().Add(callTTL)); err != nil {
 				return false, err
 			}
+		case req := <-newLink:
+			pendingLink <- req // remembered if creation below fails or errors
+			createLink(req)
+			drainRequest(pendingLink, req)
 		case <-wait.C:
 		}
 	}
 	return false, nil
+}
+
+// drainRequest removes req from a full pending channel, if it is still the
+// request at the head (createLink finished handling it). A different request
+// that raced in is put back for the next round.
+func drainRequest(pending chan linkRequest, req linkRequest) {
+	select {
+	case got := <-pending:
+		if got != req {
+			pending <- got
+		}
+	default:
+	}
 }

@@ -127,7 +127,7 @@ func tap(e event) {
 		vk = uint16(n) & 0xff
 	}
 	// Never send the Windows security sequence or winss132r's local stop key.
-if (e.Ctrl && (vk == 0x32 || (e.Alt && vk == 46))) || strings.EqualFold(e.Key, "F12") {
+	if (e.Ctrl && (vk == 0x32 || (e.Alt && vk == 46))) || strings.EqualFold(e.Key, "F12") {
 		return
 	}
 	var mods []uint16

@@ -170,6 +170,73 @@ export const GetDesklineFrameQueryParams = zod.object({
   "after": zod.coerce.number().int().min(getDesklineFrameQueryAfterMin).optional()
 })
 
+
+/**
+ * Create a shareable remote access URL from the client app. The host PC registers a waiting session under the link's code; every viewer that opens the shared URL starts a new session without approval, until the link expires (24 hours by default) or is revoked. Requires the unattended access key of the PC.
+ */
+export const createDesklineLinkBodyKeyRegExp = new RegExp('^[A-Za-z0-9_-]{43}$');
+export const createDesklineLinkBodyNameMax = 64;
+
+
+
+export const CreateDesklineLinkBody = zod.object({
+  "key": zod.string().regex(createDesklineLinkBodyKeyRegExp),
+  "name": zod.string().max(createDesklineLinkBodyNameMax).optional(),
+  "ttlHours": zod.union([zod.literal(1), zod.literal(2), zod.literal(4), zod.literal(5), zod.literal(8), zod.literal(12), zod.literal(24), zod.literal(48), zod.literal(72), zod.literal(120)]).optional()
+})
+
+export const DesklineLinkSchema = zod.object({
+  "id": zod.string(),
+  "code": zod.string().regex(new RegExp('^L[0-9A-F]{11}$')),
+  "name": zod.string(),
+  "createdAt": zod.number(),
+  "expiresAt": zod.number(),
+  "ttlHours": zod.union([zod.literal(1), zod.literal(2), zod.literal(4), zod.literal(5), zod.literal(8), zod.literal(12), zod.literal(24), zod.literal(48), zod.literal(72), zod.literal(120)]),
+  "sessions": zod.number().int().min(0)
+})
+
+
+/**
+ * The host re-registers its waiting session under an existing link id after each session ends, so the shared URL keeps accepting viewers until it expires or is revoked.
+ */
+export const registerDesklineLinkBodyIdMax = 64;
+export const registerDesklineLinkBodyKeyRegExp = new RegExp('^[A-Za-z0-9_-]{43}$');
+
+
+
+export const RegisterDesklineLinkBody = zod.object({
+  "id": zod.string().max(registerDesklineLinkBodyIdMax),
+  "key": zod.string().regex(registerDesklineLinkBodyKeyRegExp)
+})
+
+export const RegisterDesklineLinkResponse = zod.object({
+  "code": zod.string(),
+  "token": zod.string()
+})
+
+export const getDesklineLinkStatusQueryIdRegExp = new RegExp('^[A-Za-z0-9_-]{1,64}$');
+export const getDesklineLinkStatusQueryKeyRegExp = new RegExp('^[A-Za-z0-9_-]{43}$');
+
+
+
+export const GetDesklineLinkStatusQueryParams = zod.object({
+  "id": zod.string().regex(getDesklineLinkStatusQueryIdRegExp),
+  "key": zod.string().regex(getDesklineLinkStatusQueryKeyRegExp)
+})
+
+export const DesklineLinkStatusSchema = zod.object({
+  "link": DesklineLinkSchema,
+  "online": zod.boolean(),
+  "busy": zod.boolean()
+})
+
+export const RevokeDesklineLinkBody = zod.object({
+  "id": zod.string().max(registerDesklineLinkBodyIdMax),
+  "key": zod.string().regex(registerDesklineLinkBodyKeyRegExp)
+})
+
+export const RevokeDesklineLinkResponse = zod.void()
+
 export const GetDesklineFrameResponse = zod.unknown()
 
 

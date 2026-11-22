@@ -119,6 +119,54 @@ export interface DesklineInvite {
   token: string;
 }
 
+export type DesklineLinkCreateTtlHours = typeof DesklineLinkCreateTtlHours[keyof typeof DesklineLinkCreateTtlHours];
+
+
+export const DesklineLinkCreateTtlHours = {
+  NUMBER_1: 1,
+  NUMBER_2: 2,
+  NUMBER_4: 4,
+  NUMBER_5: 5,
+  NUMBER_8: 8,
+  NUMBER_12: 12,
+  NUMBER_24: 24,
+  NUMBER_48: 48,
+  NUMBER_72: 72,
+  NUMBER_120: 120,
+} as const;
+
+export interface DesklineLinkCreate {
+  /** @pattern ^[A-Za-z0-9_-]{43}$ */
+  key: string;
+  /** @maxLength 64 */
+  name?: string;
+  ttlHours?: DesklineLinkCreateTtlHours;
+}
+
+export interface DesklineLinkRegister {
+  /** @maxLength 64 */
+  id: string;
+  /** @pattern ^[A-Za-z0-9_-]{43}$ */
+  key: string;
+}
+
+export interface DesklineLink {
+  id: string;
+  /** @pattern ^L[0-9A-F]{11}$ */
+  code: string;
+  name: string;
+  createdAt: number;
+  expiresAt: number;
+  /** @minimum 0 */
+  sessions: number;
+}
+
+export interface DesklineLinkStatus {
+  link: DesklineLink;
+  online: boolean;
+  busy: boolean;
+}
+
 export interface DesklineViewer {
   token: string;
   verification: string;
@@ -128,6 +176,14 @@ export interface DesklineViewer {
 export interface HealthStatus {
   status: string;
 }
+
+export type GetDesklineLinkStatusParams = {
+id: string;
+/**
+ * @pattern ^[A-Za-z0-9_-]{43}$
+ */
+key: string;
+};
 
 export type GetDesklineFrameParams = {
 /**

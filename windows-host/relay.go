@@ -15,7 +15,8 @@ import (
 	"time"
 )
 
-var codeFormat = regexp.MustCompile(`^[A-F0-9]{12}$`)
+var codeFormat = regexp.MustCompile(`^(L[0-9A-F]|S[0-9A-F]{11}|[A-F0-9]{12})$`)
+var linkCodeFormat = regexp.MustCompile(`^L[0-9A-F]{11}$`)
 var tokenFormat = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
 var verifyFormat = regexp.MustCompile(`^[0-9]{6}$`)
 
@@ -76,6 +77,98 @@ func (r *relay) postJSON(ctx context.Context, path string, body, response any) e
 		return err
 	}
 	return r.send(ctx, path, data, "application/json", response)
+}
+
+func (r *relay) get(ctx context.Context, path string, response any) error {
+	req, err := http.NewRequestWithContext(ctx, "GET", r.base+path, nil)
+	if err != nil {
+		return err
+	}
+	if r.token != "" {
+		req.Header.Set("Authorization", "Bearer "+r.token)
+	}
+	res, err := r.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(res.Body, 65537))
+	if err != nil {
+		return err
+	}
+	if len(body) > 65536 {
+		return errors.New("relay response exceeded limit")
+	}
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		return &statusError{status: res.StatusCode, text: fmt.Sprintf("relay rejected %s (HTTP %d)", path, res.StatusCode)}
+	}
+	if response != nil {
+		return json.Unmarshal(body, response)
+	}
+	return nil
+}
+
+// remoteLink is a shareable unattended-access URL. The id identifies the
+// link; key authorizes host operations (re-registration, status, revoke).
+type remoteLink struct {
+	ID        string `json:"id"`
+	Code      string `json:"code"`
+	Key       string `json:"key"`
+	Name      string `json:"name"`
+	CreatedAt int64  `json:"createdAt"`
+	ExpiresAt int64  `json:"expiresAt"`
+	Sessions  int    `json:"sessions"`
+}
+
+func (l *remoteLink) URL(origin string) string {
+	return origin + "/?access=" + l.Code
+}
+
+type linkCreateRequest struct {
+	Key      string `json:"key"`
+	Name     string `json:"name,omitempty"`
+	TTLHours int    `json:"ttlHours,omitempty"`
+}
+
+func (r *relay) createLink(ctx context.Context, key, name string, hours int) (*remoteLink, error) {
+	var out remoteLink
+	if err := r.postJSON(ctx, "link/create", linkCreateRequest{Key: key, Name: name, TTLHours: hours}, &out); err != nil {
+		return nil, err
+	}
+	if !linkCodeFormat.MatchString(out.Code) || out.ID == "" {
+		return nil, errors.New("relay returned an unusable link")
+	}
+	out.Key = key
+	return &out, nil
+}
+
+// registerLink re-arms a link host so another session can be opened through
+// the shared URL after the previous one ended.
+func (r *relay) registerLink(ctx context.Context, id, key string) (string, error) {
+	var out invite
+	if err := r.postJSON(ctx, "link/register", map[string]string{"id": id, "key": key}, &out); err != nil {
+		return "", err
+	}
+	return out.Token, nil
+}
+
+type linkStatusResult struct {
+	Link   remoteLink `json:"link"`
+	Online bool       `json:"online"`
+	Busy   bool       `json:"busy"`
+}
+
+func (r *relay) linkStatus(ctx context.Context, id, key string) (*linkStatusResult, error) {
+	var out linkStatusResult
+	path := "link/status?id=" + url.QueryEscape(id) + "&key=" + url.QueryEscape(key)
+	if err := r.get(ctx, path, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (r *relay) revokeLink(ctx context.Context, id, key string) error {
+	return r.postJSON(ctx, "link/revoke", map[string]string{"id": id, "key": key}, nil)
 }
 
 func (r *relay) send(ctx context.Context, path string, payload []byte, contentType string, response any) error {

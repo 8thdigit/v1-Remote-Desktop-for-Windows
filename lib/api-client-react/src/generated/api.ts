@@ -31,10 +31,15 @@ import type {
   DesklineCode,
   DesklineInput,
   DesklineInvite,
+  DesklineLink,
+  DesklineLinkCreate,
+  DesklineLinkRegister,
+  DesklineLinkStatus,
   DesklineStandingKey,
   DesklineTick,
   DesklineViewer,
   GetDesklineFrameParams,
+  GetDesklineLinkStatusParams,
   HealthStatus
 } from './api.schemas';
 
@@ -488,6 +493,366 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getListDesklineCallsMutationOptions(options), queryClient);
+    }
+
+export const getCreateDesklineLinkUrl = () => {
+
+
+
+
+  return `/api/deskline/link/create`
+}
+
+/**
+ * Create a shareable remote access URL from the client app. The host PC registers a waiting session under the link's code; every viewer that opens the shared URL starts a new session without approval, until the link expires (24 hours by default) or is revoked. Requires the unattended access key of the PC.
+ */
+export const createDesklineLink = async (desklineLinkCreate: DesklineLinkCreate, options?: Parameters<typeof customFetch>[1]): Promise<DesklineLink> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<DesklineLink>(getCreateDesklineLinkUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(desklineLinkCreate)
+  }
+);}
+
+
+
+
+
+export const getCreateDesklineLinkMutationKey = () => ['createDesklineLink'] as const;
+
+export const getCreateDesklineLinkMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDesklineLink>>, TError,CreateDesklineLinkMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createDesklineLink>>, TError,CreateDesklineLinkMutationVariables, TContext> => {
+
+const mutationKey = getCreateDesklineLinkMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createDesklineLink>>, CreateDesklineLinkMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createDesklineLink(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateDesklineLinkMutationResult = NonNullable<Awaited<ReturnType<typeof createDesklineLink>>>
+    export type CreateDesklineLinkMutationBody = BodyType<DesklineLinkCreate>
+    export type CreateDesklineLinkMutationError = ErrorType<unknown>
+    export type CreateDesklineLinkMutationVariables = {data: BodyType<DesklineLinkCreate>}
+
+    export const useCreateDesklineLink = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDesklineLink>>, TError,CreateDesklineLinkMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof createDesklineLink>>,
+        TError,
+        CreateDesklineLinkMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateDesklineLinkMutationOptions(options), queryClient);
+    }
+
+export const getRegisterDesklineLinkUrl = () => {
+
+
+
+
+  return `/api/deskline/link/register`
+}
+
+/**
+ * The host re-registers its waiting session under an existing link id after each session ends, so the shared URL keeps accepting viewers until it expires or is revoked.
+ */
+export const registerDesklineLink = async (desklineLinkRegister: DesklineLinkRegister, options?: Parameters<typeof customFetch>[1]): Promise<DesklineInvite> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<DesklineInvite>(getRegisterDesklineLinkUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(desklineLinkRegister)
+  }
+);}
+
+
+
+
+
+export const getRegisterDesklineLinkMutationKey = () => ['registerDesklineLink'] as const;
+
+export const getRegisterDesklineLinkMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerDesklineLink>>, TError,RegisterDesklineLinkMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof registerDesklineLink>>, TError,RegisterDesklineLinkMutationVariables, TContext> => {
+
+const mutationKey = getRegisterDesklineLinkMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof registerDesklineLink>>, RegisterDesklineLinkMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  registerDesklineLink(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RegisterDesklineLinkMutationResult = NonNullable<Awaited<ReturnType<typeof registerDesklineLink>>>
+    export type RegisterDesklineLinkMutationBody = BodyType<DesklineLinkRegister>
+    export type RegisterDesklineLinkMutationError = ErrorType<void>
+    export type RegisterDesklineLinkMutationVariables = {data: BodyType<DesklineLinkRegister>}
+
+    export const useRegisterDesklineLink = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerDesklineLink>>, TError,RegisterDesklineLinkMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof registerDesklineLink>>,
+        TError,
+        RegisterDesklineLinkMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRegisterDesklineLinkMutationOptions(options), queryClient);
+    }
+
+export const getGetDesklineLinkStatusUrl = (params: GetDesklineLinkStatusParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/deskline/link/status?${stringifiedParams}` : `/api/deskline/link/status`
+}
+
+/**
+ * Current state of a link for the client app: validity, whether the host is registered and online, and how many sessions were opened.
+ */
+export const getDesklineLinkStatus = async (params: GetDesklineLinkStatusParams, options?: Parameters<typeof customFetch>[1]): Promise<DesklineLinkStatus> => {
+
+  return customFetch<DesklineLinkStatus>(getGetDesklineLinkStatusUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetDesklineLinkStatusQueryKey = (params?: GetDesklineLinkStatusParams,) => {
+    return [
+    `/api/deskline/link/status`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetDesklineLinkStatusQueryOptions = <TData = Awaited<ReturnType<typeof getDesklineLinkStatus>>, TError = ErrorType<unknown>>(params: GetDesklineLinkStatusParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDesklineLinkStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetDesklineLinkStatusQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDesklineLinkStatus>>> = ({ signal }) => getDesklineLinkStatus(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDesklineLinkStatus>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetDesklineLinkStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getDesklineLinkStatus>>>
+export type GetDesklineLinkStatusQueryError = ErrorType<unknown>
+
+
+export function useGetDesklineLinkStatus<TData = Awaited<ReturnType<typeof getDesklineLinkStatus>>, TError = ErrorType<unknown>>(
+ params: GetDesklineLinkStatusParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDesklineLinkStatus>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getDesklineLinkStatus>>,
+          TError,
+          Awaited<ReturnType<typeof getDesklineLinkStatus>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetDesklineLinkStatus<TData = Awaited<ReturnType<typeof getDesklineLinkStatus>>, TError = ErrorType<unknown>>(
+ params: GetDesklineLinkStatusParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDesklineLinkStatus>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getDesklineLinkStatus>>,
+          TError,
+          Awaited<ReturnType<typeof getDesklineLinkStatus>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetDesklineLinkStatus<TData = Awaited<ReturnType<typeof getDesklineLinkStatus>>, TError = ErrorType<unknown>>(
+ params: GetDesklineLinkStatusParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDesklineLinkStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetDesklineLinkStatus<TData = Awaited<ReturnType<typeof getDesklineLinkStatus>>, TError = ErrorType<unknown>>(
+ params: GetDesklineLinkStatusParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDesklineLinkStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetDesklineLinkStatusQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRevokeDesklineLinkUrl = () => {
+
+
+
+
+  return `/api/deskline/link/revoke`
+}
+
+/**
+ * Revoke a link at once; any live session under it is ended.
+ */
+export const revokeDesklineLink = async (desklineLinkRegister: DesklineLinkRegister, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<void>(getRevokeDesklineLinkUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(desklineLinkRegister)
+  }
+);}
+
+
+
+
+
+export const getRevokeDesklineLinkMutationKey = () => ['revokeDesklineLink'] as const;
+
+export const getRevokeDesklineLinkMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeDesklineLink>>, TError,RevokeDesklineLinkMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof revokeDesklineLink>>, TError,RevokeDesklineLinkMutationVariables, TContext> => {
+
+const mutationKey = getRevokeDesklineLinkMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof revokeDesklineLink>>, RevokeDesklineLinkMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  revokeDesklineLink(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RevokeDesklineLinkMutationResult = NonNullable<Awaited<ReturnType<typeof revokeDesklineLink>>>
+    export type RevokeDesklineLinkMutationBody = BodyType<DesklineLinkRegister>
+    export type RevokeDesklineLinkMutationError = ErrorType<unknown>
+    export type RevokeDesklineLinkMutationVariables = {data: BodyType<DesklineLinkRegister>}
+
+    export const useRevokeDesklineLink = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeDesklineLink>>, TError,RevokeDesklineLinkMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof revokeDesklineLink>>,
+        TError,
+        RevokeDesklineLinkMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRevokeDesklineLinkMutationOptions(options), queryClient);
     }
 
 export const getJoinDesklineUrl = () => {
