@@ -168,6 +168,32 @@ export async function gateForRa(
   }
 }
 
+// Whether a company may connect one of its operators to a PC right now. This
+// is the viewer-side counterpart of gateForRa: it gates the moment a session
+// actually starts (accept, connect, join, link join), so that a company whose
+// subscription is inactive, expired, suspended or over its session quota
+// cannot open new sessions even if a PC is still registered. Unlike
+// gateForRa it never checks a license — the viewer is the signed-in company,
+// not the client binary, and the PC's license was already verified when it
+// registered. A company with no subscription on record is ungated (legacy).
+export async function connectGateForRa(
+  raId: string | undefined,
+): Promise<{ ok: boolean; status: SubStatus | "none"; reason?: Entitlement["reason"]; message?: string }> {
+  if (!raId) return { ok: true, status: "none" };
+  try {
+    const account = (await accountsReady()).findRa(raId);
+    if (!account) return { ok: true, status: "none" };
+    const billing = await billingReady();
+    if (!billing.getSubscription(account.id)) return { ok: true, status: "none" };
+    const gate = billing.canStartSession(account.id);
+    if (gate.ok) return { ok: true, status: gate.entitlement.status };
+    return { ok: false, status: gate.entitlement.status, reason: gate.reason, message: subBlockMessage(gate.reason) };
+  } catch (err) {
+    logger.error({ err }, "Billing connect-gate check failed; allowing session");
+    return { ok: true, status: "none" };
+  }
+}
+
 function readCookie(req: Request, name: string) {
   const header = req.headers.cookie;
   if (!header) return undefined;

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  AlertTriangle, BadgeCheck, CalendarClock, Check, Copy, CreditCard, Download, IndianRupee,
-  MonitorPlay, MoreHorizontal, Package, Plus, RefreshCw, ShieldAlert,
+  AlertTriangle, BadgeCheck, CalendarClock, Check, Copy, CreditCard, Download, History, IndianRupee,
+  MonitorPlay, MoreHorizontal, Package, Plus, RefreshCw, ShieldAlert, Users,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
@@ -46,6 +46,11 @@ export type Summary = {
   suspendedSubscriptions: number; mrrInr: number; overdueCount: number; overdueAmountInr: number;
   upcomingCount: number; sessionsThisMonth: number;
 };
+export type SessionMode = 'attended' | 'unattended' | 'link';
+export type SessionRecord = {
+  id: string; accountId: string | null; raId: string; pcName: string; mode: SessionMode;
+  operator: string; startedAt: number; endedAt: number; durationMs: number; viewers: number;
+};
 
 // --- API helper (cookie session, same origin) ---
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -65,6 +70,17 @@ const inr = (n: number) => new Intl.NumberFormat('en-IN', { style: 'currency', c
 const dateFmt = (ms: number | null | undefined) =>
   ms ? new Date(ms).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
 const INTERVAL_LABEL: Record<Interval, string> = { monthly: 'Monthly', quarterly: 'Quarterly', annual: 'Annual' };
+const MODE_LABEL: Record<SessionMode, string> = { attended: 'Attended', unattended: 'Unattended', link: 'Remote URL' };
+const dateTimeFmt = (ms: number) =>
+  new Date(ms).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+function fmtDuration(ms: number) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (h) return `${h} h ${m} min`;
+  if (m) return `${m} min`;
+  return `${s}s`;
+}
 
 const inputCls = 'w-full rounded-xl border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40';
 
@@ -597,5 +613,56 @@ function PaymentDialog({ open, companies, onClose, onSaved, onError }: { open: b
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ============================= Session history ===============================
+
+// The record of sessions that have gone live and ended, with their duration,
+// operator and viewer count. This is what each session counts against a
+// company's quota; it is kept by the billing store and survives restarts.
+export function SessionHistoryPanel({ onError }: { onError: (msg: string | null) => void }) {
+  const qc = useQueryClient();
+  const sessions = useQuery({ queryKey: ['billing', 'sessions'], queryFn: () => api<{ sessions: SessionRecord[] }>('/sessions'), refetchInterval: 15_000 });
+  const companies = useQuery({ queryKey: ['billing', 'companies'], queryFn: () => api<{ companies: Company[] }>('/companies') });
+  const byId = useMemo(() => new Map((companies.data?.companies ?? []).map((c) => [c.id, c])), [companies.data]);
+  const reload = () => void qc.invalidateQueries({ queryKey: ['billing', 'sessions'] });
+
+  useEffect(() => { if (sessions.error) onError(errorText(sessions.error, 'Could not load the session history.')); }, [sessions.error, onError]);
+
+  const list = sessions.data?.sessions ?? [];
+  const companyName = (r: SessionRecord) =>
+    (r.accountId && byId.get(r.accountId)?.displayName) || (r.raId ? raLabel(r.raId) : 'Unknown');
+
+  return (
+    <Card title="Session history" icon={History} action={
+      <button type="button" onClick={reload} data-testid="button-refresh-sessions" className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground">
+        <RefreshCw className="h-3.5 w-3.5" /> Refresh
+      </button>}>
+      {list.length === 0 ? <Empty text="No sessions recorded yet. Each session that goes live is logged here with its duration when it ends, and counts against the company's quota." /> : (
+        <div className="-mx-1 overflow-x-auto">
+          <table className="w-full min-w-[760px] text-left text-sm">
+            <thead><tr className="text-xs text-muted-foreground">
+              <th className="px-1 py-2 font-semibold">PC / company</th><th className="px-1 py-2 font-semibold">Mode</th>
+              <th className="px-1 py-2 font-semibold">Operator</th><th className="px-1 py-2 font-semibold">Started</th>
+              <th className="px-1 py-2 font-semibold">Duration</th><th className="px-1 py-2 font-semibold">Viewers</th>
+            </tr></thead>
+            <tbody className="divide-y divide-foreground/8">
+              {list.map((r) => (
+                <tr key={r.id} data-testid={`session-${r.id}`}>
+                  <td className="px-1 py-2.5"><p className="font-semibold">{r.pcName || 'Windows PC'}</p><p className="text-xs text-muted-foreground">{companyName(r)}</p></td>
+                  <td className="px-1 py-2.5"><span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">{MODE_LABEL[r.mode]}</span></td>
+                  <td className="px-1 py-2.5">{r.operator || <span className="text-muted-foreground">—</span>}</td>
+                  <td className="px-1 py-2.5 text-xs text-muted-foreground">{dateTimeFmt(r.startedAt)}</td>
+                  <td className="px-1 py-2.5 font-semibold">{fmtDuration(r.durationMs)}</td>
+                  <td className="px-1 py-2.5"><span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><Users className="h-3.5 w-3.5" /> {r.viewers}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="mt-3 text-xs text-muted-foreground">Up to 300 most recent sessions. Durations are measured from when the session went live to when it ended. This list refreshes automatically.</p>
+    </Card>
   );
 }

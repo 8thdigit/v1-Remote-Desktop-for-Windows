@@ -3,14 +3,14 @@ import {
   acceptMsfwrRequest, connectMsfwrPc, getMsfwrInbox, listMsfwrCalls, useJoinMsfwr, type MsfwrInbox,
 } from '@workspace/api-client-react';
 import { Link } from 'wouter';
-import { ArrowRight, Bell, BellOff, BellRing, Building2, Check, Clock, Copy, Download, Eye, EyeOff, History, Laptop, Monitor, Pencil, Plus, ShieldCheck, Trash2, UserRound, Volume2, VolumeX, X } from 'lucide-react';
+import { ArrowRight, Bell, BellOff, BellRing, Building2, Check, Clock, Copy, Download, Eye, EyeOff, History, Laptop, Monitor, Pencil, Plus, RefreshCw, ShieldCheck, Star, Trash2, UserRound, Volume2, VolumeX, X } from 'lucide-react';
 import { LogoMark, Wordmark } from '@/components/logo';
 import LiveSession from '@/LiveSession';
 import { RaBadge, UserMenu } from '@/components/user-menu';
 import { errorText, raLabel, useAuth } from '@/lib/auth';
 import {
-  HEX, MAX_PCS, loadPCs, loadRequests, mergeCalls, relativeTime, setRequestStatus, storePCs, storeRequests,
-  type RequestEntry, type RequestStatus, type SavedPC,
+  HEX, MAX_PCS, loadPCs, loadRequests, loadSavedRaPcs, mergeCalls, relativeTime, setRequestStatus, storePCs, storeRequests, storeSavedRaPcs,
+  type RequestEntry, type RequestStatus, type SavedPC, type SavedRaPc,
 } from '@/lib/unattended';
 
 type Session = { token: string; verification: string; preapproved: boolean; code: string };
@@ -64,6 +64,8 @@ export default function Home() {
   const { user } = useAuth();
   // Requests sent to this company's RA ID and the PCs pointed to it.
   const [inbox, setInbox] = useState<MsfwrInbox | null>(null);
+  const [refreshingInbox, setRefreshingInbox] = useState(false);
+  const [savedRaPcs, setSavedRaPcs] = useState<SavedRaPc[]>(loadSavedRaPcs);
   const [connecting, setConnecting] = useState(false);
   const seenRequests = useRef<Set<string> | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -115,6 +117,37 @@ export default function Home() {
     requestsRef.current = next;
     storeRequests(next);
     setRequests(next);
+  }, []);
+
+  // Forces an immediate inbox refresh (the Refresh button on the company view),
+  // on top of the background poll.
+  const refreshInbox = useCallback(async () => {
+    setRefreshingInbox(true);
+    try {
+      const next = await getMsfwrInbox();
+      setInbox(next);
+      seenRequests.current = new Set(next.requests.map((r) => r.id));
+    } catch {
+      setError('Could not reach the relay to refresh. Check your connection and try again.');
+    } finally {
+      setRefreshingInbox(false);
+    }
+  }, []);
+
+  const saveRaPc = useCallback((pc: { id: string; name: string }) => {
+    setSavedRaPcs((list) => {
+      if (list.some((p) => p.id === pc.id)) return list;
+      const next = [{ id: pc.id, name: pc.name, savedAt: Date.now() }, ...list].slice(0, 100);
+      storeSavedRaPcs(next);
+      return next;
+    });
+  }, []);
+  const forgetRaPc = useCallback((id: string) => {
+    setSavedRaPcs((list) => {
+      const next = list.filter((p) => p.id !== id);
+      storeSavedRaPcs(next);
+      return next;
+    });
   }, []);
 
   const waiting = useMemo(() => requests.filter((r) => r.open && r.status === 'waiting'), [requests]);
@@ -460,6 +493,8 @@ export default function Home() {
 
         {tab === 'pcs' && (
           <CompanyPanel inbox={inbox} raId={user.raId} company={user.displayName} now={now} busy={connecting}
+            savedPcs={savedRaPcs} refreshing={refreshingInbox}
+            onRefresh={() => void refreshInbox()} onSave={saveRaPc} onForget={forgetRaPc}
             onConnect={(id) => void connectCompany(() => connectMsfwrPc({ pc: id }), 'Could not connect to that PC.')} />
         )}
 
@@ -540,10 +575,18 @@ export default function Home() {
 }
 
 // The company's own view: PCs pointed to its RA ID, and recent requests.
-function CompanyPanel({ inbox, raId, company, now, busy, onConnect }: {
-  inbox: MsfwrInbox | null; raId: string; company: string; now: number; busy: boolean; onConnect: (id: string) => void;
+function CompanyPanel({ inbox, raId, company, now, busy, savedPcs, refreshing, onRefresh, onSave, onForget, onConnect }: {
+  inbox: MsfwrInbox | null; raId: string; company: string; now: number; busy: boolean;
+  savedPcs: SavedRaPc[]; refreshing: boolean;
+  onRefresh: () => void; onSave: (pc: { id: string; name: string }) => void; onForget: (id: string) => void;
+  onConnect: (id: string) => void;
 }) {
   const recent = inbox?.requests.filter((r) => r.status !== 'waiting').slice(0, 6) ?? [];
+  const savedIds = useMemo(() => new Set(savedPcs.map((p) => p.id)), [savedPcs]);
+  // Saved PCs that are not in the live inbox right now are shown as offline, so
+  // the company's roster persists even when a PC is switched off.
+  const onlineIds = useMemo(() => new Set((inbox?.pcs ?? []).map((p) => p.id)), [inbox]);
+  const savedOffline = savedPcs.filter((p) => !onlineIds.has(p.id));
   return (
     <section aria-labelledby="company-heading" className="dl-rise mb-8 rounded-2xl border bg-card/90 p-4 shadow-[0_10px_30px_-24px_hsl(200_32%_13%/0.5)] md:p-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -555,26 +598,55 @@ function CompanyPanel({ inbox, raId, company, now, busy, onConnect }: {
             PCs whose remote access points to <span className="font-mono font-bold text-primary">{raLabel(raId)}</span>. Their Initiate requests appear above with a chime.
           </p>
         </div>
+        <button type="button" onClick={onRefresh} disabled={refreshing} data-testid="button-refresh-company"
+          className="flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-50">
+          <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> {refreshing ? 'Refreshing…' : 'Refresh'}
+        </button>
       </div>
-      {!inbox ? <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p> : inbox.pcs.length === 0 ? (
+      {!inbox ? <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p> : inbox.pcs.length === 0 && savedOffline.length === 0 ? (
         <EmptyState icon={Laptop} title="No PCs online for your RA ID"
           body={`On a PC with WINRSS.net, open the WINRSS.net window, type ${raLabel(raId)} in the RA ID box and select Save. The PC appears here while it is on and signed in.`} />
       ) : (
         <ul className="mt-4 grid gap-3 sm:grid-cols-2" data-testid="list-company-pcs">
-          {inbox.pcs.map((pc) => (
-            <li key={pc.id} className="flex items-center gap-3 rounded-xl border bg-background/60 p-3" data-testid={`company-pc-${pc.name}`}>
+          {inbox.pcs.map((pc) => {
+            const saved = savedIds.has(pc.id);
+            return (
+              <li key={pc.id} className="flex items-center gap-3 rounded-xl border bg-background/60 p-3" data-testid={`company-pc-${pc.name}`}>
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-foreground/5"><Monitor className="h-5 w-5" /></span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-semibold">{pc.name || 'Windows PC'}</p>
+                  <PresencePill state={pc.state} />
+                </div>
+                <button type="button" aria-pressed={saved} title={saved ? 'Saved to your PCs' : 'Save this PC'}
+                  onClick={() => (saved ? onForget(pc.id) : onSave({ id: pc.id, name: pc.name }))}
+                  data-testid={`button-save-pc-${pc.name}`}
+                  className={`flex shrink-0 items-center gap-1 rounded-xl border px-2.5 py-2 text-sm font-semibold ${saved ? 'border-primary/40 bg-primary/8 text-primary' : 'hover:bg-muted'}`}>
+                  <Star className={`h-4 w-4 ${saved ? 'fill-current' : ''}`} /> <span className="hidden sm:inline">{saved ? 'Saved' : 'Save'}</span>
+                </button>
+                <button type="button" disabled={busy || pc.state !== 'online'} onClick={() => onConnect(pc.id)} data-testid={`button-connect-pc-${pc.name}`}
+                  className="flex items-center gap-1.5 rounded-xl bg-foreground px-3 py-2 text-sm font-bold text-background disabled:opacity-40">
+                  Connect <ArrowRight className="h-4 w-4" />
+                </button>
+              </li>
+            );
+          })}
+          {savedOffline.map((pc) => (
+            <li key={pc.id} className="flex items-center gap-3 rounded-xl border border-dashed bg-background/40 p-3 opacity-80" data-testid={`company-saved-pc-${pc.name}`}>
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-foreground/5"><Monitor className="h-5 w-5" /></span>
               <div className="min-w-0 flex-1">
-                <p className="truncate font-semibold">{pc.name || 'Windows PC'}</p>
-                <PresencePill state={pc.state} />
+                <p className="truncate font-semibold">{pc.name || 'Saved PC'}</p>
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground"><i className="h-1.5 w-1.5 rounded-full bg-foreground/30" /> Saved · offline</span>
               </div>
-              <button type="button" disabled={busy || pc.state !== 'online'} onClick={() => onConnect(pc.id)} data-testid={`button-connect-pc-${pc.name}`}
-                className="flex items-center gap-1.5 rounded-xl bg-foreground px-3 py-2 text-sm font-bold text-background disabled:opacity-40">
-                Connect <ArrowRight className="h-4 w-4" />
+              <button type="button" onClick={() => onForget(pc.id)} title="Forget this PC" data-testid={`button-forget-pc-${pc.name}`}
+                className="flex shrink-0 items-center gap-1 rounded-xl border px-2.5 py-2 text-sm font-semibold text-muted-foreground hover:bg-muted hover:text-foreground">
+                <Star className="h-4 w-4 fill-current text-primary" />
               </button>
             </li>
           ))}
         </ul>
+      )}
+      {savedPcs.length > 0 && (
+        <p className="mt-3 text-xs text-muted-foreground">Saved PCs stay on this list even when they are offline, so you can find and reconnect to them quickly. Saved in this browser only.</p>
       )}
       {recent.length > 0 && (
         <div className="mt-5">

@@ -88,6 +88,40 @@ export function storePCs(pcs: SavedPC[]) {
   write(PCS_KEY, pcs.slice(0, MAX_PCS));
 }
 
+// A company's saved roster of the PCs pointed to its RA ID. Unlike SavedPC it
+// holds no access code — a company connects to these by their relay id — so it
+// is only a convenience list that keeps a PC visible (to reconnect to) even
+// while it is offline. Stored per browser.
+export type SavedRaPc = {
+  id: string;
+  name: string;
+  savedAt: number;
+};
+
+const RA_PCS_KEY = 'Msfwr.raPcs';
+export const MAX_RA_PCS = 100;
+
+export function loadSavedRaPcs(): SavedRaPc[] {
+  const raw = read(RA_PCS_KEY);
+  if (!Array.isArray(raw)) return [];
+  const now = Date.now();
+  const seen = new Set<string>();
+  const out: SavedRaPc[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const r = item as Record<string, unknown>;
+    if (typeof r.id !== 'string' || !r.id || r.id.length > 64 || seen.has(r.id)) continue;
+    seen.add(r.id);
+    out.push({ id: r.id, name: text(r.name), savedAt: time(r.savedAt) ?? now });
+    if (out.length >= MAX_RA_PCS) break;
+  }
+  return out;
+}
+
+export function storeSavedRaPcs(list: SavedRaPc[]) {
+  write(RA_PCS_KEY, list.slice(0, MAX_RA_PCS));
+}
+
 const STATUSES: RequestStatus[] = ['waiting', 'accepted', 'missed', 'dismissed'];
 
 export function loadRequests(): RequestEntry[] {

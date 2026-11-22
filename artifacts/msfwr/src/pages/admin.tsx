@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Brand, RaBadge, UserMenu } from '@/components/user-menu';
 import { errorText, raLabel, useAuth } from '@/lib/auth';
 import { relativeTime } from '@/lib/unattended';
-import { SubscriptionsPanel, PaymentsPanel } from './billing-admin';
+import { SubscriptionsPanel, PaymentsPanel, SessionHistoryPanel } from './billing-admin';
 
 type Tab = 'users' | 'subscriptions' | 'payments' | 'pcs' | 'sessions' | 'requests' | 'activity';
 
@@ -193,6 +193,7 @@ export default function Admin() {
               )}
             </Panel>
           )}
+          {tab === 'sessions' && <div className="mt-4"><SessionHistoryPanel onError={setProblem} /></div>}
           {tab === 'requests' && (
             <Panel title="Initiate requests" icon={Activity} action={<Refresh onClick={reload} />}>
               <RequestList requests={overview.data?.requests ?? []} byRa={byRa} now={now} />

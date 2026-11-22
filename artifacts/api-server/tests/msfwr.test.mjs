@@ -236,6 +236,16 @@ test("a remote access link needs its access code, connects to the PC that made i
   assert.deepEqual(store.linkJoin(link.code, link.pin), {error: "missing"});
 });
 
+test("linkHostRa returns the RA ID of the PC behind a link, for subscription gating", () => {
+  let now = 8_500_000;
+  const store = createMsfwrStore(() => now);
+  store.standing(key("r"), "KIOSK", "246810");
+  const link = store.linkCreate(key("r"), "KIOSK", 4);
+  assert.equal(store.linkHostRa(link.code), "246810", "the link resolves to its PC's RA ID");
+  assert.equal(store.linkHostRa(link.code.toLowerCase()), "246810", "codes are case-insensitive");
+  assert.equal(store.linkHostRa("LDEADBEEF01"), undefined, "an unknown code resolves to nothing");
+});
+
 test("a link locks after repeated wrong access codes and expires on time", () => {
   let now = 9_000_000;
   const store = createMsfwrStore(() => now);
