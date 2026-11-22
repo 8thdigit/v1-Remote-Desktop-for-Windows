@@ -56,3 +56,7 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# Relay login accounts saved locally (MSFWR_DATA_DIR default)
+.data/
+artifacts/api-server/.data/

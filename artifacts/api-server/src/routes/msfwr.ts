@@ -2,13 +2,14 @@ import { Router, raw, type Request, type Response } from "express";
 import {
   JoinMsfwrBody, JoinMsfwrResponse, CreateMsfwrInviteResponse,
   SendMsfwrInputBody, RegisterMsfwrStandingBody, RegisterMsfwrStandingResponse, CallMsfwrBody, ListMsfwrCallsBody, ListMsfwrCallsResponse, TickMsfwrResponse, GetMsfwrFrameQueryParams,
-  CreateMsfwrLinkBody, MsfwrLinkSchema, RegisterMsfwrLinkBody, GetMsfwrLinkStatusQueryParams, MsfwrLinkStatusSchema, RevokeMsfwrLinkBody,
+  CreateMsfwrLinkBody, CreateMsfwrLinkResponse, RegisterMsfwrLinkBody, RegisterMsfwrLinkResponse, GetMsfwrLinkStatusQueryParams, GetMsfwrLinkStatusResponse, RevokeMsfwrLinkBody,
+  GetMsfwrLinkInfoQueryParams, GetMsfwrLinkInfoResponse, JoinMsfwrLinkBody, JoinMsfwrLinkResponse,
+  GetMsfwrInboxResponse, AcceptMsfwrRequestBody, AcceptMsfwrRequestResponse, ConnectMsfwrPcBody, ConnectMsfwrPcResponse,
 } from "@workspace/api-zod";
-import { createMsfwrStore } from "../lib/msfwr";
+import { formatRaId, normalizeRaId } from "../lib/msfwr";
+import { accountsReady, activity, operatorOf, requireUser, store } from "../lib/portal";
 
 const router = Router();
-const store = createMsfwrStore();
-setInterval(store.sweep, 5000).unref();
 
 function throttle(max: number) {
   let since = 0;
@@ -23,6 +24,17 @@ const tooManyInvites = throttle(90);
 const tooManyJoins = throttle(240);
 const tooManyStanding = throttle(240);
 const tooManyCallChecks = throttle(1200);
+const tooManyLinkJoins = throttle(120);
+
+// Checks an RA ID a PC names. "none" when it names none, "unknown" when no
+// active company has it (the PC is told, so its user can fix the ID).
+async function lookupRa(value: string | undefined) {
+  if (!value?.trim()) return {status: "none" as const};
+  const ra = normalizeRaId(value);
+  const owner = ra ? (await accountsReady()).findRa(ra) : undefined;
+  if (!ra || !owner) return {status: "unknown" as const};
+  return {status: "ok" as const, ra, name: owner.displayName};
+}
 
 function auth(req: Request, res: Response, role?: "host" | "viewer") {
   const found = store.authenticate(req.get("authorization"), role);
@@ -38,23 +50,63 @@ router.post("/invite", (_req, res) => {
   if (!invite) { res.status(429).json({error: "Relay busy. Try again in a minute."}); return; }
   res.status(201).json(CreateMsfwrInviteResponse.parse(invite));
 });
-router.post("/standing", (req, res) => {
+router.post("/standing", async (req, res) => {
   if (tooManyStanding()) { res.status(429).json({error: "Relay busy. Try again in a minute."}); return; }
   const body = RegisterMsfwrStandingBody.safeParse(req.body);
   if (!body.success) { res.status(400).json({error: "Invalid unattended access key."}); return; }
-  const standing = store.standing(body.data.key, body.data.name);
+  const ra = await lookupRa(body.data.ra);
+  const standing = store.standing(body.data.key, body.data.name, ra.status === "ok" ? ra.ra : undefined);
   if (!standing) { res.status(409).json({error: "Relay busy, or the code is in use by another session."}); return; }
-  res.status(201).json(RegisterMsfwrStandingResponse.parse(standing));
+  res.status(201).json(RegisterMsfwrStandingResponse.parse({...standing, raStatus: ra.status, ...(ra.status === "ok" ? {raName: ra.name} : {})}));
 });
-router.post("/call", (req, res) => {
+router.post("/call", async (req, res) => {
   const s = auth(req, res, "host");
   if (!s) return;
   const body = CallMsfwrBody.safeParse(req.body ?? {});
   if (!body.success) { res.status(400).json({error: "Invalid request."}); return; }
-  if (!store.call(s, body.data.name ?? "")) { res.status(409).json({error: "Only a waiting unattended host can initiate."}); return; }
+  let ra = s.ra;
+  if (body.data.ra?.trim()) {
+    const found = await lookupRa(body.data.ra);
+    // 422 tells the PC that the RA ID it was given does not belong to any company.
+    if (found.status !== "ok") { res.status(422).json({error: "No active company has that RA ID."}); return; }
+    ra = found.ra;
+  }
+  const fresh = !s.call || s.call.until <= Date.now() || s.call.ra !== ra;
+  if (!store.call(s, body.data.name ?? "", undefined, ra)) { res.status(409).json({error: "Only a waiting host can initiate."}); return; }
+  if (fresh) activity.add("request", `${s.call?.name || "A PC"} asked IT to connect${ra ? ` (${formatRaId(ra)})` : ""}`);
   res.sendStatus(204);
 });
-router.post("/calls", (req, res) => {
+// --- Signed-in companies: requests and PCs for their RA ID ---
+router.get("/inbox", requireUser(), (req, res) => {
+  const user = req.account!;
+  res.json(GetMsfwrInboxResponse.parse({raId: user.raId, company: user.displayName, ...store.inbox(user.raId)}));
+});
+router.post("/accept", requireUser(), (req, res) => {
+  if (tooManyJoins()) { res.status(429).json({error: "Too many attempts. Try again in a minute."}); return; }
+  const body = AcceptMsfwrRequestBody.safeParse(req.body);
+  if (!body.success) { res.status(400).json({error: "Invalid request."}); return; }
+  const user = req.account!;
+  const result = store.accept(body.data.id, operatorOf(user));
+  if (!result.viewer) {
+    res.status(result.error === "accepted" ? 409 : 404).json({error: result.error === "accepted"
+      ? "This request was already accepted."
+      : "This request is no longer open. The PC may have gone offline or the request timed out."});
+    return;
+  }
+  activity.add("accept", `${user.displayName} (${formatRaId(user.raId)}) accepted a request and connected`, user.username);
+  res.json(AcceptMsfwrRequestResponse.parse(result.viewer));
+});
+router.post("/connect", requireUser(), (req, res) => {
+  if (tooManyJoins()) { res.status(429).json({error: "Too many attempts. Try again in a minute."}); return; }
+  const body = ConnectMsfwrPcBody.safeParse(req.body);
+  if (!body.success) { res.status(400).json({error: "Invalid request."}); return; }
+  const user = req.account!;
+  const viewer = store.connectPc(body.data.pc, operatorOf(user));
+  if (!viewer) { res.status(404).json({error: "That PC is not available right now. It may be offline, locked, or already in a session."}); return; }
+  activity.add("connect", `${user.displayName} (${formatRaId(user.raId)}) connected to a PC`, user.username);
+  res.json(ConnectMsfwrPcResponse.parse(viewer));
+});
+router.post("/calls", requireUser(), (req, res) => {
   if (tooManyCallChecks()) { res.status(429).json({error: "Too many checks. Try again in a minute."}); return; }
   const body = ListMsfwrCallsBody.safeParse(req.body);
   if (!body.success) { res.status(400).json({error: "Send up to 50 saved access codes."}); return; }
@@ -67,35 +119,68 @@ router.post("/link/create", (req, res) => {
   if (!body.success) { res.status(400).json({error: "Invalid unattended access key."}); return; }
   const link = store.linkCreate(body.data.key, body.data.name ?? "", body.data.ttlHours);
   if (!link) { res.status(409).json({error: "Relay busy. Try again in a minute."}); return; }
-  res.status(201).json(MsfwrLinkSchema.parse(link));
+  activity.add("link", `${link.name || "A PC"} created a remote access URL (${link.ttlHours} h)`);
+  res.status(201).json(CreateMsfwrLinkResponse.parse(link));
 });
+// The PC sends its saved link again whenever it registers, so the link is
+// restored if the relay restarted.
 router.post("/link/register", (req, res) => {
   if (tooManyStanding()) { res.status(429).json({error: "Relay busy. Try again in a minute."}); return; }
   const body = RegisterMsfwrLinkBody.safeParse(req.body);
   if (!body.success) { res.status(400).json({error: "Invalid link registration."}); return; }
-  const invite = store.linkRegister(body.data.id, body.data.key);
-  if (!invite) { res.status(410).json({error: "This remote access link expired or was revoked."}); return; }
-  res.status(201).json(RegisterMsfwrStandingResponse.parse(invite));
+  const link = store.linkRestore(body.data);
+  if (!link) { res.status(410).json({error: "This remote access URL expired or was cleared."}); return; }
+  res.status(201).json(RegisterMsfwrLinkResponse.parse(link));
 });
 router.get("/link/status", (req, res) => {
   const query = GetMsfwrLinkStatusQueryParams.safeParse(req.query);
   if (!query.success) { res.status(400).json({error: "Invalid link lookup."}); return; }
   const status = store.linkStatus(query.data.id, query.data.key);
-  if (!status) { res.status(404).json({error: "Link not found, expired, or revoked."}); return; }
-  res.json(MsfwrLinkStatusSchema.parse(status));
+  if (!status) { res.status(404).json({error: "Link not found, expired, or cleared."}); return; }
+  res.json(GetMsfwrLinkStatusResponse.parse(status));
 });
 router.post("/link/revoke", (req, res) => {
   const body = RevokeMsfwrLinkBody.safeParse(req.body);
   if (!body.success) { res.status(400).json({error: "Invalid link revocation."}); return; }
-  if (!store.linkRevoke(body.data.id, body.data.key)) { res.status(404).json({error: "Link not found, expired, or revoked."}); return; }
+  if (!store.linkRevoke(body.data.id, body.data.key)) { res.status(404).json({error: "Link not found, expired, or cleared."}); return; }
   res.sendStatus(204);
 });
-router.post("/join", (req, res) => {
+// Public: the page a shared link opens reads this, then asks for the access code.
+router.get("/link/info", (req, res) => {
+  const query = GetMsfwrLinkInfoQueryParams.safeParse({code: String(req.query["code"] ?? "").toUpperCase()});
+  if (!query.success) { res.status(400).json({error: "That is not a remote access URL."}); return; }
+  const info = store.linkInfo(query.data.code);
+  if (!info) { res.status(404).json({error: "This remote access URL expired or was cleared on the PC."}); return; }
+  res.json(GetMsfwrLinkInfoResponse.parse(info));
+});
+router.post("/link/join", (req, res) => {
+  if (tooManyLinkJoins()) { res.status(429).json({error: "Too many attempts. Try again in a minute."}); return; }
+  const body = JoinMsfwrLinkBody.safeParse({...req.body, code: String(req.body?.code ?? "").toUpperCase()});
+  if (!body.success) { res.status(400).json({error: "Enter the access code that came with the link."}); return; }
+  const result = store.linkJoin(body.data.code, body.data.pin);
+  if (!result.viewer) {
+    const answers = {
+      missing: [404, "This remote access URL expired or was cleared on the PC."],
+      locked: [429, "Too many wrong access codes. This link is locked for 15 minutes."],
+      pin: [403, "That access code is not correct."],
+      offline: [409, "The PC is offline or locked right now. Try again when it is on and signed in."],
+      busy: [409, "Someone is already connected to this PC. Try again when that session ends."],
+    } as const;
+    const [status, error] = answers[result.error];
+    res.status(status).json({error});
+    return;
+  }
+  activity.add("link-join", `Someone connected to ${result.name || "a PC"} through its remote access URL`);
+  res.json(JoinMsfwrLinkResponse.parse(result.viewer));
+});
+router.post("/join", requireUser(), (req, res) => {
   if (tooManyJoins()) { res.status(429).json({error: "Too many attempts. Try again in a minute."}); return; }
   const body = JoinMsfwrBody.safeParse(req.body);
   if (!body.success) { res.status(400).json({error: "Enter a 12-character code from the host."}); return; }
-  const viewer = store.join(body.data.code);
+  const user = req.account!;
+  const viewer = store.join(body.data.code, operatorOf(user));
   if (!viewer) { res.status(404).json({error: "Code not found, already used, or expired."}); return; }
+  activity.add("join", `${user.displayName} connected with ${viewer.preapproved ? "an unattended access code" : "a one-time code"}`, user.username);
   res.json(JoinMsfwrResponse.parse(viewer));
 });
 router.post("/approve", (req, res) => {
@@ -107,6 +192,7 @@ router.post("/approve", (req, res) => {
 router.post("/end", (req, res) => {
   const s = auth(req, res);
   if (!s) return;
+  if (s.state === "live") activity.add("end", `Session ${s.name ? `with ${s.name} ` : ""}ended${s.operator ? ` (${s.operator.name})` : ""}`);
   store.end(s);
   res.sendStatus(204);
 });

@@ -151,3 +151,106 @@ test("presence reports online and busy unattended PCs only to viewers that know 
   const attended = store.invite();
   assert.deepEqual(store.presence([attended.code]), []);
 });
+
+const key = (c) => c.repeat(43);
+const op = (raId, id = "u1") => ({id, name: "Acme Ltd", raId});
+
+test("a PC pointed at an RA ID shows up for that company, which can connect without the access code", () => {
+  let now = 5_000_000;
+  const store = createMsfwrStore(() => now);
+  const host = store.standing(key("a"), "PC-ONE", "123456");
+  store.standing(key("b"), "PC-OTHER", "654321");
+  const mine = store.inbox("123456");
+  assert.deepEqual(mine.pcs.map((p) => [p.name, p.state]), [["PC-ONE", "online"]]);
+  assert.ok(!JSON.stringify(mine).includes(host.code), "the access code never reaches the portal");
+  assert.equal(store.connectPc(mine.pcs[0].id, op("654321")), undefined, "another company cannot use the id");
+  const viewer = store.connectPc(mine.pcs[0].id, op("123456"));
+  assert.equal(viewer.preapproved, true);
+  assert.equal(store.inbox("123456").pcs[0].state, "busy");
+});
+
+test("Initiate with an RA ID reaches that company's inbox only, and accepting it goes live", () => {
+  let now = 6_000_000;
+  const store = createMsfwrStore(() => now);
+  const host = store.standing(key("c"), "FRONT-DESK", "111111");
+  const s = store.authenticate(bearer(host.token), "host");
+  assert.equal(store.call(s, "FRONT-DESK"), true);
+  const inbox = store.inbox("111111");
+  assert.equal(inbox.requests.length, 1);
+  assert.equal(inbox.requests[0].status, "waiting");
+  assert.equal(inbox.requests[0].code, undefined);
+  assert.equal(store.inbox("222222").requests.length, 0);
+  assert.deepEqual(store.accept(inbox.requests[0].id, op("222222")), {error: "missing"});
+  const { viewer } = store.accept(inbox.requests[0].id, op("111111"));
+  assert.equal(viewer.preapproved, true);
+  assert.equal(store.tick(s).state, "live");
+  const after = store.inbox("111111").requests[0];
+  assert.equal(after.status, "accepted");
+  assert.equal(after.acceptedBy, "Acme Ltd");
+  assert.deepEqual(store.accept(after.id, op("111111")), {error: "accepted"});
+});
+
+test("an unanswered request is marked missed after two minutes", () => {
+  let now = 7_000_000;
+  const store = createMsfwrStore(() => now);
+  const host = store.standing(key("d"), "PC", "333333");
+  const s = store.authenticate(bearer(host.token), "host");
+  store.call(s, "PC");
+  now += 2 * 60_000 + 1;
+  store.authenticate(bearer(host.token), "host");
+  assert.equal(store.inbox("333333").requests[0].status, "missed");
+});
+
+test("a remote access link needs its access code, connects to the PC that made it, and stops when cleared", () => {
+  let now = 8_000_000;
+  const store = createMsfwrStore(() => now);
+  const host = store.standing(key("e"), "LAPTOP", undefined);
+  const link = store.linkCreate(key("e"), "LAPTOP", 4);
+  assert.match(link.code, /^L[0-9A-F]{11}$/);
+  assert.match(link.pin, /^\d{6}$/);
+  assert.equal(link.expiresAt - link.createdAt, 4 * 3_600_000);
+  assert.equal(link.key, undefined);
+  const info = store.linkInfo(link.code.toLowerCase());
+  assert.deepEqual([info.name, info.online, info.busy], ["LAPTOP", true, false]);
+  const wrong = link.pin === "000000" ? "000001" : "000000";
+  assert.deepEqual(store.linkJoin(link.code, wrong), {error: "pin"});
+  const ok = store.linkJoin(link.code, link.pin);
+  assert.equal(ok.viewer.preapproved, true);
+  const s = store.authenticate(bearer(host.token), "host");
+  assert.equal(store.tick(s).state, "live");
+  assert.deepEqual(store.linkJoin(link.code, link.pin), {error: "busy"});
+  assert.equal(store.linkStatus(link.id, key("e")).link.sessions, 1);
+  assert.equal(store.linkRevoke(link.id, key("f")), false, "only the PC's key can clear it");
+  assert.equal(store.linkRevoke(link.id, key("e")), true);
+  assert.equal(store.linkInfo(link.code), undefined);
+  assert.deepEqual(store.linkJoin(link.code, link.pin), {error: "missing"});
+});
+
+test("a link locks after repeated wrong access codes and expires on time", () => {
+  let now = 9_000_000;
+  const store = createMsfwrStore(() => now);
+  store.standing(key("g"), "PC");
+  const link = store.linkCreate(key("g"), "PC", 1);
+  const wrong = link.pin === "000000" ? "000001" : "000000";
+  for (let i = 0; i < 8; i++) store.linkJoin(link.code, wrong);
+  assert.deepEqual(store.linkJoin(link.code, link.pin), {error: "locked"});
+  now += 15 * 60_000 + 1;
+  store.standing(key("g"), "PC");
+  assert.ok(store.linkJoin(link.code, link.pin).viewer);
+  now += 60 * 60_000;
+  assert.equal(store.linkInfo(link.code), undefined);
+});
+
+test("only the PC that owns a link can restore it after a relay restart", () => {
+  const first = createMsfwrStore(() => 10_000_000);
+  const link = first.linkCreate(key("h"), "PC", 24);
+  const second = createMsfwrStore(() => 10_000_000 + 60_000);
+  const saved = {id: link.id, key: key("h"), pin: link.pin, name: "PC", createdAt: link.createdAt, expiresAt: link.expiresAt};
+  const thief = second.linkRestore({...saved, key: key("i")});
+  assert.notEqual(thief.code, link.code, "another key gets a different public code");
+  const restored = second.linkRestore(saved);
+  assert.equal(restored.code, link.code);
+  assert.equal(restored.pin, link.pin);
+  const third = createMsfwrStore(() => 10_000_000 + 60_000);
+  assert.equal(third.linkRestore({...saved, expiresAt: 10_000_000}), undefined, "expired links are not restored");
+});

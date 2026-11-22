@@ -19,7 +19,9 @@ export const HealthCheckResponse = zod.object({
 
 export const CreateMsfwrInviteResponse = zod.object({
   "code": zod.string(),
-  "token": zod.string()
+  "token": zod.string(),
+  "raStatus": zod.enum(['none', 'ok', 'unknown']).optional().describe('Unattended hosts: whether the RA ID they named belongs to an active company'),
+  "raName": zod.string().optional().describe('The company name behind the RA ID')
 })
 
 
@@ -29,16 +31,21 @@ export const CreateMsfwrInviteResponse = zod.object({
 export const registerMsfwrStandingBodyKeyRegExp = new RegExp('^[A-Za-z0-9_-]{43}$');
 export const registerMsfwrStandingBodyNameMax = 64;
 
+export const registerMsfwrStandingBodyRaMax = 16;
+
 
 
 export const RegisterMsfwrStandingBody = zod.object({
   "key": zod.string().regex(registerMsfwrStandingBodyKeyRegExp),
-  "name": zod.string().max(registerMsfwrStandingBodyNameMax).optional()
+  "name": zod.string().max(registerMsfwrStandingBodyNameMax).optional(),
+  "ra": zod.string().max(registerMsfwrStandingBodyRaMax).optional().describe('RA ID this PC\'s remote access points to (RA-123456 or 123456); empty for none')
 })
 
 export const RegisterMsfwrStandingResponse = zod.object({
   "code": zod.string(),
-  "token": zod.string()
+  "token": zod.string(),
+  "raStatus": zod.enum(['none', 'ok', 'unknown']).optional().describe('Unattended hosts: whether the RA ID they named belongs to an active company'),
+  "raName": zod.string().optional().describe('The company name behind the RA ID')
 })
 
 
@@ -47,10 +54,13 @@ export const RegisterMsfwrStandingResponse = zod.object({
  */
 export const callMsfwrBodyNameMax = 64;
 
+export const callMsfwrBodyRaMax = 16;
+
 
 
 export const CallMsfwrBody = zod.object({
-  "name": zod.string().max(callMsfwrBodyNameMax).optional()
+  "name": zod.string().max(callMsfwrBodyNameMax).optional(),
+  "ra": zod.string().max(callMsfwrBodyRaMax).optional()
 })
 
 export const CallMsfwrResponse = zod.void()
@@ -78,6 +88,436 @@ export const ListMsfwrCallsResponse = zod.object({
   "name": zod.string(),
   "state": zod.enum(['online', 'busy'])
 })).optional()
+})
+
+
+/**
+ * Create a shareable remote access URL from the client app, with a six-digit access code. Whoever opens the URL and enters the code connects to the PC without a prompt, until the link expires (24 hours by default) or is cleared on the PC. Requires the PC's unattended access key.
+ */
+export const createMsfwrLinkBodyKeyRegExp = new RegExp('^[A-Za-z0-9_-]{43}$');
+export const createMsfwrLinkBodyNameMax = 64;
+
+export const createMsfwrLinkBodyTtlHoursDefault = 24;
+
+export const CreateMsfwrLinkBody = zod.object({
+  "key": zod.string().regex(createMsfwrLinkBodyKeyRegExp),
+  "name": zod.string().max(createMsfwrLinkBodyNameMax).optional(),
+  "ttlHours": zod.union([zod.literal(1),zod.literal(2),zod.literal(4),zod.literal(5),zod.literal(8),zod.literal(12),zod.literal(24),zod.literal(48),zod.literal(72),zod.literal(120)]).default(createMsfwrLinkBodyTtlHoursDefault)
+})
+
+export const createMsfwrLinkResponseCodeRegExp = new RegExp('^L[0-9A-F]{11}$');
+export const createMsfwrLinkResponsePinRegExp = new RegExp('^[0-9]{6}$');
+export const createMsfwrLinkResponseSessionsMin = 0;
+
+
+
+export const CreateMsfwrLinkResponse = zod.object({
+  "id": zod.string(),
+  "code": zod.string().regex(createMsfwrLinkResponseCodeRegExp),
+  "pin": zod.string().regex(createMsfwrLinkResponsePinRegExp).optional().describe('The access code viewers enter on the link page'),
+  "name": zod.string(),
+  "createdAt": zod.number(),
+  "expiresAt": zod.number(),
+  "ttlHours": zod.int().optional(),
+  "sessions": zod.int().min(createMsfwrLinkResponseSessionsMin)
+})
+
+
+/**
+ * The PC sends its saved link again each time it registers, so the link is restored if the relay restarted. Only the PC that owns the link can restore it, because the link's code is derived from its key.
+ */
+export const registerMsfwrLinkBodyIdMax = 64;
+
+export const registerMsfwrLinkBodyKeyRegExp = new RegExp('^[A-Za-z0-9_-]{43}$');
+export const registerMsfwrLinkBodyPinRegExp = new RegExp('^[0-9]{6}$');
+export const registerMsfwrLinkBodyNameMax = 64;
+
+
+
+export const RegisterMsfwrLinkBody = zod.object({
+  "id": zod.string().max(registerMsfwrLinkBodyIdMax),
+  "key": zod.string().regex(registerMsfwrLinkBodyKeyRegExp),
+  "pin": zod.string().regex(registerMsfwrLinkBodyPinRegExp).optional().describe('Restores a link the relay lost on restart'),
+  "name": zod.string().max(registerMsfwrLinkBodyNameMax).optional(),
+  "createdAt": zod.number().optional(),
+  "expiresAt": zod.number().optional()
+})
+
+export const registerMsfwrLinkResponseCodeRegExp = new RegExp('^L[0-9A-F]{11}$');
+export const registerMsfwrLinkResponsePinRegExp = new RegExp('^[0-9]{6}$');
+export const registerMsfwrLinkResponseSessionsMin = 0;
+
+
+
+export const RegisterMsfwrLinkResponse = zod.object({
+  "id": zod.string(),
+  "code": zod.string().regex(registerMsfwrLinkResponseCodeRegExp),
+  "pin": zod.string().regex(registerMsfwrLinkResponsePinRegExp).optional().describe('The access code viewers enter on the link page'),
+  "name": zod.string(),
+  "createdAt": zod.number(),
+  "expiresAt": zod.number(),
+  "ttlHours": zod.int().optional(),
+  "sessions": zod.int().min(registerMsfwrLinkResponseSessionsMin)
+})
+
+
+/**
+ * Current state of a link for the client app: validity, whether the host is registered and online, and how many sessions were opened.
+ */
+export const getMsfwrLinkStatusQueryKeyRegExp = new RegExp('^[A-Za-z0-9_-]{43}$');
+
+
+export const GetMsfwrLinkStatusQueryParams = zod.object({
+  "id": zod.coerce.string(),
+  "key": zod.coerce.string().regex(getMsfwrLinkStatusQueryKeyRegExp)
+})
+
+export const getMsfwrLinkStatusResponseLinkCodeRegExp = new RegExp('^L[0-9A-F]{11}$');
+export const getMsfwrLinkStatusResponseLinkPinRegExp = new RegExp('^[0-9]{6}$');
+export const getMsfwrLinkStatusResponseLinkSessionsMin = 0;
+
+
+
+export const GetMsfwrLinkStatusResponse = zod.object({
+  "link": zod.object({
+  "id": zod.string(),
+  "code": zod.string().regex(getMsfwrLinkStatusResponseLinkCodeRegExp),
+  "pin": zod.string().regex(getMsfwrLinkStatusResponseLinkPinRegExp).optional().describe('The access code viewers enter on the link page'),
+  "name": zod.string(),
+  "createdAt": zod.number(),
+  "expiresAt": zod.number(),
+  "ttlHours": zod.int().optional(),
+  "sessions": zod.int().min(getMsfwrLinkStatusResponseLinkSessionsMin)
+}),
+  "online": zod.boolean(),
+  "busy": zod.boolean()
+})
+
+
+/**
+ * Revoke a link at once; any live session under it is ended.
+ */
+export const revokeMsfwrLinkBodyIdMax = 64;
+
+export const revokeMsfwrLinkBodyKeyRegExp = new RegExp('^[A-Za-z0-9_-]{43}$');
+export const revokeMsfwrLinkBodyPinRegExp = new RegExp('^[0-9]{6}$');
+export const revokeMsfwrLinkBodyNameMax = 64;
+
+
+
+export const RevokeMsfwrLinkBody = zod.object({
+  "id": zod.string().max(revokeMsfwrLinkBodyIdMax),
+  "key": zod.string().regex(revokeMsfwrLinkBodyKeyRegExp),
+  "pin": zod.string().regex(revokeMsfwrLinkBodyPinRegExp).optional().describe('Restores a link the relay lost on restart'),
+  "name": zod.string().max(revokeMsfwrLinkBodyNameMax).optional(),
+  "createdAt": zod.number().optional(),
+  "expiresAt": zod.number().optional()
+})
+
+export const RevokeMsfwrLinkResponse = zod.void()
+
+
+/**
+ * Public facts about a shared remote access URL, for the page it opens: the PC name, whether the PC is online, and when the link expires.
+ */
+export const getMsfwrLinkInfoQueryCodeRegExp = new RegExp('^L[0-9A-F]{11}$');
+
+
+export const GetMsfwrLinkInfoQueryParams = zod.object({
+  "code": zod.coerce.string().regex(getMsfwrLinkInfoQueryCodeRegExp)
+})
+
+export const GetMsfwrLinkInfoResponse = zod.object({
+  "code": zod.string(),
+  "name": zod.string(),
+  "online": zod.boolean(),
+  "busy": zod.boolean(),
+  "expiresAt": zod.number()
+})
+
+
+/**
+ * Open a session through a shared remote access URL. The viewer gives the link's access code; the PC connects without a prompt.
+ */
+export const joinMsfwrLinkBodyCodeRegExp = new RegExp('^L[0-9A-F]{11}$');
+export const joinMsfwrLinkBodyPinMax = 12;
+
+
+
+export const JoinMsfwrLinkBody = zod.object({
+  "code": zod.string().regex(joinMsfwrLinkBodyCodeRegExp),
+  "pin": zod.string().max(joinMsfwrLinkBodyPinMax)
+})
+
+export const JoinMsfwrLinkResponse = zod.object({
+  "token": zod.string(),
+  "verification": zod.string(),
+  "preapproved": zod.boolean()
+})
+
+
+/**
+ * For the signed-in company: Initiate requests sent to its RA ID and the PCs whose remote access points to its RA ID.
+ */
+export const GetMsfwrInboxResponse = zod.object({
+  "raId": zod.string(),
+  "company": zod.string(),
+  "requests": zod.array(zod.object({
+  "id": zod.string(),
+  "ra": zod.string().optional(),
+  "name": zod.string(),
+  "at": zod.number(),
+  "until": zod.number(),
+  "status": zod.enum(['waiting', 'accepted', 'missed']),
+  "closedAt": zod.number().optional(),
+  "acceptedBy": zod.string().optional()
+})),
+  "pcs": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "state": zod.enum(['online', 'busy'])
+}))
+})
+
+
+export const acceptMsfwrRequestBodyIdMax = 64;
+
+
+
+export const AcceptMsfwrRequestBody = zod.object({
+  "id": zod.string().max(acceptMsfwrRequestBodyIdMax)
+})
+
+export const AcceptMsfwrRequestResponse = zod.object({
+  "token": zod.string(),
+  "verification": zod.string(),
+  "preapproved": zod.boolean()
+})
+
+
+/**
+ * Connect to an online PC whose remote access points to the company's RA ID.
+ */
+export const connectMsfwrPcBodyPcMax = 64;
+
+
+
+export const ConnectMsfwrPcBody = zod.object({
+  "pc": zod.string().max(connectMsfwrPcBodyPcMax)
+})
+
+export const ConnectMsfwrPcResponse = zod.object({
+  "token": zod.string(),
+  "verification": zod.string(),
+  "preapproved": zod.boolean()
+})
+
+
+export const GetAuthStatusResponse = zod.object({
+  "setupRequired": zod.boolean(),
+  "user": zod.object({
+  "id": zod.string(),
+  "username": zod.string(),
+  "displayName": zod.string(),
+  "role": zod.enum(['admin', 'company']),
+  "raId": zod.string(),
+  "disabled": zod.boolean(),
+  "createdAt": zod.number(),
+  "lastLoginAt": zod.number().optional()
+}).optional()
+})
+
+
+export const setupAdminBodySetupCodeMax = 32;
+
+export const setupAdminBodyUsernameMax = 64;
+
+export const setupAdminBodyDisplayNameMax = 80;
+
+export const setupAdminBodyPasswordMax = 200;
+
+
+
+export const SetupAdminBody = zod.object({
+  "setupCode": zod.string().max(setupAdminBodySetupCodeMax),
+  "username": zod.string().max(setupAdminBodyUsernameMax),
+  "displayName": zod.string().max(setupAdminBodyDisplayNameMax).optional(),
+  "password": zod.string().max(setupAdminBodyPasswordMax)
+})
+
+export const SetupAdminResponse = zod.object({
+  "id": zod.string(),
+  "username": zod.string(),
+  "displayName": zod.string(),
+  "role": zod.enum(['admin', 'company']),
+  "raId": zod.string(),
+  "disabled": zod.boolean(),
+  "createdAt": zod.number(),
+  "lastLoginAt": zod.number().optional()
+})
+
+
+export const loginBodyUsernameMax = 64;
+
+export const loginBodyPasswordMax = 200;
+
+
+
+export const LoginBody = zod.object({
+  "username": zod.string().max(loginBodyUsernameMax),
+  "password": zod.string().max(loginBodyPasswordMax)
+})
+
+export const LoginResponse = zod.object({
+  "id": zod.string(),
+  "username": zod.string(),
+  "displayName": zod.string(),
+  "role": zod.enum(['admin', 'company']),
+  "raId": zod.string(),
+  "disabled": zod.boolean(),
+  "createdAt": zod.number(),
+  "lastLoginAt": zod.number().optional()
+})
+
+
+export const LogoutResponse = zod.void()
+
+
+export const changePasswordBodyCurrentMax = 200;
+
+export const changePasswordBodyNextMax = 200;
+
+
+
+export const ChangePasswordBody = zod.object({
+  "current": zod.string().max(changePasswordBodyCurrentMax),
+  "next": zod.string().max(changePasswordBodyNextMax)
+})
+
+export const ChangePasswordResponse = zod.void()
+
+
+export const ListUsersResponse = zod.object({
+  "users": zod.array(zod.object({
+  "id": zod.string(),
+  "username": zod.string(),
+  "displayName": zod.string(),
+  "role": zod.enum(['admin', 'company']),
+  "raId": zod.string(),
+  "disabled": zod.boolean(),
+  "createdAt": zod.number(),
+  "lastLoginAt": zod.number().optional()
+}))
+})
+
+
+export const createUserBodyUsernameMax = 64;
+
+export const createUserBodyDisplayNameMax = 80;
+
+export const createUserBodyPasswordMax = 200;
+
+export const createUserBodyRaIdMax = 16;
+
+
+
+export const CreateUserBody = zod.object({
+  "username": zod.string().max(createUserBodyUsernameMax),
+  "displayName": zod.string().max(createUserBodyDisplayNameMax).optional(),
+  "password": zod.string().max(createUserBodyPasswordMax),
+  "role": zod.enum(['admin', 'company']),
+  "raId": zod.string().max(createUserBodyRaIdMax).optional().describe('Optional; six digits. A unique one is generated when empty.')
+})
+
+export const CreateUserResponse = zod.object({
+  "id": zod.string(),
+  "username": zod.string(),
+  "displayName": zod.string(),
+  "role": zod.enum(['admin', 'company']),
+  "raId": zod.string(),
+  "disabled": zod.boolean(),
+  "createdAt": zod.number(),
+  "lastLoginAt": zod.number().optional()
+})
+
+
+export const UpdateUserParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const updateUserBodyDisplayNameMax = 80;
+
+export const updateUserBodyPasswordMax = 200;
+
+export const updateUserBodyRaIdMax = 16;
+
+
+
+export const UpdateUserBody = zod.object({
+  "displayName": zod.string().max(updateUserBodyDisplayNameMax).optional(),
+  "password": zod.string().max(updateUserBodyPasswordMax).optional(),
+  "role": zod.enum(['admin', 'company']).optional(),
+  "disabled": zod.boolean().optional(),
+  "raId": zod.string().max(updateUserBodyRaIdMax).optional()
+})
+
+export const UpdateUserResponse = zod.object({
+  "id": zod.string(),
+  "username": zod.string(),
+  "displayName": zod.string(),
+  "role": zod.enum(['admin', 'company']),
+  "raId": zod.string(),
+  "disabled": zod.boolean(),
+  "createdAt": zod.number(),
+  "lastLoginAt": zod.number().optional()
+})
+
+
+export const DeleteUserParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeleteUserResponse = zod.void()
+
+
+export const GetAdminOverviewResponse = zod.object({
+  "live": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "mode": zod.enum(['unattended', 'attended', 'link']),
+  "state": zod.enum(['waiting', 'pending', 'live']),
+  "ra": zod.string().optional(),
+  "operator": zod.string().optional(),
+  "createdAt": zod.number(),
+  "liveAt": zod.number().optional()
+})),
+  "pcs": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "mode": zod.enum(['unattended', 'attended', 'link']),
+  "state": zod.enum(['waiting', 'pending', 'live']),
+  "ra": zod.string().optional(),
+  "operator": zod.string().optional(),
+  "createdAt": zod.number(),
+  "liveAt": zod.number().optional()
+})),
+  "requests": zod.array(zod.object({
+  "id": zod.string(),
+  "ra": zod.string().optional(),
+  "name": zod.string(),
+  "at": zod.number(),
+  "until": zod.number(),
+  "status": zod.enum(['waiting', 'accepted', 'missed']),
+  "closedAt": zod.number().optional(),
+  "acceptedBy": zod.string().optional()
+})),
+  "activity": zod.array(zod.object({
+  "at": zod.number(),
+  "kind": zod.string(),
+  "actor": zod.string().optional(),
+  "text": zod.string()
+})),
+  "storage": zod.string()
 })
 
 
@@ -169,73 +609,6 @@ export const getMsfwrFrameQueryAfterMin = 0;
 export const GetMsfwrFrameQueryParams = zod.object({
   "after": zod.coerce.number().int().min(getMsfwrFrameQueryAfterMin).optional()
 })
-
-
-/**
- * Create a shareable remote access URL from the client app. The host PC registers a waiting session under the link's code; every viewer that opens the shared URL starts a new session without approval, until the link expires (24 hours by default) or is revoked. Requires the unattended access key of the PC.
- */
-export const createMsfwrLinkBodyKeyRegExp = new RegExp('^[A-Za-z0-9_-]{43}$');
-export const createMsfwrLinkBodyNameMax = 64;
-
-
-
-export const CreateMsfwrLinkBody = zod.object({
-  "key": zod.string().regex(createMsfwrLinkBodyKeyRegExp),
-  "name": zod.string().max(createMsfwrLinkBodyNameMax).optional(),
-  "ttlHours": zod.union([zod.literal(1), zod.literal(2), zod.literal(4), zod.literal(5), zod.literal(8), zod.literal(12), zod.literal(24), zod.literal(48), zod.literal(72), zod.literal(120)]).optional()
-})
-
-export const MsfwrLinkSchema = zod.object({
-  "id": zod.string(),
-  "code": zod.string().regex(new RegExp('^L[0-9A-F]{11}$')),
-  "name": zod.string(),
-  "createdAt": zod.number(),
-  "expiresAt": zod.number(),
-  "ttlHours": zod.union([zod.literal(1), zod.literal(2), zod.literal(4), zod.literal(5), zod.literal(8), zod.literal(12), zod.literal(24), zod.literal(48), zod.literal(72), zod.literal(120)]),
-  "sessions": zod.number().int().min(0)
-})
-
-
-/**
- * The host re-registers its waiting session under an existing link id after each session ends, so the shared URL keeps accepting viewers until it expires or is revoked.
- */
-export const registerMsfwrLinkBodyIdMax = 64;
-export const registerMsfwrLinkBodyKeyRegExp = new RegExp('^[A-Za-z0-9_-]{43}$');
-
-
-
-export const RegisterMsfwrLinkBody = zod.object({
-  "id": zod.string().max(registerMsfwrLinkBodyIdMax),
-  "key": zod.string().regex(registerMsfwrLinkBodyKeyRegExp)
-})
-
-export const RegisterMsfwrLinkResponse = zod.object({
-  "code": zod.string(),
-  "token": zod.string()
-})
-
-export const getMsfwrLinkStatusQueryIdRegExp = new RegExp('^[A-Za-z0-9_-]{1,64}$');
-export const getMsfwrLinkStatusQueryKeyRegExp = new RegExp('^[A-Za-z0-9_-]{43}$');
-
-
-
-export const GetMsfwrLinkStatusQueryParams = zod.object({
-  "id": zod.string().regex(getMsfwrLinkStatusQueryIdRegExp),
-  "key": zod.string().regex(getMsfwrLinkStatusQueryKeyRegExp)
-})
-
-export const MsfwrLinkStatusSchema = zod.object({
-  "link": MsfwrLinkSchema,
-  "online": zod.boolean(),
-  "busy": zod.boolean()
-})
-
-export const RevokeMsfwrLinkBody = zod.object({
-  "id": zod.string().max(registerMsfwrLinkBodyIdMax),
-  "key": zod.string().regex(registerMsfwrLinkBodyKeyRegExp)
-})
-
-export const RevokeMsfwrLinkResponse = zod.void()
 
 export const GetMsfwrFrameResponse = zod.unknown()
 

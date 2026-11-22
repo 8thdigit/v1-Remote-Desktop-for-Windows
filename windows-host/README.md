@@ -91,10 +91,30 @@ Msfwr shows nothing while it is idle: no taskbar button and no
 notification-area (tray) icon. Unattended access runs from a hidden window.
 Open the **Msfwr** window from its Start shortcut for the status, the access
 code, the connection count, **Copy access code**, **Initiate**, **Stop current
-session**, **Create remote access URL…**, **Turn off unattended access…**
-(deletes the key and the startup entry), and **Exit** (unattended access
-starts again at next sign-in). Starting Msfwr again while it runs brings its
-existing window to the front instead of starting a second copy.
+session**, **Turn off unattended access…** (deletes the key and the startup
+entry), and **Exit** (unattended access starts again at next sign-in).
+Starting Msfwr again while it runs brings its existing window to the front
+instead of starting a second copy.
+
+### RA ID
+
+Type the company's RA ID (for example `RA-123456`, from the relay's `/admin`
+console) in the **RA ID** box and select **Save**. The PC then shows up for
+that company when it signs in to the relay, which can connect without the
+access code, and **Initiate: ask IT to connect** goes to that company. The line
+under the box says which company the RA ID belongs to, or that no company has
+it. Clear the box and Save to remove it.
+
+### Remote access URL
+
+Under **Remote access URL**, choose how long it stays valid (1 hour to 5
+days, 24 hours by default) and select **Create URL**. The window shows the
+URL (`https://<relay>/r/<code>`) and its six-digit access code. **Copy URL +
+code** copies both. Whoever opens the URL and enters the code connects
+without a prompt, and without signing in, until the URL expires or you select
+**Clear**. **Create new URL** replaces the current one. Eight wrong codes lock
+the URL for 15 minutes. Creating and clearing run in the background, so the
+window never stops responding.
 
 While IT is connected, the always-on-top **Live sharing** indicator appears on
 the screen, so a session is never silent on the PC. Ctrl+2 and F12 end a live
@@ -118,8 +138,12 @@ At the repo root, with Go 1.26 and NSIS available, run:
 ```sh
 bash windows-host/build.sh
 (cd windows-host && go test ./...)
-node --test artifacts/api-server/tests/msfwr.test.mjs
+node --experimental-strip-types --test artifacts/api-server/tests/msfwr.test.mjs
+pnpm --filter @workspace/api-server run build && node --test artifacts/api-server/tests/e2e.test.mjs
 ```
+
+`integration_test.go` runs this client's relay calls against a live relay:
+`MSFWR_TEST_RELAY=https://… MSFWR_TEST_RA=123456 go test -tags integration -run Integration .`
 
 The build writes the installer to
 `artifacts/msfwr/public/downloads/msfwr-Setup-x64.exe`.

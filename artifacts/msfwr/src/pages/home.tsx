@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { listMsfwrCalls, useJoinMsfwr } from '@workspace/api-client-react';
+import {
+  acceptMsfwrRequest, connectMsfwrPc, getMsfwrInbox, listMsfwrCalls, useJoinMsfwr, type MsfwrInbox,
+} from '@workspace/api-client-react';
 import { Link } from 'wouter';
 import {
-  ArrowRight, Bell, BellOff, BellRing, Check, Clock, Copy, Download, Eye, EyeOff, History, Laptop, Monitor,
+  ArrowRight, Bell, BellOff, BellRing, Building2, Check, Clock, Copy, Download, Eye, EyeOff, History, Laptop, Monitor,
   Pencil, Plus, Radio, ShieldCheck, Trash2, UserRound, Volume2, VolumeX, X,
 } from 'lucide-react';
 import LiveSession from '@/LiveSession';
+import { RaBadge, UserMenu } from '@/components/user-menu';
+import { errorText, raLabel, useAuth } from '@/lib/auth';
 import {
   HEX, MAX_PCS, loadPCs, loadRequests, mergeCalls, relativeTime, setRequestStatus, storePCs, storeRequests,
   type RequestEntry, type RequestStatus, type SavedPC,
@@ -59,6 +63,11 @@ function chime() {
 
 export default function Home() {
   const join = useJoinMsfwr();
+  const { user } = useAuth();
+  // Requests sent to this company's RA ID and the PCs pointed to it.
+  const [inbox, setInbox] = useState<MsfwrInbox | null>(null);
+  const [connecting, setConnecting] = useState(false);
+  const seenRequests = useRef<Set<string> | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -111,6 +120,8 @@ export default function Home() {
   }, []);
 
   const waiting = useMemo(() => requests.filter((r) => r.open && r.status === 'waiting'), [requests]);
+  const companyWaiting = useMemo(() => inbox?.requests.filter((r) => r.status === 'waiting') ?? [], [inbox]);
+  const alertCount = waiting.length + companyWaiting.length;
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 5000);
@@ -119,10 +130,42 @@ export default function Home() {
 
   useEffect(() => {
     if (session) { document.title = 'Msfwr — Connected session'; return; }
-    document.title = waiting.length
-      ? `(${waiting.length}) Request${waiting.length > 1 ? 's' : ''} to connect — Msfwr`
+    document.title = alertCount
+      ? `(${alertCount}) Request${alertCount > 1 ? 's' : ''} to connect — Msfwr`
       : 'Msfwr — Remote support for Windows';
-  }, [session, waiting.length]);
+  }, [session, alertCount]);
+
+  // Poll the company's inbox: requests to its RA ID and the PCs pointed to it.
+  useEffect(() => {
+    if (session) return;
+    let stopped = false;
+    let timer = 0;
+    async function check() {
+      try {
+        const next = await getMsfwrInbox();
+        if (stopped) return;
+        setInbox(next);
+        const open = next.requests.filter((r) => r.status === 'waiting');
+        const seen = seenRequests.current;
+        const fresh = seen ? open.filter((r) => !seen.has(r.id)) : [];
+        seenRequests.current = new Set(next.requests.map((r) => r.id));
+        if (fresh.length) {
+          if (soundRef.current) chime();
+          if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.visibilityState !== 'visible') {
+            for (const f of fresh) {
+              try {
+                const n = new Notification(`${f.name || 'A PC'} is asking ${next.company} to connect`, { body: 'Open Msfwr and select Accept.', tag: `Msfwr-ra-${f.id}` });
+                n.onclick = () => { window.focus(); n.close(); };
+              } catch { /* notifications unavailable */ }
+            }
+          }
+        }
+      } catch { /* shown by the relay dot; retried below */ }
+      if (!stopped) timer = window.setTimeout(check, document.visibilityState === 'visible' ? 3000 : 8000);
+    }
+    void check();
+    return () => { stopped = true; window.clearTimeout(timer); };
+  }, [session]);
 
   // Poll the relay for Initiate requests and presence of the saved PCs. It
   // keeps polling (more slowly) while the tab is hidden so a request can
@@ -223,6 +266,21 @@ export default function Home() {
     }
   }
 
+  // Accepts a request sent to this company, or connects to one of its PCs.
+  async function connectCompany(action: () => Promise<{ token: string; verification: string; preapproved: boolean }>, fallback: string) {
+    setError(null);
+    setNotice(null);
+    setConnecting(true);
+    try {
+      const viewer = await action();
+      setSession({ token: viewer.token, verification: viewer.verification, preapproved: viewer.preapproved, code: '' });
+    } catch (reason) {
+      setError(errorText(reason, fallback));
+    } finally {
+      setConnecting(false);
+    }
+  }
+
   function dismiss(code: string) {
     updateRequests((list) => setRequestStatus(list, code, 'dismissed'));
   }
@@ -272,14 +330,18 @@ export default function Home() {
           <nav aria-label="Sections" className="order-3 flex w-full gap-1 rounded-xl bg-muted/80 p-1 sm:order-none sm:ml-auto sm:w-auto">
             <TabButton active={tab === 'pcs'} onClick={() => setTab('pcs')} testId="tab-pcs">
               <BellRing className="mr-1.5 h-3.5 w-3.5" /> Requests &amp; PCs
-              {waiting.length > 0
-                ? <span className="ml-1.5 rounded-full bg-primary px-1.5 text-[11px] font-bold text-primary-foreground">{waiting.length}</span>
+              {alertCount > 0
+                ? <span className="ml-1.5 rounded-full bg-primary px-1.5 text-[11px] font-bold text-primary-foreground">{alertCount}</span>
                 : pcs.length > 0 && <span className="ml-1.5 rounded-full bg-foreground/10 px-1.5 text-[11px] font-semibold">{pcs.length}</span>}
             </TabButton>
             <TabButton active={tab === 'connect'} onClick={() => setTab('connect')} testId="tab-connect">Connect with a code</TabButton>
             <TabButton active={tab === 'download'} onClick={() => setTab('download')} testId="tab-download">Get the app</TabButton>
           </nav>
           <RelayDot reachable={relay ? relayReachable : false} watching={pcs.length > 0 && !relayOutdated} />
+          <div className="ml-auto flex items-center gap-2 sm:ml-0">
+            <RaBadge compact />
+            <UserMenu />
+          </div>
         </div>
       </header>
 
@@ -289,6 +351,36 @@ export default function Home() {
             This relay is running an older build without Initiate requests, so requests from PCs cannot reach this page and
             the tray's Initiate fails. Redeploy the relay from the latest code, then reload this page.
           </p>
+        )}
+        {companyWaiting.length > 0 && (
+          <section aria-label={`Requests for ${raLabel(user.raId)}`} className="mb-6 space-y-3">
+            {companyWaiting.map((r) => {
+              const left = Math.max(0, r.until - now);
+              return (
+                <div key={r.id} role="alert" data-testid={`ra-request-${r.id}`}
+                  className="dl-rise relative overflow-hidden rounded-2xl border border-primary/40 bg-card shadow-[0_18px_40px_-24px_hsl(14_78%_40%/0.55)]">
+                  <div className="flex flex-wrap items-center gap-4 p-4 md:p-5">
+                    <span className="relative grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary/12 text-primary">
+                      <span className="dl-ping absolute inset-0 rounded-2xl ring-2 ring-primary/50" />
+                      <BellRing className="h-5 w-5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-mono text-[11px] uppercase tracking-widest text-primary">Initiate: ask IT to connect · {raLabel(user.raId)} · {relativeTime(r.at, now)}</p>
+                      <p className="mt-0.5 truncate text-lg font-bold">{r.name || 'A Windows PC'} is asking you to connect</p>
+                    </div>
+                    <button type="button" data-testid={`button-accept-ra-${r.id}`} disabled={connecting}
+                      onClick={() => void connectCompany(() => acceptMsfwrRequest({ id: r.id }), 'Could not accept the request.')}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground shadow-sm transition-transform active:scale-[0.98] disabled:opacity-40 sm:w-auto">
+                      Accept <ArrowRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="h-1 bg-primary/10">
+                    <div className="h-full bg-primary transition-[width] duration-1000" style={{ width: `${Math.min(100, (left / CALL_TTL) * 100)}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </section>
         )}
         {waiting.length > 0 && (
           <section aria-label="Incoming requests" className="mb-6 space-y-3">
@@ -371,11 +463,16 @@ export default function Home() {
         )}
 
         {tab === 'pcs' && (
+          <CompanyPanel inbox={inbox} raId={user.raId} company={user.displayName} now={now} busy={connecting}
+            onConnect={(id) => void connectCompany(() => connectMsfwrPc({ pc: id }), 'Could not connect to that PC.')} />
+        )}
+
+        {tab === 'pcs' && (
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
             <section aria-labelledby="pcs-heading" className="dl-rise min-w-0 space-y-4">
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
-                  <h1 id="pcs-heading" className="text-2xl font-extrabold tracking-tight md:text-3xl">Unattended PCs</h1>
+                  <h2 id="pcs-heading" className="text-xl font-extrabold tracking-tight md:text-2xl">PCs saved in this browser</h2>
                   <p className="mt-1 text-sm text-muted-foreground">
                     {pcs.length === 0 ? 'No PCs saved in this browser yet.'
                       : presenceSupported ? `${onlineCount} of ${pcs.length} online · requests appear here automatically`
@@ -397,7 +494,7 @@ export default function Home() {
 
               {pcs.length === 0 ? (
                 <EmptyState icon={Laptop} title="Save a PC to get its requests"
-                  body="Initiate requests only reach browsers that know the PC's access code, because accepting one gives full control. On the PC, click the Msfwr tray icon and select Copy access code, then save it above. From then on, when someone at that PC selects Initiate, an Accept banner appears here with a chime." />
+                  body="Initiate requests only reach browsers that know the PC's access code, because accepting one gives full control. On the PC, open the Msfwr window and select Copy access code, then save it above. From then on, when someone at that PC selects Initiate, an Accept banner appears here with a chime." />
               ) : (
                 <ul className="grid gap-3 sm:grid-cols-2">
                   {pcs.map((pc) => (
@@ -446,6 +543,63 @@ export default function Home() {
   );
 }
 
+// The company's own view: PCs pointed to its RA ID, and recent requests.
+function CompanyPanel({ inbox, raId, company, now, busy, onConnect }: {
+  inbox: MsfwrInbox | null; raId: string; company: string; now: number; busy: boolean; onConnect: (id: string) => void;
+}) {
+  const recent = inbox?.requests.filter((r) => r.status !== 'waiting').slice(0, 6) ?? [];
+  return (
+    <section aria-labelledby="company-heading" className="dl-rise mb-8 rounded-2xl border bg-card/90 p-4 shadow-[0_10px_30px_-24px_hsl(200_32%_13%/0.5)] md:p-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 id="company-heading" className="flex items-center gap-2 text-2xl font-extrabold tracking-tight md:text-3xl">
+            <Building2 className="h-6 w-6 text-primary" /> {company}
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            PCs whose remote access points to <span className="font-mono font-bold text-primary">{raLabel(raId)}</span>. Their Initiate requests appear above with a chime.
+          </p>
+        </div>
+      </div>
+      {!inbox ? <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p> : inbox.pcs.length === 0 ? (
+        <EmptyState icon={Laptop} title="No PCs online for your RA ID"
+          body={`On a PC with Msfwr, open the Msfwr window, type ${raLabel(raId)} in the RA ID box and select Save. The PC appears here while it is on and signed in.`} />
+      ) : (
+        <ul className="mt-4 grid gap-3 sm:grid-cols-2" data-testid="list-company-pcs">
+          {inbox.pcs.map((pc) => (
+            <li key={pc.id} className="flex items-center gap-3 rounded-xl border bg-background/60 p-3" data-testid={`company-pc-${pc.name}`}>
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-foreground/5"><Monitor className="h-5 w-5" /></span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-semibold">{pc.name || 'Windows PC'}</p>
+                <PresencePill state={pc.state} />
+              </div>
+              <button type="button" disabled={busy || pc.state !== 'online'} onClick={() => onConnect(pc.id)} data-testid={`button-connect-pc-${pc.name}`}
+                className="flex items-center gap-1.5 rounded-xl bg-foreground px-3 py-2 text-sm font-bold text-background disabled:opacity-40">
+                Connect <ArrowRight className="h-4 w-4" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {recent.length > 0 && (
+        <div className="mt-5">
+          <h3 className="flex items-center gap-1.5 text-sm font-bold"><History className="h-4 w-4" /> Recent requests</h3>
+          <ul className="mt-2 divide-y divide-foreground/8 text-sm">
+            {recent.map((r) => (
+              <li key={r.id} className="flex items-center justify-between gap-3 py-2">
+                <span className="truncate">{r.name || 'A Windows PC'}{r.acceptedBy ? <span className="text-muted-foreground"> · accepted by {r.acceptedBy}</span> : null}</span>
+                <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+                  <span className={`rounded-full px-2 py-0.5 font-semibold ${r.status === 'accepted' ? 'bg-emerald-500/12 text-emerald-700' : 'bg-amber-500/15 text-amber-700'}`}>{r.status === 'accepted' ? 'Accepted' : 'Missed'}</span>
+                  {relativeTime(r.at, now)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function TabButton({ active, onClick, children, testId }: { active: boolean; onClick: () => void; children: ReactNode; testId: string }) {
   return (
     <button type="button" onClick={onClick} aria-current={active ? 'page' : undefined} data-testid={testId}
@@ -460,12 +614,12 @@ function RelayDot({ reachable, watching }: { reachable: boolean | null; watching
   const label = reachable === false ? 'Relay unreachable' : reachable && watching ? 'Listening for requests' : 'Relay ready';
   const color = reachable === false ? 'bg-destructive' : 'bg-emerald-500';
   return (
-    <span className="hidden items-center gap-2 rounded-full border border-foreground/10 bg-card/70 px-3 py-1 font-mono text-[11px] text-muted-foreground md:flex" data-testid="text-relay-status">
+    <span title={label} className="hidden items-center gap-2 rounded-full border border-foreground/10 bg-card/70 px-3 py-1.5 font-mono text-[11px] text-muted-foreground md:flex" data-testid="text-relay-status">
       <span className="relative flex h-2 w-2">
         {reachable && watching && <span className={`absolute inline-flex h-full w-full animate-ping rounded-full ${color} opacity-60`} />}
         <span className={`relative inline-flex h-2 w-2 rounded-full ${color}`} />
       </span>
-      {label}
+      <span className="hidden 2xl:inline">{label}</span>
     </span>
   );
 }

@@ -1,5 +1,5 @@
 import type { DataTag, DefinedInitialDataOptions, DefinedUseQueryResult, QueryClient, QueryKey, UndefinedInitialDataOptions, UseMutationOptions, UseMutationResult, UseQueryOptions, UseQueryResult } from '@tanstack/react-query';
-import type { MsfwrCall, MsfwrCallList, MsfwrCallQuery, MsfwrCode, MsfwrInput, MsfwrInvite, MsfwrLink, MsfwrLinkCreate, MsfwrLinkRegister, MsfwrLinkStatus, MsfwrStandingKey, MsfwrTick, MsfwrViewer, GetMsfwrFrameParams, GetMsfwrLinkStatusParams, HealthStatus } from './api.schemas';
+import type { Account, AccountCreate, AccountList, AccountUpdate, AdminOverview, AuthLogin, AuthSetup, AuthStatus, GetMsfwrFrameParams, GetMsfwrLinkInfoParams, GetMsfwrLinkStatusParams, HealthStatus, MsfwrAccept, MsfwrCall, MsfwrCallList, MsfwrCallQuery, MsfwrCode, MsfwrConnectPc, MsfwrInbox, MsfwrInput, MsfwrInvite, MsfwrLink, MsfwrLinkCreate, MsfwrLinkInfo, MsfwrLinkJoin, MsfwrLinkRegister, MsfwrLinkStatus, MsfwrStandingKey, MsfwrTick, MsfwrViewer, PasswordChange } from './api.schemas';
 import { customFetch } from '../custom-fetch';
 import type { ErrorType, BodyType } from '../custom-fetch';
 type AwaitedInput<T> = PromiseLike<T> | T;
@@ -113,7 +113,7 @@ export declare const useListMsfwrCalls: <TError = ErrorType<unknown>, TContext =
 }, queryClient?: QueryClient) => UseMutationResult<Awaited<ReturnType<typeof listMsfwrCalls>>, TError, ListMsfwrCallsMutationVariables, TContext>;
 export declare const getCreateMsfwrLinkUrl: () => string;
 /**
- * Create a shareable remote access URL from the client app. The host PC registers a waiting session under the link's code; every viewer that opens the shared URL starts a new session without approval, until the link expires (24 hours by default) or is revoked. Requires the unattended access key of the PC.
+ * Create a shareable remote access URL from the client app, with a six-digit access code. Whoever opens the URL and enters the code connects to the PC without a prompt, until the link expires (24 hours by default) or is cleared on the PC. Requires the PC's unattended access key.
  */
 export declare const createMsfwrLink: (msfwrLinkCreate: MsfwrLinkCreate, options?: Parameters<typeof customFetch>[1]) => Promise<MsfwrLink>;
 export declare const getCreateMsfwrLinkMutationKey: () => readonly ["createMsfwrLink"];
@@ -133,9 +133,9 @@ export declare const useCreateMsfwrLink: <TError = ErrorType<unknown>, TContext 
 }, queryClient?: QueryClient) => UseMutationResult<Awaited<ReturnType<typeof createMsfwrLink>>, TError, CreateMsfwrLinkMutationVariables, TContext>;
 export declare const getRegisterMsfwrLinkUrl: () => string;
 /**
- * The host re-registers its waiting session under an existing link id after each session ends, so the shared URL keeps accepting viewers until it expires or is revoked.
+ * The PC sends its saved link again each time it registers, so the link is restored if the relay restarted. Only the PC that owns the link can restore it, because the link's code is derived from its key.
  */
-export declare const registerMsfwrLink: (msfwrLinkRegister: MsfwrLinkRegister, options?: Parameters<typeof customFetch>[1]) => Promise<MsfwrInvite>;
+export declare const registerMsfwrLink: (msfwrLinkRegister: MsfwrLinkRegister, options?: Parameters<typeof customFetch>[1]) => Promise<MsfwrLink>;
 export declare const getRegisterMsfwrLinkMutationKey: () => readonly ["registerMsfwrLink"];
 export declare const getRegisterMsfwrLinkMutationOptions: <TError = ErrorType<void>, TContext = unknown>(options?: {
     mutation?: UseMutationOptions<Awaited<ReturnType<typeof registerMsfwrLink>>, TError, RegisterMsfwrLinkMutationVariables, TContext>;
@@ -203,6 +203,329 @@ export declare const useRevokeMsfwrLink: <TError = ErrorType<unknown>, TContext 
     mutation?: UseMutationOptions<Awaited<ReturnType<typeof revokeMsfwrLink>>, TError, RevokeMsfwrLinkMutationVariables, TContext>;
     request?: SecondParameter<typeof customFetch>;
 }, queryClient?: QueryClient) => UseMutationResult<Awaited<ReturnType<typeof revokeMsfwrLink>>, TError, RevokeMsfwrLinkMutationVariables, TContext>;
+export declare const getGetMsfwrLinkInfoUrl: (params: GetMsfwrLinkInfoParams) => string;
+/**
+ * Public facts about a shared remote access URL, for the page it opens: the PC name, whether the PC is online, and when the link expires.
+ */
+export declare const getMsfwrLinkInfo: (params: GetMsfwrLinkInfoParams, options?: Parameters<typeof customFetch>[1]) => Promise<MsfwrLinkInfo>;
+export declare const getGetMsfwrLinkInfoQueryKey: (params?: GetMsfwrLinkInfoParams) => readonly ["/api/msfwr/link/info", ...GetMsfwrLinkInfoParams[]];
+export declare const getGetMsfwrLinkInfoQueryOptions: <TData = Awaited<ReturnType<typeof getMsfwrLinkInfo>>, TError = ErrorType<void>>(params: GetMsfwrLinkInfoParams, options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMsfwrLinkInfo>>, TError, TData>>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseQueryOptions<Awaited<ReturnType<typeof getMsfwrLinkInfo>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+};
+export type GetMsfwrLinkInfoQueryResult = NonNullable<Awaited<ReturnType<typeof getMsfwrLinkInfo>>>;
+export type GetMsfwrLinkInfoQueryError = ErrorType<void>;
+export declare function useGetMsfwrLinkInfo<TData = Awaited<ReturnType<typeof getMsfwrLinkInfo>>, TError = ErrorType<void>>(params: GetMsfwrLinkInfoParams, options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMsfwrLinkInfo>>, TError, TData>> & Pick<DefinedInitialDataOptions<Awaited<ReturnType<typeof getMsfwrLinkInfo>>, TError, Awaited<ReturnType<typeof getMsfwrLinkInfo>>>, 'initialData'>;
+    request?: SecondParameter<typeof customFetch>;
+}, queryClient?: QueryClient): DefinedUseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+};
+export declare function useGetMsfwrLinkInfo<TData = Awaited<ReturnType<typeof getMsfwrLinkInfo>>, TError = ErrorType<void>>(params: GetMsfwrLinkInfoParams, options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMsfwrLinkInfo>>, TError, TData>> & Pick<UndefinedInitialDataOptions<Awaited<ReturnType<typeof getMsfwrLinkInfo>>, TError, Awaited<ReturnType<typeof getMsfwrLinkInfo>>>, 'initialData'>;
+    request?: SecondParameter<typeof customFetch>;
+}, queryClient?: QueryClient): UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+};
+export declare function useGetMsfwrLinkInfo<TData = Awaited<ReturnType<typeof getMsfwrLinkInfo>>, TError = ErrorType<void>>(params: GetMsfwrLinkInfoParams, options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMsfwrLinkInfo>>, TError, TData>>;
+    request?: SecondParameter<typeof customFetch>;
+}, queryClient?: QueryClient): UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+};
+export declare const getJoinMsfwrLinkUrl: () => string;
+/**
+ * Open a session through a shared remote access URL. The viewer gives the link's access code; the PC connects without a prompt.
+ */
+export declare const joinMsfwrLink: (msfwrLinkJoin: MsfwrLinkJoin, options?: Parameters<typeof customFetch>[1]) => Promise<MsfwrViewer>;
+export declare const getJoinMsfwrLinkMutationKey: () => readonly ["joinMsfwrLink"];
+export declare const getJoinMsfwrLinkMutationOptions: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof joinMsfwrLink>>, TError, JoinMsfwrLinkMutationVariables, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseMutationOptions<Awaited<ReturnType<typeof joinMsfwrLink>>, TError, JoinMsfwrLinkMutationVariables, TContext>;
+export type JoinMsfwrLinkMutationResult = NonNullable<Awaited<ReturnType<typeof joinMsfwrLink>>>;
+export type JoinMsfwrLinkMutationBody = BodyType<MsfwrLinkJoin>;
+export type JoinMsfwrLinkMutationError = ErrorType<unknown>;
+export type JoinMsfwrLinkMutationVariables = {
+    data: BodyType<MsfwrLinkJoin>;
+};
+export declare const useJoinMsfwrLink: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof joinMsfwrLink>>, TError, JoinMsfwrLinkMutationVariables, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}, queryClient?: QueryClient) => UseMutationResult<Awaited<ReturnType<typeof joinMsfwrLink>>, TError, JoinMsfwrLinkMutationVariables, TContext>;
+export declare const getGetMsfwrInboxUrl: () => string;
+/**
+ * For the signed-in company: Initiate requests sent to its RA ID and the PCs whose remote access points to its RA ID.
+ */
+export declare const getMsfwrInbox: (options?: Parameters<typeof customFetch>[1]) => Promise<MsfwrInbox>;
+export declare const getGetMsfwrInboxQueryKey: () => readonly ["/api/msfwr/inbox"];
+export declare const getGetMsfwrInboxQueryOptions: <TData = Awaited<ReturnType<typeof getMsfwrInbox>>, TError = ErrorType<unknown>>(options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMsfwrInbox>>, TError, TData>>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseQueryOptions<Awaited<ReturnType<typeof getMsfwrInbox>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+};
+export type GetMsfwrInboxQueryResult = NonNullable<Awaited<ReturnType<typeof getMsfwrInbox>>>;
+export type GetMsfwrInboxQueryError = ErrorType<unknown>;
+export declare function useGetMsfwrInbox<TData = Awaited<ReturnType<typeof getMsfwrInbox>>, TError = ErrorType<unknown>>(options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMsfwrInbox>>, TError, TData>> & Pick<DefinedInitialDataOptions<Awaited<ReturnType<typeof getMsfwrInbox>>, TError, Awaited<ReturnType<typeof getMsfwrInbox>>>, 'initialData'>;
+    request?: SecondParameter<typeof customFetch>;
+}, queryClient?: QueryClient): DefinedUseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+};
+export declare function useGetMsfwrInbox<TData = Awaited<ReturnType<typeof getMsfwrInbox>>, TError = ErrorType<unknown>>(options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMsfwrInbox>>, TError, TData>> & Pick<UndefinedInitialDataOptions<Awaited<ReturnType<typeof getMsfwrInbox>>, TError, Awaited<ReturnType<typeof getMsfwrInbox>>>, 'initialData'>;
+    request?: SecondParameter<typeof customFetch>;
+}, queryClient?: QueryClient): UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+};
+export declare function useGetMsfwrInbox<TData = Awaited<ReturnType<typeof getMsfwrInbox>>, TError = ErrorType<unknown>>(options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMsfwrInbox>>, TError, TData>>;
+    request?: SecondParameter<typeof customFetch>;
+}, queryClient?: QueryClient): UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+};
+export declare const getAcceptMsfwrRequestUrl: () => string;
+export declare const acceptMsfwrRequest: (msfwrAccept: MsfwrAccept, options?: Parameters<typeof customFetch>[1]) => Promise<MsfwrViewer>;
+export declare const getAcceptMsfwrRequestMutationKey: () => readonly ["acceptMsfwrRequest"];
+export declare const getAcceptMsfwrRequestMutationOptions: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof acceptMsfwrRequest>>, TError, AcceptMsfwrRequestMutationVariables, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseMutationOptions<Awaited<ReturnType<typeof acceptMsfwrRequest>>, TError, AcceptMsfwrRequestMutationVariables, TContext>;
+export type AcceptMsfwrRequestMutationResult = NonNullable<Awaited<ReturnType<typeof acceptMsfwrRequest>>>;
+export type AcceptMsfwrRequestMutationBody = BodyType<MsfwrAccept>;
+export type AcceptMsfwrRequestMutationError = ErrorType<unknown>;
+export type AcceptMsfwrRequestMutationVariables = {
+    data: BodyType<MsfwrAccept>;
+};
+export declare const useAcceptMsfwrRequest: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof acceptMsfwrRequest>>, TError, AcceptMsfwrRequestMutationVariables, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}, queryClient?: QueryClient) => UseMutationResult<Awaited<ReturnType<typeof acceptMsfwrRequest>>, TError, AcceptMsfwrRequestMutationVariables, TContext>;
+export declare const getConnectMsfwrPcUrl: () => string;
+/**
+ * Connect to an online PC whose remote access points to the company's RA ID.
+ */
+export declare const connectMsfwrPc: (msfwrConnectPc: MsfwrConnectPc, options?: Parameters<typeof customFetch>[1]) => Promise<MsfwrViewer>;
+export declare const getConnectMsfwrPcMutationKey: () => readonly ["connectMsfwrPc"];
+export declare const getConnectMsfwrPcMutationOptions: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof connectMsfwrPc>>, TError, ConnectMsfwrPcMutationVariables, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseMutationOptions<Awaited<ReturnType<typeof connectMsfwrPc>>, TError, ConnectMsfwrPcMutationVariables, TContext>;
+export type ConnectMsfwrPcMutationResult = NonNullable<Awaited<ReturnType<typeof connectMsfwrPc>>>;
+export type ConnectMsfwrPcMutationBody = BodyType<MsfwrConnectPc>;
+export type ConnectMsfwrPcMutationError = ErrorType<unknown>;
+export type ConnectMsfwrPcMutationVariables = {
+    data: BodyType<MsfwrConnectPc>;
+};
+export declare const useConnectMsfwrPc: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof connectMsfwrPc>>, TError, ConnectMsfwrPcMutationVariables, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}, queryClient?: QueryClient) => UseMutationResult<Awaited<ReturnType<typeof connectMsfwrPc>>, TError, ConnectMsfwrPcMutationVariables, TContext>;
+export declare const getGetAuthStatusUrl: () => string;
+export declare const getAuthStatus: (options?: Parameters<typeof customFetch>[1]) => Promise<AuthStatus>;
+export declare const getGetAuthStatusQueryKey: () => readonly ["/api/auth/status"];
+export declare const getGetAuthStatusQueryOptions: <TData = Awaited<ReturnType<typeof getAuthStatus>>, TError = ErrorType<unknown>>(options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAuthStatus>>, TError, TData>>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseQueryOptions<Awaited<ReturnType<typeof getAuthStatus>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+};
+export type GetAuthStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getAuthStatus>>>;
+export type GetAuthStatusQueryError = ErrorType<unknown>;
+export declare function useGetAuthStatus<TData = Awaited<ReturnType<typeof getAuthStatus>>, TError = ErrorType<unknown>>(options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAuthStatus>>, TError, TData>> & Pick<DefinedInitialDataOptions<Awaited<ReturnType<typeof getAuthStatus>>, TError, Awaited<ReturnType<typeof getAuthStatus>>>, 'initialData'>;
+    request?: SecondParameter<typeof customFetch>;
+}, queryClient?: QueryClient): DefinedUseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+};
+export declare function useGetAuthStatus<TData = Awaited<ReturnType<typeof getAuthStatus>>, TError = ErrorType<unknown>>(options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAuthStatus>>, TError, TData>> & Pick<UndefinedInitialDataOptions<Awaited<ReturnType<typeof getAuthStatus>>, TError, Awaited<ReturnType<typeof getAuthStatus>>>, 'initialData'>;
+    request?: SecondParameter<typeof customFetch>;
+}, queryClient?: QueryClient): UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+};
+export declare function useGetAuthStatus<TData = Awaited<ReturnType<typeof getAuthStatus>>, TError = ErrorType<unknown>>(options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAuthStatus>>, TError, TData>>;
+    request?: SecondParameter<typeof customFetch>;
+}, queryClient?: QueryClient): UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+};
+export declare const getSetupAdminUrl: () => string;
+export declare const setupAdmin: (authSetup: AuthSetup, options?: Parameters<typeof customFetch>[1]) => Promise<Account>;
+export declare const getSetupAdminMutationKey: () => readonly ["setupAdmin"];
+export declare const getSetupAdminMutationOptions: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof setupAdmin>>, TError, SetupAdminMutationVariables, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseMutationOptions<Awaited<ReturnType<typeof setupAdmin>>, TError, SetupAdminMutationVariables, TContext>;
+export type SetupAdminMutationResult = NonNullable<Awaited<ReturnType<typeof setupAdmin>>>;
+export type SetupAdminMutationBody = BodyType<AuthSetup>;
+export type SetupAdminMutationError = ErrorType<unknown>;
+export type SetupAdminMutationVariables = {
+    data: BodyType<AuthSetup>;
+};
+export declare const useSetupAdmin: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof setupAdmin>>, TError, SetupAdminMutationVariables, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}, queryClient?: QueryClient) => UseMutationResult<Awaited<ReturnType<typeof setupAdmin>>, TError, SetupAdminMutationVariables, TContext>;
+export declare const getLoginUrl: () => string;
+export declare const login: (authLogin: AuthLogin, options?: Parameters<typeof customFetch>[1]) => Promise<Account>;
+export declare const getLoginMutationKey: () => readonly ["login"];
+export declare const getLoginMutationOptions: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof login>>, TError, LoginMutationVariables, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseMutationOptions<Awaited<ReturnType<typeof login>>, TError, LoginMutationVariables, TContext>;
+export type LoginMutationResult = NonNullable<Awaited<ReturnType<typeof login>>>;
+export type LoginMutationBody = BodyType<AuthLogin>;
+export type LoginMutationError = ErrorType<unknown>;
+export type LoginMutationVariables = {
+    data: BodyType<AuthLogin>;
+};
+export declare const useLogin: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof login>>, TError, LoginMutationVariables, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}, queryClient?: QueryClient) => UseMutationResult<Awaited<ReturnType<typeof login>>, TError, LoginMutationVariables, TContext>;
+export declare const getLogoutUrl: () => string;
+export declare const logout: (options?: Parameters<typeof customFetch>[1]) => Promise<void>;
+export declare const getLogoutMutationKey: () => readonly ["logout"];
+export declare const getLogoutMutationOptions: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError, void, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError, void, TContext>;
+export type LogoutMutationResult = NonNullable<Awaited<ReturnType<typeof logout>>>;
+export type LogoutMutationError = ErrorType<unknown>;
+export declare const useLogout: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError, void, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}, queryClient?: QueryClient) => UseMutationResult<Awaited<ReturnType<typeof logout>>, TError, void, TContext>;
+export declare const getChangePasswordUrl: () => string;
+export declare const changePassword: (passwordChange: PasswordChange, options?: Parameters<typeof customFetch>[1]) => Promise<void>;
+export declare const getChangePasswordMutationKey: () => readonly ["changePassword"];
+export declare const getChangePasswordMutationOptions: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof changePassword>>, TError, ChangePasswordMutationVariables, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseMutationOptions<Awaited<ReturnType<typeof changePassword>>, TError, ChangePasswordMutationVariables, TContext>;
+export type ChangePasswordMutationResult = NonNullable<Awaited<ReturnType<typeof changePassword>>>;
+export type ChangePasswordMutationBody = BodyType<PasswordChange>;
+export type ChangePasswordMutationError = ErrorType<unknown>;
+export type ChangePasswordMutationVariables = {
+    data: BodyType<PasswordChange>;
+};
+export declare const useChangePassword: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof changePassword>>, TError, ChangePasswordMutationVariables, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}, queryClient?: QueryClient) => UseMutationResult<Awaited<ReturnType<typeof changePassword>>, TError, ChangePasswordMutationVariables, TContext>;
+export declare const getListUsersUrl: () => string;
+export declare const listUsers: (options?: Parameters<typeof customFetch>[1]) => Promise<AccountList>;
+export declare const getListUsersQueryKey: () => readonly ["/api/admin/users"];
+export declare const getListUsersQueryOptions: <TData = Awaited<ReturnType<typeof listUsers>>, TError = ErrorType<unknown>>(options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listUsers>>, TError, TData>>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseQueryOptions<Awaited<ReturnType<typeof listUsers>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+};
+export type ListUsersQueryResult = NonNullable<Awaited<ReturnType<typeof listUsers>>>;
+export type ListUsersQueryError = ErrorType<unknown>;
+export declare function useListUsers<TData = Awaited<ReturnType<typeof listUsers>>, TError = ErrorType<unknown>>(options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof listUsers>>, TError, TData>> & Pick<DefinedInitialDataOptions<Awaited<ReturnType<typeof listUsers>>, TError, Awaited<ReturnType<typeof listUsers>>>, 'initialData'>;
+    request?: SecondParameter<typeof customFetch>;
+}, queryClient?: QueryClient): DefinedUseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+};
+export declare function useListUsers<TData = Awaited<ReturnType<typeof listUsers>>, TError = ErrorType<unknown>>(options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listUsers>>, TError, TData>> & Pick<UndefinedInitialDataOptions<Awaited<ReturnType<typeof listUsers>>, TError, Awaited<ReturnType<typeof listUsers>>>, 'initialData'>;
+    request?: SecondParameter<typeof customFetch>;
+}, queryClient?: QueryClient): UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+};
+export declare function useListUsers<TData = Awaited<ReturnType<typeof listUsers>>, TError = ErrorType<unknown>>(options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listUsers>>, TError, TData>>;
+    request?: SecondParameter<typeof customFetch>;
+}, queryClient?: QueryClient): UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+};
+export declare const getCreateUserUrl: () => string;
+export declare const createUser: (accountCreate: AccountCreate, options?: Parameters<typeof customFetch>[1]) => Promise<Account>;
+export declare const getCreateUserMutationKey: () => readonly ["createUser"];
+export declare const getCreateUserMutationOptions: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof createUser>>, TError, CreateUserMutationVariables, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseMutationOptions<Awaited<ReturnType<typeof createUser>>, TError, CreateUserMutationVariables, TContext>;
+export type CreateUserMutationResult = NonNullable<Awaited<ReturnType<typeof createUser>>>;
+export type CreateUserMutationBody = BodyType<AccountCreate>;
+export type CreateUserMutationError = ErrorType<unknown>;
+export type CreateUserMutationVariables = {
+    data: BodyType<AccountCreate>;
+};
+export declare const useCreateUser: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof createUser>>, TError, CreateUserMutationVariables, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}, queryClient?: QueryClient) => UseMutationResult<Awaited<ReturnType<typeof createUser>>, TError, CreateUserMutationVariables, TContext>;
+export declare const getUpdateUserUrl: (id: string) => string;
+export declare const updateUser: (id: string, accountUpdate: AccountUpdate, options?: Parameters<typeof customFetch>[1]) => Promise<Account>;
+export declare const getUpdateUserMutationKey: () => readonly ["updateUser"];
+export declare const getUpdateUserMutationOptions: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof updateUser>>, TError, UpdateUserMutationVariables, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseMutationOptions<Awaited<ReturnType<typeof updateUser>>, TError, UpdateUserMutationVariables, TContext>;
+export type UpdateUserMutationResult = NonNullable<Awaited<ReturnType<typeof updateUser>>>;
+export type UpdateUserMutationBody = BodyType<AccountUpdate>;
+export type UpdateUserMutationError = ErrorType<unknown>;
+export type UpdateUserMutationVariables = {
+    id: string;
+    data: BodyType<AccountUpdate>;
+};
+export declare const useUpdateUser: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof updateUser>>, TError, UpdateUserMutationVariables, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}, queryClient?: QueryClient) => UseMutationResult<Awaited<ReturnType<typeof updateUser>>, TError, UpdateUserMutationVariables, TContext>;
+export declare const getDeleteUserUrl: (id: string) => string;
+export declare const deleteUser: (id: string, options?: Parameters<typeof customFetch>[1]) => Promise<void>;
+export declare const getDeleteUserMutationKey: () => readonly ["deleteUser"];
+export declare const getDeleteUserMutationOptions: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof deleteUser>>, TError, DeleteUserMutationVariables, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseMutationOptions<Awaited<ReturnType<typeof deleteUser>>, TError, DeleteUserMutationVariables, TContext>;
+export type DeleteUserMutationResult = NonNullable<Awaited<ReturnType<typeof deleteUser>>>;
+export type DeleteUserMutationError = ErrorType<unknown>;
+export type DeleteUserMutationVariables = {
+    id: string;
+};
+export declare const useDeleteUser: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof deleteUser>>, TError, DeleteUserMutationVariables, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}, queryClient?: QueryClient) => UseMutationResult<Awaited<ReturnType<typeof deleteUser>>, TError, DeleteUserMutationVariables, TContext>;
+export declare const getGetAdminOverviewUrl: () => string;
+export declare const getAdminOverview: (options?: Parameters<typeof customFetch>[1]) => Promise<AdminOverview>;
+export declare const getGetAdminOverviewQueryKey: () => readonly ["/api/admin/overview"];
+export declare const getGetAdminOverviewQueryOptions: <TData = Awaited<ReturnType<typeof getAdminOverview>>, TError = ErrorType<unknown>>(options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAdminOverview>>, TError, TData>>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseQueryOptions<Awaited<ReturnType<typeof getAdminOverview>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+};
+export type GetAdminOverviewQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminOverview>>>;
+export type GetAdminOverviewQueryError = ErrorType<unknown>;
+export declare function useGetAdminOverview<TData = Awaited<ReturnType<typeof getAdminOverview>>, TError = ErrorType<unknown>>(options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAdminOverview>>, TError, TData>> & Pick<DefinedInitialDataOptions<Awaited<ReturnType<typeof getAdminOverview>>, TError, Awaited<ReturnType<typeof getAdminOverview>>>, 'initialData'>;
+    request?: SecondParameter<typeof customFetch>;
+}, queryClient?: QueryClient): DefinedUseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+};
+export declare function useGetAdminOverview<TData = Awaited<ReturnType<typeof getAdminOverview>>, TError = ErrorType<unknown>>(options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAdminOverview>>, TError, TData>> & Pick<UndefinedInitialDataOptions<Awaited<ReturnType<typeof getAdminOverview>>, TError, Awaited<ReturnType<typeof getAdminOverview>>>, 'initialData'>;
+    request?: SecondParameter<typeof customFetch>;
+}, queryClient?: QueryClient): UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+};
+export declare function useGetAdminOverview<TData = Awaited<ReturnType<typeof getAdminOverview>>, TError = ErrorType<unknown>>(options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAdminOverview>>, TError, TData>>;
+    request?: SecondParameter<typeof customFetch>;
+}, queryClient?: QueryClient): UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+};
 export declare const getJoinMsfwrUrl: () => string;
 export declare const joinMsfwr: (msfwrCode: MsfwrCode, options?: Parameters<typeof customFetch>[1]) => Promise<MsfwrViewer>;
 export declare const getJoinMsfwrMutationKey: () => readonly ["joinMsfwr"];

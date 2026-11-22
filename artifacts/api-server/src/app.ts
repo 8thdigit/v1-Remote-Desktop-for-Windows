@@ -5,6 +5,9 @@ import router from "./routes";
 import { logger } from "./lib/logger";
 
 const app: Express = express();
+// Render (and Vercel in front of it) terminate TLS in proxies, so trust the
+// forwarded protocol and address for secure cookies and sign-in limits.
+app.set("trust proxy", 2);
 
 app.use(
   pinoHttp({

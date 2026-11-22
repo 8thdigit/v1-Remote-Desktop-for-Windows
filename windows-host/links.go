@@ -6,43 +6,58 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"time"
 )
 
-// savedLink is a remote access link persisted on this PC. The secret key is
-// stored next to it so the client can show status, re-register after each
-// session, and revoke the link later. Codes are public; keys never leave
-// this file except in requests to the relay that prove ownership.
+// savedLink is this PC's remote access URL ("Create remote access URL"). A
+// PC has at most one at a time: the Msfwr window shows it with its access
+// code, and Clear removes it. The PC's unattended key proves ownership of
+// the link to the relay; it is stored with the link so the link can be
+// restored on the relay after a relay restart and cleared later.
 type savedLink struct {
 	ID        string `json:"id"`
 	Code      string `json:"code"`
+	Pin       string `json:"pin"`
 	Key       string `json:"key"`
 	Name      string `json:"name,omitempty"`
 	Relay     string `json:"relay"`
 	CreatedAt int64  `json:"createdAt"` // Unix milliseconds
 	ExpiresAt int64  `json:"expiresAt"` // Unix milliseconds
+	Hours     int    `json:"hours,omitempty"`
 }
 
 func (l savedLink) expired(now time.Time) bool {
 	return now.UnixMilli() >= l.ExpiresAt
 }
 
+// shareURL is the address people open to connect, such as
+// https://msfwr.vercel.app/r/L0123456789A.
 func (l savedLink) shareURL() string {
 	link := remoteLink{Code: l.Code}
 	r, err := newRelay(l.Relay)
 	if err != nil {
-		return l.Relay + "/?access=" + l.Code
+		return l.Relay + "/r/" + l.Code
 	}
 	return link.URL(linkOrigin(r))
 }
 
+// shareText is what Copy puts on the clipboard: the link and its access code.
+func (l savedLink) shareText() string {
+	return l.shareURL() + "\r\nAccess code: " + l.Pin
+}
+
 const linksFile = "links.json"
 
-// loadLinks returns the saved links, dropping ones past their validity. A
-// missing file means no links yet, which is not an error. Damaged files are
-// reported so callers can warn instead of silently forgetting secrets.
-func loadLinks(path string, now time.Time) ([]savedLink, error) {
+var pinFormat = regexp.MustCompile(`^[0-9]{6}$`)
+
+// loadLink returns this PC's current remote access URL, or nil when there is
+// none or it expired. A damaged file is reported so the window can say so.
+func loadLink(path string, now time.Time) (*savedLink, error) {
+	if path == "" {
+		return nil, nil
+	}
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
@@ -50,27 +65,33 @@ func loadLinks(path string, now time.Time) ([]savedLink, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Older builds saved a list of links; the newest valid one wins.
 	var all []savedLink
 	if err := json.Unmarshal(data, &all); err != nil {
-		return nil, errors.New("the saved remote access links are damaged")
+		var one savedLink
+		if err := json.Unmarshal(data, &one); err != nil {
+			return nil, errors.New("the saved remote access URL is damaged")
+		}
+		all = []savedLink{one}
 	}
-	kept := make([]savedLink, 0, len(all))
-	for _, l := range all {
-		if !linkCodeFormat.MatchString(l.Code) || !tokenFormat.MatchString(l.Key) || l.ID == "" {
+	for i := len(all) - 1; i >= 0; i-- {
+		l := all[i]
+		if !linkCodeFormat.MatchString(l.Code) || !tokenFormat.MatchString(l.Key) || l.ID == "" || !pinFormat.MatchString(l.Pin) {
 			continue
 		}
 		if _, err := newRelay(l.Relay); err != nil {
 			continue
 		}
-		if !l.expired(now) {
-			kept = append(kept, l)
+		if l.expired(now) {
+			continue
 		}
+		return &l, nil
 	}
-	return kept, nil
+	return nil, nil
 }
 
-func saveLinks(path string, links []savedLink) error {
-	data, err := json.Marshal(links)
+func saveLink(path string, l savedLink) error {
+	data, err := json.Marshal(l)
 	if err != nil {
 		return err
 	}
@@ -88,50 +109,77 @@ func saveLinks(path string, links []savedLink) error {
 	return nil
 }
 
-// addLink stores a freshly created link, replacing any older one with the
-// same id, and drops expired links. It keeps at most maxLinks entries.
-func addLink(links []savedLink, l savedLink, now time.Time) []savedLink {
-	out := make([]savedLink, 0, len(links)+1)
-	replaced := false
-	for _, old := range links {
-		if old.ID == l.ID {
-			if !replaced {
-				out = append(out, l)
-				replaced = true
-			}
-			continue
-		}
-		if !old.expired(now) {
-			out = append(out, old)
-		}
+func forgetLink(path string) error {
+	err := os.Remove(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
 	}
-	if !replaced {
-		out = append(out, l)
-	}
-	const maxLinks = 8
-	if len(out) > maxLinks {
-		out = out[len(out)-maxLinks:]
-	}
-	return out
+	return err
 }
 
-// removeLink drops the link with this id and reports whether it was there.
-func removeLink(links []savedLink, id string) ([]savedLink, bool) {
-	out := make([]savedLink, 0, len(links))
-	found := false
-	for _, l := range links {
-		if l.ID == id {
-			found = true
-			continue
-		}
-		out = append(out, l)
+// createRemoteLink asks the relay for a new remote access URL for this PC
+// and saves it, replacing (and clearing on the relay) any earlier one.
+func createRemoteLink(ctx context.Context, path, origin, key, name string, hours int) (savedLink, error) {
+	if path == "" {
+		return savedLink{}, errors.New("this PC has no place to save the URL")
 	}
-	return out, found
+	r, err := newRelay(origin)
+	if err != nil {
+		return savedLink{}, err
+	}
+	created, err := r.createLink(ctx, key, name, hours)
+	if err != nil {
+		return savedLink{}, err
+	}
+	if !pinFormat.MatchString(created.Pin) {
+		return savedLink{}, errors.New("this relay is too old to create URLs with an access code; ask IT to update it")
+	}
+	old, _ := loadLink(path, time.Now())
+	l := savedLink{ID: created.ID, Code: created.Code, Pin: created.Pin, Key: key, Name: name, Relay: origin,
+		CreatedAt: created.CreatedAt, ExpiresAt: created.ExpiresAt, Hours: hours}
+	if err := saveLink(path, l); err != nil {
+		_ = r.revokeLink(ctx, l.ID, key)
+		return savedLink{}, errors.New("the URL could not be saved on this PC: " + err.Error())
+	}
+	if old != nil && old.ID != l.ID {
+		_ = r.revokeLink(ctx, old.ID, old.Key)
+	}
+	return l, nil
+}
+
+// clearRemoteLink removes this PC's remote access URL at once, then asks the
+// relay to stop honouring it. The local copy goes first so the URL is gone
+// from the window even while the relay cannot be reached; the relay is told
+// again on the next registration if that fails (see restoreOrClear).
+func clearRemoteLink(ctx context.Context, path string) error {
+	l, err := loadLink(path, time.Now())
+	if err := forgetLink(path); err != nil {
+		return err
+	}
+	if err != nil || l == nil {
+		return nil
+	}
+	r, err := newRelay(l.Relay)
+	if err != nil {
+		return nil
+	}
+	if err := r.revokeLink(ctx, l.ID, l.Key); err != nil {
+		var status *statusError
+		if errors.As(err, &status) && status.status == 404 {
+			return nil // already gone on the relay
+		}
+		return errors.New("cleared on this PC, but the relay could not be told yet: " + err.Error())
+	}
+	return nil
 }
 
 // linkHoursList are the validity choices offered when creating a link. The
-// default is 24 hours; other values such as 4 or 5 hours are selectable.
+// default is 24 hours.
 var linkHoursList = []int{1, 2, 4, 5, 8, 12, 24, 48, 72, 120}
+
+// defaultLinkHours is the validity preselected when creating a remote access
+// URL.
+const defaultLinkHours = 24
 
 // validLinkHours reports whether hours is an allowed validity value.
 func validLinkHours(hours int) bool {
@@ -143,18 +191,14 @@ func validLinkHours(hours int) bool {
 	return false
 }
 
-// formatValidity renders a duration for menus, e.g. "24 hours".
+// formatValidity renders a validity choice for the window, e.g. "24 hours".
 func formatValidity(hours int) string {
-	switch hours {
-	case 1:
+	switch {
+	case hours == 1:
 		return "1 hour"
-	case 24:
-		return "24 hours (default)"
-	}
-	if hours%24 == 0 {
-		if hours/24 == 1 {
-			return "1 day"
-		}
+	case hours == 24:
+		return "24 hours"
+	case hours%24 == 0:
 		return strconv.Itoa(hours/24) + " days"
 	}
 	return strconv.Itoa(hours) + " hours"
@@ -163,7 +207,7 @@ func formatValidity(hours int) string {
 // timeLeft renders how long until something expires, for status lines like
 // "expires in 5h 20m" or "expired 3m ago".
 func timeLeft(unixMilli int64, now time.Time) string {
-	d := time.Until(time.UnixMilli(unixMilli))
+	d := time.UnixMilli(unixMilli).Sub(now)
 	neg := d < 0
 	if neg {
 		d = -d
@@ -186,167 +230,19 @@ func timeLeft(unixMilli int64, now time.Time) string {
 	return "expires in " + text
 }
 
-// linksPathFor returns where saved remote access links live next to the
+// linkSummary is the status line under the URL in the Msfwr window.
+func linkSummary(l *savedLink, now time.Time) string {
+	if l == nil {
+		return "No remote access URL. Choose how long it stays valid, then Create."
+	}
+	return "Valid until " + time.UnixMilli(l.ExpiresAt).Format("Mon 15:04") + " (" + timeLeft(l.ExpiresAt, now) + "). Anyone with the URL and access code can connect."
+}
+
+// linksPathFor returns where the remote access URL lives next to the
 // unattended settings file. It is empty when the config path is unknown.
 func linksPathFor(configPath string) string {
 	if configPath == "" {
 		return ""
 	}
 	return filepath.Join(filepath.Dir(configPath), linksFile)
-}
-
-// linkRequest is a remote access link the UI wants registered so its shared
-// URL can open sessions. serveUnattended creates the link on the relay,
-// stores it in links.json, and keeps re-registering the host under its code
-// after every session until the link expires or is revoked.
-type linkRequest struct {
-	id    uint64 // unique per request, for retry bookkeeping between rounds
-	name  string
-	hours int
-}
-
-var linkSeq uint64
-
-// newLinkRequest stamps a request with a fresh id.
-func newLinkRequest(name string, hours int) linkRequest {
-	linkSeq++
-	return linkRequest{id: linkSeq, name: name, hours: hours}
-}
-
-// listLinks summarizes saved links for menus and status text. Expired links
-// are dropped from the file as a side effect when linksPath is known.
-func listLinks(linksPath string, now time.Time) []string {
-	if linksPath == "" {
-		return nil
-	}
-	all, err := loadLinks(linksPath, now)
-	if err != nil {
-		return []string{"Saved links could not be read: " + err.Error()}
-	}
-	fresh := make([]savedLink, 0, len(all))
-	for _, l := range all {
-		if !l.expired(now) {
-			fresh = append(fresh, l)
-		}
-	}
-	if len(fresh) != len(all) {
-		_ = saveLinks(linksPath, fresh)
-	}
-	out := make([]string, 0, len(fresh)+1)
-	for _, l := range fresh {
-		status := timeLeft(l.ExpiresAt, now)
-		if l.Name != "" {
-			status = l.Name + " — " + status
-		}
-		out = append(out, l.shareURL()+"  ("+status+")")
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-// revokeLink drops a saved link locally and asks the relay to stop honouring
-// its shared URL. The key stored with the link proves ownership.
-func revokeLink(linksPath, id string, now time.Time) error {
-	r, err := newRelay(savedLinkRelay(linksPath, id, now))
-	if err != nil {
-		return err
-	}
-	links, err := loadLinks(linksPath, now)
-	if err != nil {
-		return err
-	}
-	var target *savedLink
-	for i := range links {
-		if links[i].ID == id {
-			target = &links[i]
-		}
-	}
-	if target == nil {
-		return errors.New("that link is no longer saved on this PC")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-	defer cancel()
-	if err := r.revokeLink(ctx, target.ID, target.Key); err != nil {
-		return err
-	}
-	rest, _ := removeLink(links, id)
-	return saveLinks(linksPath, rest)
-}
-
-// savedLinkRelay finds the relay origin a saved link belongs to.
-func savedLinkRelay(linksPath, id string, now time.Time) string {
-	links, err := loadLinks(linksPath, now)
-	if err != nil {
-		return ""
-	}
-	for _, l := range links {
-		if l.ID == id {
-			return l.Relay
-		}
-	}
-	return ""
-}
-
-// linkEntry is a saved link paired with its position in the links file, for
-// menu ids that map back to one specific link.
-type linkEntry struct {
-	url string
-	id  string
-}
-
-// listLinkEntries summarizes live (unexpired) links for the tray menu.
-func listLinkEntries(linksPath string, now time.Time) []linkEntry {
-	if linksPath == "" {
-		return nil
-	}
-	all, err := loadLinks(linksPath, now)
-	if err != nil {
-		return []linkEntry{{url: "Saved links could not be read: " + err.Error()}}
-	}
-	fresh := make([]savedLink, 0, len(all))
-	for _, l := range all {
-		if !l.expired(now) {
-			fresh = append(fresh, l)
-		}
-	}
-	if len(fresh) != len(all) {
-		_ = saveLinks(linksPath, fresh)
-	}
-	out := make([]linkEntry, 0, len(fresh))
-	for _, l := range fresh {
-		line := l.shareURL() + "  (" + timeLeft(l.ExpiresAt, now) + ")"
-		if l.Name != "" {
-			line = l.Name + ": " + line
-		}
-		out = append(out, linkEntry{url: line, id: l.ID})
-	}
-	return out
-}
-
-// defaultLinkHours is the validity preselected when creating a remote access
-// URL: 24 hours, per product requirements.
-const defaultLinkHours = 24
-
-// linkInflight tracks whether a create-link request is still being handled,
-// so repeated menu clicks are deduplicated instead of piling up requests.
-type linkInflight struct {
-	on bool
-	id uint64
-}
-
-// begin records a new in-flight request and reports whether it should be
-// sent: false when an earlier request with the same id is still pending.
-func (f *linkInflight) begin(req linkRequest) bool {
-	if f.on && f.id == req.id {
-		return false
-	}
-	f.on, f.id = true, req.id
-	return true
-}
-
-// done clears the in-flight marker once serveUnattended confirms creation.
-func (f *linkInflight) done() {
-	f.on, f.id = false, 0
 }
