@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type WheelEvent } from 'react';
-import { ArrowLeft, Laptop, MousePointer2, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Laptop, Maximize2, Minimize2, MousePointer2, ShieldCheck } from 'lucide-react';
 import { endMsfwr, getGetMsfwrFrameUrl, sendMsfwrInput, type MsfwrInput } from '@workspace/api-client-react';
 
 type Props = { token: string; verification: string; preapproved?: boolean; onLeave: (message?: string) => void };
@@ -21,6 +21,27 @@ export default function LiveSession({ token, verification, preapproved = false, 
   const input = useRef<MsfwrInput[]>([]);
   const sending = useRef(false);
   const surface = useRef<HTMLImageElement>(null);
+  const stage = useRef<HTMLDivElement>(null);
+  // Full screen uses the browser's own full-screen mode where it exists, and
+  // otherwise (iPhone Safari) fills the window.
+  const [full, setFull] = useState(false);
+  useEffect(() => {
+    const sync = () => setFull(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', sync);
+    return () => {
+      document.removeEventListener('fullscreenchange', sync);
+      if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+    };
+  }, []);
+  async function toggleFull() {
+    if (document.fullscreenElement) { await document.exitFullscreen().catch(() => {}); return; }
+    if (full) { setFull(false); return; }
+    const el = stage.current;
+    if (el?.requestFullscreen) {
+      try { await el.requestFullscreen({ navigationUI: 'hide' }); return; } catch { /* fall back below */ }
+    }
+    setFull(true);
+  }
   const lastMove = useRef(0);
   const lastWheel = useRef(0);
   const pressed = useRef<number | null>(null);
@@ -139,7 +160,7 @@ export default function LiveSession({ token, verification, preapproved = false, 
   }
 
   return (
-    <main className="min-h-[100dvh] bg-background text-foreground">
+    <main className="min-h-[100dvh] bg-background text-foreground" data-fullscreen={full || undefined}>
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-foreground/15 px-5 py-4 md:px-10">
         <div>
           <p className="text-lg font-bold">Msfwr</p>
@@ -172,11 +193,32 @@ export default function LiveSession({ token, verification, preapproved = false, 
               <h1 className="text-2xl font-bold">Remote desktop</h1>
               <p className="text-sm text-muted-foreground">{control ? 'Press Esc to release control in this browser.' : 'You are viewing without sending input.'}</p>
             </div>
-            <button type="button" disabled={!frame} aria-pressed={control} onClick={toggle} className="inline-flex items-center gap-2 rounded-lg bg-foreground px-4 py-2 text-sm font-semibold text-background disabled:opacity-50">
-              <MousePointer2 size={16} /> {control ? 'Disable remote input' : 'Enable remote input'}
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" disabled={!frame} onClick={() => void toggleFull()} data-testid="button-fullscreen"
+                className="inline-flex items-center gap-2 rounded-lg border border-foreground/25 px-4 py-2 text-sm font-semibold hover:bg-foreground/10 disabled:opacity-50">
+                <Maximize2 size={16} /> Full screen
+              </button>
+              <button type="button" disabled={!frame} aria-pressed={control} onClick={toggle} className="inline-flex items-center gap-2 rounded-lg bg-foreground px-4 py-2 text-sm font-semibold text-background disabled:opacity-50">
+                <MousePointer2 size={16} /> {control ? 'Disable remote input' : 'Enable remote input'}
+              </button>
+            </div>
           </div>
-          <div className="flex min-h-52 items-center justify-center rounded-xl bg-foreground p-2 text-background">
+          <div ref={stage}
+            className={full
+              ? 'fixed inset-0 z-50 flex items-center justify-center bg-black text-background'
+              : 'flex min-h-52 items-center justify-center rounded-xl bg-foreground p-2 text-background'}>
+            {full && (
+              <div className="absolute right-3 top-3 z-10 flex gap-2 opacity-70 transition-opacity hover:opacity-100">
+                <button type="button" aria-pressed={control} onClick={toggle} data-testid="button-fullscreen-input"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur hover:bg-white/25">
+                  <MousePointer2 size={14} /> {control ? 'Input on' : 'Input off'}
+                </button>
+                <button type="button" onClick={() => void toggleFull()} data-testid="button-exit-fullscreen"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur hover:bg-white/25">
+                  <Minimize2 size={14} /> Exit full screen
+                </button>
+              </div>
+            )}
             {frame ? (
               <img
                 ref={surface}
@@ -184,7 +226,7 @@ export default function LiveSession({ token, verification, preapproved = false, 
                 alt="Live view of the host's primary Windows screen"
                 tabIndex={0}
                 draggable={false}
-                className={`block max-h-[72dvh] max-w-full rounded-sm outline-offset-4 ${control ? 'touch-none cursor-default' : ''}`}
+                className={`block ${full ? 'max-h-[100dvh] max-w-[100vw] object-contain' : 'max-h-[72dvh] max-w-full rounded-sm outline-offset-4'} ${control ? 'touch-none cursor-default' : ''}`}
                 onBlur={() => { release(); setControl(false); }}
                 onKeyDown={key}
                 onContextMenu={(e) => { if (control) e.preventDefault(); }}

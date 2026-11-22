@@ -122,6 +122,7 @@ export function FirstPassword({ username }: { username: string }) {
   }
 
   async function signOut() {
+    client.setQueryData(getGetAuthStatusQueryKey(), {});
     await logout().catch(() => {});
     await client.invalidateQueries({ queryKey: getGetAuthStatusQueryKey() });
   }

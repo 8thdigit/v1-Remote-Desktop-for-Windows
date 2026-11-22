@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useLocation } from 'wouter';
 import { getAuthStatus, getGetAuthStatusQueryKey, logout, type Account, type AuthStatus } from '@workspace/api-client-react';
 
 // The signed-in portal user. The login itself is an HttpOnly cookie set by
@@ -51,10 +52,17 @@ export function AuthProvider({ user, children }: { user: Account; children: Reac
   const refresh = useCallback(async () => {
     await client.invalidateQueries({ queryKey: getGetAuthStatusQueryKey() });
   }, [client]);
+  const [, navigate] = useLocation();
+  // Show the sign-in screen at once, then tell the relay. Other pages' data
+  // is dropped so the next user never sees it.
   const signOut = useCallback(async () => {
+    const key = getGetAuthStatusQueryKey();
+    const authKey = JSON.stringify(key);
+    client.setQueryData<AuthStatus>(key, {});
+    client.removeQueries({ predicate: (q) => JSON.stringify(q.queryKey) !== authKey });
+    navigate('/', { replace: true });
     try { await logout(); } catch { /* the cookie is cleared or already gone */ }
-    client.clear();
-    await client.invalidateQueries({ queryKey: getGetAuthStatusQueryKey() });
-  }, [client]);
+    await client.invalidateQueries({ queryKey: key });
+  }, [client, navigate]);
   return <AuthContext.Provider value={{ user, refresh, signOut }}>{children}</AuthContext.Provider>;
 }
