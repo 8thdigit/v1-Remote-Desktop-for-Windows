@@ -32,6 +32,9 @@ type invite struct {
 	// Unattended registrations: what the relay knows about the RA ID.
 	RaStatus string `json:"raStatus"`
 	RaName   string `json:"raName"`
+	// The company's subscription status, when its RA ID is known: "active",
+	// "trial", "expired", "suspended", or "none" (not gated).
+	SubStatus string `json:"subStatus"`
 }
 
 type tick struct {
@@ -218,6 +221,15 @@ func (r *relay) send(ctx context.Context, path string, payload []byte, contentTy
 			text = "the session ended or expired"
 		} else if res.StatusCode == 429 {
 			text = "relay busy; wait a minute and try again"
+		} else if res.StatusCode == 402 {
+			// Subscription refusal: surface the relay's own message so the
+			// PC can show why it cannot serve.
+			var msg struct {
+				Error string `json:"error"`
+			}
+			if json.Unmarshal(body, &msg) == nil && msg.Error != "" {
+				text = msg.Error
+			}
 		}
 		return &statusError{status: res.StatusCode, text: text}
 	}

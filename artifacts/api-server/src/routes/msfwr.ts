@@ -7,7 +7,13 @@ import {
   GetMsfwrInboxResponse, AcceptMsfwrRequestBody, AcceptMsfwrRequestResponse, ConnectMsfwrPcBody, ConnectMsfwrPcResponse,
 } from "@workspace/api-zod";
 import { formatRaId, normalizeRaId } from "../lib/msfwr";
-import { accountsReady, activity, operatorOf, requireUser, store } from "../lib/portal";
+import { accountsReady, activity, gateForRa, operatorOf, requireUser, store } from "../lib/portal";
+import { keyedLimiter } from "../lib/security";
+
+// Per-PC registration limiter, on top of the global throttle: bounds how fast
+// one unattended key can re-register, so a single client cannot flood the
+// relay or a company's gate checks.
+const standingByKey = keyedLimiter(40, 60_000);
 
 const router = Router();
 
@@ -54,10 +60,24 @@ router.post("/standing", async (req, res) => {
   if (tooManyStanding()) { res.status(429).json({error: "Relay busy. Try again in a minute."}); return; }
   const body = RegisterMsfwrStandingBody.safeParse(req.body);
   if (!body.success) { res.status(400).json({error: "Invalid unattended access key."}); return; }
+  if (standingByKey.hit(body.data.key)) { res.status(429).json({error: "This PC is registering too often. Try again in a minute."}); return; }
   const ra = await lookupRa(body.data.ra);
+  // Enforce the company's subscription: a PC pointing to a company whose
+  // subscription is expired, suspended or over quota is refused, so the
+  // client cannot serve sessions. Companies with no subscription on record,
+  // and PCs with no RA ID, are not gated.
+  const license = typeof req.body?.license === "string" ? req.body.license : undefined;
+  const gate = ra.status === "ok" ? await gateForRa(ra.ra, license) : { ok: true, status: "none" as const };
+  if (!gate.ok) {
+    res.status(402).json({ error: gate.message, subStatus: gate.status, reason: gate.reason });
+    return;
+  }
   const standing = store.standing(body.data.key, body.data.name, ra.status === "ok" ? ra.ra : undefined);
   if (!standing) { res.status(409).json({error: "Relay busy, or the code is in use by another session."}); return; }
-  res.status(201).json(RegisterMsfwrStandingResponse.parse({...standing, raStatus: ra.status, ...(ra.status === "ok" ? {raName: ra.name} : {})}));
+  const base = RegisterMsfwrStandingResponse.parse({...standing, raStatus: ra.status, ...(ra.status === "ok" ? {raName: ra.name} : {})});
+  // The subscription status travels back with the registration so the client
+  // can show it. "none" means the company is not gated.
+  res.status(201).json({ ...base, subStatus: gate.status });
 });
 router.post("/call", async (req, res) => {
   const s = auth(req, res, "host");
@@ -70,6 +90,11 @@ router.post("/call", async (req, res) => {
     // 422 tells the PC that the RA ID it was given does not belong to any company.
     if (found.status !== "ok") { res.status(422).json({error: "No active company has that RA ID."}); return; }
     ra = found.ra;
+  }
+  // Refuse Initiate for a company whose subscription is not active.
+  if (ra) {
+    const gate = await gateForRa(ra);
+    if (!gate.ok) { res.status(402).json({ error: gate.message, subStatus: gate.status, reason: gate.reason }); return; }
   }
   const fresh = !s.call || s.call.until <= Date.now() || s.call.ra !== ra;
   if (!store.call(s, body.data.name ?? "", undefined, ra)) { res.status(409).json({error: "Only a waiting host can initiate."}); return; }

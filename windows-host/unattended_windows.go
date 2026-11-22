@@ -596,7 +596,7 @@ func runUnattended(configPath string, config unattendedConfig, announce, openWin
 
 	go func() {
 		defer close(worker)
-		serveUnattended(ctx, config.Relay, config.Key, hostName, linksPath, raOf, reregister, stopSession, initiate, updates)
+		serveUnattended(ctx, config.Relay, config.Key, hostName, config.License, linksPath, raOf, reregister, stopSession, initiate, updates)
 	}()
 
 	var msg indicatorMessage

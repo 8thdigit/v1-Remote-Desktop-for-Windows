@@ -176,7 +176,7 @@ const callTTL = 2 * time.Minute
 // behind the RA ID, and browsers that saved this PC's code, see the request.
 // raOf returns the current RA ID; a value on reregister makes the host
 // register again at once (for example after the RA ID changed).
-func serveUnattended(ctx context.Context, origin, key, name, linksPath string, raOf func() string, reregister, stopSession, initiate <-chan struct{}, updates chan<- unattendedUpdate) {
+func serveUnattended(ctx context.Context, origin, key, name, license, linksPath string, raOf func() string, reregister, stopSession, initiate <-chan struct{}, updates chan<- unattendedUpdate) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	backoff := 2 * time.Second
@@ -202,7 +202,7 @@ func serveUnattended(ctx context.Context, origin, key, name, linksPath string, r
 			}
 			continue
 		}
-		served, err := unattendedRound(ctx, origin, key, name, raOf(), linksPath, reregister, stopSession, initiate, &callUntil, updates)
+		served, err := unattendedRound(ctx, origin, key, name, license, raOf(), linksPath, reregister, stopSession, initiate, &callUntil, updates)
 		if ctx.Err() != nil {
 			return
 		}
@@ -222,6 +222,15 @@ func serveUnattended(ctx context.Context, origin, key, name, linksPath string, r
 			backoff = 2 * time.Second
 			continue
 		}
+		// A subscription refusal is not a lost relay: show why and wait,
+		// without a tight retry. The relay re-checks on the next round.
+		if text, blocked := subscriptionBlocked(err); blocked {
+			updates <- unattendedUpdate{state: "offline", text: text}
+			if !pause(30 * time.Second) {
+				return
+			}
+			continue
+		}
 		updates <- unattendedUpdate{state: "offline", text: "Cannot reach the relay (" + err.Error() + "). Retrying…"}
 		if !pause(backoff) {
 			return
@@ -237,13 +246,14 @@ func serveUnattended(ctx context.Context, origin, key, name, linksPath string, r
 // whether a viewer connected.
 // callUntil is when the current Initiate request lapses; it survives the
 // registration refresh so a request is not lost when the round restarts.
-func unattendedRound(parent context.Context, origin, key, name, ra, linksPath string, reregister, stopSession, initiate <-chan struct{}, callUntil *time.Time, updates chan<- unattendedUpdate) (served bool, err error) {
+func unattendedRound(parent context.Context, origin, key, name, license, ra, linksPath string, reregister, stopSession, initiate <-chan struct{}, callUntil *time.Time, updates chan<- unattendedUpdate) (served bool, err error) {
 	r, err := newRelay(origin)
 	if err != nil {
 		return false, err
 	}
 	var invitation invite
-	if err := r.postJSON(parent, "standing", map[string]string{"key": key, "name": name, "ra": ra}, &invitation); err != nil {
+	body := standingBody(unattendedConfig{Key: key, RA: ra, License: license}, name)
+	if err := r.postJSON(parent, "standing", body, &invitation); err != nil {
 		return false, err
 	}
 	if invitation.Code != standingCode(key) || !tokenFormat.MatchString(invitation.Token) {

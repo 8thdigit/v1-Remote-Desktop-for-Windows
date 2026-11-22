@@ -16,8 +16,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Brand, RaBadge, UserMenu } from '@/components/user-menu';
 import { errorText, raLabel, useAuth } from '@/lib/auth';
 import { relativeTime } from '@/lib/unattended';
+import { SubscriptionsPanel, PaymentsPanel } from './billing-admin';
 
-type Tab = 'users' | 'pcs' | 'sessions' | 'requests' | 'activity';
+type Tab = 'users' | 'subscriptions' | 'payments' | 'pcs' | 'sessions' | 'requests' | 'activity';
 
 // Ends a session from the console (not part of the generated client).
 async function endSessionAsAdmin(id: string) {
@@ -115,7 +116,7 @@ export default function Admin() {
         )}
 
         <nav aria-label="Admin sections" className="mt-6 flex w-full gap-1 overflow-x-auto rounded-xl bg-muted/80 p-1 sm:w-fit">
-          {([['users', 'Companies'], ['pcs', `PCs${pcs.length ? ` (${pcs.length})` : ''}`], ['sessions', `Sessions${live.length ? ` (${live.length})` : ''}`], ['requests', 'Requests'], ['activity', 'Activity']] as const).map(([id, text]) => (
+          {([['users', 'Companies'], ['subscriptions', 'Subscriptions'], ['payments', 'Payments'], ['pcs', `PCs${pcs.length ? ` (${pcs.length})` : ''}`], ['sessions', `Sessions${live.length ? ` (${live.length})` : ''}`], ['requests', 'Requests'], ['activity', 'Activity']] as const).map(([id, text]) => (
             <button key={id} type="button" onClick={() => setTab(id)} aria-current={tab === id ? 'page' : undefined} data-testid={`admin-tab-${id}`}
               className={`flex-1 whitespace-nowrap rounded-lg px-4 py-1.5 text-sm font-semibold transition-colors sm:flex-none ${tab === id ? 'bg-card shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
               {text}
@@ -137,6 +138,8 @@ export default function Admin() {
                 }
               }} />
           )}
+          {tab === 'subscriptions' && <SubscriptionsPanel onError={setProblem} />}
+          {tab === 'payments' && <PaymentsPanel onError={setProblem} />}
           {tab === 'pcs' && (
             <Panel title="PCs online" icon={Laptop} action={<Refresh onClick={reload} />}>
               {pcs.length === 0 ? <Empty text="No PC with unattended access is connected to the relay right now." /> : (

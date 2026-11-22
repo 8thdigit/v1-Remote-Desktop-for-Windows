@@ -139,6 +139,7 @@ export declare const GetMsfwrLinkStatusQueryParams: zod.ZodObject<{
 export declare const getMsfwrLinkStatusResponseLinkCodeRegExp: RegExp;
 export declare const getMsfwrLinkStatusResponseLinkPinRegExp: RegExp;
 export declare const getMsfwrLinkStatusResponseLinkSessionsMin = 0;
+export declare const getMsfwrLinkStatusResponseViewersMin = 0;
 export declare const GetMsfwrLinkStatusResponse: zod.ZodObject<{
     link: zod.ZodObject<{
         id: zod.ZodString;
@@ -152,6 +153,7 @@ export declare const GetMsfwrLinkStatusResponse: zod.ZodObject<{
     }, zod.z.core.$strip>;
     online: zod.ZodBoolean;
     busy: zod.ZodBoolean;
+    viewers: zod.ZodOptional<zod.ZodInt>;
 }, zod.z.core.$strip>;
 /**
  * Revoke a link at once; any live session under it is ended.
@@ -176,11 +178,13 @@ export declare const getMsfwrLinkInfoQueryCodeRegExp: RegExp;
 export declare const GetMsfwrLinkInfoQueryParams: zod.ZodObject<{
     code: zod.z.ZodCoercedString<unknown>;
 }, zod.z.core.$strip>;
+export declare const getMsfwrLinkInfoResponseViewersMin = 0;
 export declare const GetMsfwrLinkInfoResponse: zod.ZodObject<{
     code: zod.ZodString;
     name: zod.ZodString;
     online: zod.ZodBoolean;
     busy: zod.ZodBoolean;
+    viewers: zod.ZodOptional<zod.ZodInt>;
     expiresAt: zod.ZodNumber;
 }, zod.z.core.$strip>;
 /**
@@ -248,7 +252,6 @@ export declare const ConnectMsfwrPcResponse: zod.ZodObject<{
     preapproved: zod.ZodBoolean;
 }, zod.z.core.$strip>;
 export declare const GetAuthStatusResponse: zod.ZodObject<{
-    setupRequired: zod.ZodBoolean;
     user: zod.ZodOptional<zod.ZodObject<{
         id: zod.ZodString;
         username: zod.ZodString;
@@ -261,30 +264,8 @@ export declare const GetAuthStatusResponse: zod.ZodObject<{
         disabled: zod.ZodBoolean;
         createdAt: zod.ZodNumber;
         lastLoginAt: zod.ZodOptional<zod.ZodNumber>;
+        mustChangePassword: zod.ZodOptional<zod.ZodBoolean>;
     }, zod.z.core.$strip>>;
-}, zod.z.core.$strip>;
-export declare const setupAdminBodySetupCodeMax = 32;
-export declare const setupAdminBodyUsernameMax = 64;
-export declare const setupAdminBodyDisplayNameMax = 80;
-export declare const setupAdminBodyPasswordMax = 200;
-export declare const SetupAdminBody: zod.ZodObject<{
-    setupCode: zod.ZodString;
-    username: zod.ZodString;
-    displayName: zod.ZodOptional<zod.ZodString>;
-    password: zod.ZodString;
-}, zod.z.core.$strip>;
-export declare const SetupAdminResponse: zod.ZodObject<{
-    id: zod.ZodString;
-    username: zod.ZodString;
-    displayName: zod.ZodString;
-    role: zod.ZodEnum<{
-        company: "company";
-        admin: "admin";
-    }>;
-    raId: zod.ZodString;
-    disabled: zod.ZodBoolean;
-    createdAt: zod.ZodNumber;
-    lastLoginAt: zod.ZodOptional<zod.ZodNumber>;
 }, zod.z.core.$strip>;
 export declare const loginBodyUsernameMax = 64;
 export declare const loginBodyPasswordMax = 200;
@@ -304,6 +285,7 @@ export declare const LoginResponse: zod.ZodObject<{
     disabled: zod.ZodBoolean;
     createdAt: zod.ZodNumber;
     lastLoginAt: zod.ZodOptional<zod.ZodNumber>;
+    mustChangePassword: zod.ZodOptional<zod.ZodBoolean>;
 }, zod.z.core.$strip>;
 export declare const LogoutResponse: zod.ZodVoid;
 export declare const changePasswordBodyCurrentMax = 200;
@@ -326,6 +308,7 @@ export declare const ListUsersResponse: zod.ZodObject<{
         disabled: zod.ZodBoolean;
         createdAt: zod.ZodNumber;
         lastLoginAt: zod.ZodOptional<zod.ZodNumber>;
+        mustChangePassword: zod.ZodOptional<zod.ZodBoolean>;
     }, zod.z.core.$strip>>;
 }, zod.z.core.$strip>;
 export declare const createUserBodyUsernameMax = 64;
@@ -354,6 +337,7 @@ export declare const CreateUserResponse: zod.ZodObject<{
     disabled: zod.ZodBoolean;
     createdAt: zod.ZodNumber;
     lastLoginAt: zod.ZodOptional<zod.ZodNumber>;
+    mustChangePassword: zod.ZodOptional<zod.ZodBoolean>;
 }, zod.z.core.$strip>;
 export declare const UpdateUserParams: zod.ZodObject<{
     id: zod.z.ZodCoercedString<unknown>;
@@ -383,11 +367,14 @@ export declare const UpdateUserResponse: zod.ZodObject<{
     disabled: zod.ZodBoolean;
     createdAt: zod.ZodNumber;
     lastLoginAt: zod.ZodOptional<zod.ZodNumber>;
+    mustChangePassword: zod.ZodOptional<zod.ZodBoolean>;
 }, zod.z.core.$strip>;
 export declare const DeleteUserParams: zod.ZodObject<{
     id: zod.z.ZodCoercedString<unknown>;
 }, zod.z.core.$strip>;
 export declare const DeleteUserResponse: zod.ZodVoid;
+export declare const getAdminOverviewResponseLiveItemViewersMin = 0;
+export declare const getAdminOverviewResponsePcsItemViewersMin = 0;
 export declare const GetAdminOverviewResponse: zod.ZodObject<{
     live: zod.ZodArray<zod.ZodObject<{
         id: zod.ZodString;
@@ -404,6 +391,7 @@ export declare const GetAdminOverviewResponse: zod.ZodObject<{
         }>;
         ra: zod.ZodOptional<zod.ZodString>;
         operator: zod.ZodOptional<zod.ZodString>;
+        viewers: zod.ZodOptional<zod.ZodInt>;
         createdAt: zod.ZodNumber;
         liveAt: zod.ZodOptional<zod.ZodNumber>;
     }, zod.z.core.$strip>>;
@@ -422,6 +410,7 @@ export declare const GetAdminOverviewResponse: zod.ZodObject<{
         }>;
         ra: zod.ZodOptional<zod.ZodString>;
         operator: zod.ZodOptional<zod.ZodString>;
+        viewers: zod.ZodOptional<zod.ZodInt>;
         createdAt: zod.ZodNumber;
         liveAt: zod.ZodOptional<zod.ZodNumber>;
     }, zod.z.core.$strip>>;

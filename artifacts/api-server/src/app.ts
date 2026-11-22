@@ -3,6 +3,7 @@ import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { securityHeaders } from "./lib/security";
 
 const app: Express = express();
 // Render (and Vercel in front of it) terminate TLS in proxies, so trust the
@@ -32,6 +33,9 @@ app.use(
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Baseline security headers on every API response.
+app.use(securityHeaders());
 
 app.use("/api", router);
 

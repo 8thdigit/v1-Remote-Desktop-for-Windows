@@ -4,13 +4,50 @@ import {
   AccountError, createAccounts, createActivityLog, fileBackend, loginTTL, postgresBackend,
   type Accounts, type PublicAccount,
 } from "./accounts";
-import { createMsfwrStore } from "./msfwr";
+import {
+  createBilling, fileBillingBackend, postgresBillingBackend, BillingError,
+  type Billing, type Entitlement, type SubStatus,
+} from "./billing";
+import { createMsfwrStore, type EndedSession, type Session } from "./msfwr";
 import { logger } from "./logger";
 
-// Shared relay state: the session store, the portal accounts and the
-// admin activity log.
+// Shared relay state: the session store, the portal accounts, the billing
+// store and the admin activity log.
 
-export const store = createMsfwrStore();
+// The session store reports live-starts and ended sessions to billing: each
+// live-start counts against the owning company's quota, and each ended
+// session is written to the history. Both are best-effort and keyed by the
+// PC's RA ID, which is mapped to a company account here.
+export const store = createMsfwrStore(Date.now, {
+  onLive(session: Session) {
+    const ra = session.ra;
+    if (!ra) return;
+    void (async () => {
+      try {
+        const account = (await accountsReady()).findRa(ra);
+        if (account) await (await billingReady()).countSession(account.id);
+      } catch (err) { logger.warn({ err }, "Could not count session for billing"); }
+    })();
+  },
+  onEnd(ended: EndedSession) {
+    void (async () => {
+      try {
+        const account = ended.raId ? (await accountsReady()).findRa(ended.raId) : undefined;
+        await (await billingReady()).recordSession({
+          accountId: account?.id ?? null,
+          raId: ended.raId,
+          pcName: ended.pcName,
+          mode: ended.mode,
+          operator: ended.operator,
+          startedAt: ended.startedAt,
+          endedAt: ended.endedAt,
+          durationMs: ended.durationMs,
+          viewers: ended.viewers,
+        });
+      } catch (err) { logger.warn({ err }, "Could not record session history"); }
+    })();
+  },
+});
 setInterval(store.sweep, 5000).unref();
 
 export const activity = createActivityLog();
@@ -50,6 +87,85 @@ export function accountsReady() {
     throw err;
   });
   return opening;
+}
+
+// The billing store shares the accounts' storage location (the Render disk
+// or PostgreSQL). Its license signing key is BILLING_SECRET when set, else
+// the SESSION_SECRET, so licenses survive restarts like login cookies do.
+async function openBilling(): Promise<Billing> {
+  const url = process.env["DATABASE_URL"];
+  const backend = url
+    ? await postgresBillingBackend(url)
+    : fileBillingBackend(process.env["MSFWR_DATA_DIR"] || path.resolve(process.cwd(), ".data"));
+  const secret = process.env["BILLING_SECRET"] || process.env["SESSION_SECRET"];
+  const { init, api } = createBilling(backend, { secret });
+  await init;
+  logger.info({ storage: api.backend, plans: api.listPlans().length }, "Billing store loaded");
+  return api;
+}
+
+let openingBilling: Promise<Billing> | undefined;
+export function billingReady() {
+  openingBilling ??= openBilling().catch((err) => {
+    openingBilling = undefined;
+    throw err;
+  });
+  return openingBilling;
+}
+
+// Tests and local runs can point billing at another backend.
+export function useBilling(ready: Promise<Billing>) { openingBilling = ready; }
+
+export { BillingError };
+export type { Entitlement, SubStatus };
+
+// Maps the reason a company is blocked to a client-facing message. Used by
+// the host endpoints that refuse registration for an inactive company.
+export function subBlockMessage(reason: Entitlement["reason"]): string {
+  switch (reason) {
+    case "expired": return "This company's WINRSS.net subscription has expired. Contact your provider to renew it.";
+    case "suspended": return "This company's WINRSS.net subscription is suspended. Contact your provider.";
+    case "quota": return "This company has reached its session limit for the current billing period.";
+    case "license": return "This client's license is missing, invalid or revoked. Reconfigure it from the admin console.";
+    default: return "This company's WINRSS.net subscription is not active.";
+  }
+}
+
+// Whether a PC that points to this RA ID may register and serve sessions.
+// A company with no subscription on record is ungated (legacy); gating
+// begins once an operator assigns it a subscription. When a license token is
+// presented it is verified against the company, and when the subscription
+// requires a license, a registration without a valid one is refused — this is
+// what stops a cracked or copied client from impersonating a company or
+// dodging revocation.
+export async function gateForRa(
+  raId: string | undefined,
+  license?: string,
+): Promise<{ ok: boolean; status: SubStatus | "none"; reason?: Entitlement["reason"]; message?: string }> {
+  if (!raId) return { ok: true, status: "none" };
+  try {
+    const account = (await accountsReady()).findRa(raId);
+    if (!account) return { ok: true, status: "none" };
+    const billing = await billingReady();
+    const sub = billing.getSubscription(account.id);
+    if (!sub) return { ok: true, status: "none" };
+    const ent = billing.entitlement(account.id);
+    // License checks come first: a presented license that is forged, revoked
+    // or issued to another company is always refused, and a company that
+    // requires a license refuses anything without a valid one.
+    const lic = billing.checkLicense(account.id, license);
+    if (lic === "mismatch" || lic === "invalid" || (ent.requireLicense && lic !== "ok")) {
+      return { ok: false, status: ent.status, reason: "license", message: subBlockMessage("license") };
+    }
+    const gate = billing.canStartSession(account.id);
+    if (gate.ok) return { ok: true, status: gate.entitlement.status };
+    return { ok: false, status: gate.entitlement.status, reason: gate.reason, message: subBlockMessage(gate.reason) };
+  } catch (err) {
+    // If billing cannot be read, do not take the whole relay down: fail open
+    // so existing sessions keep working, and log it.
+    logger.error({ err }, "Billing gate check failed; allowing session");
+    return { ok: true, status: "none" };
+  }
 }
 
 function readCookie(req: Request, name: string) {
@@ -118,7 +234,7 @@ export function requireUser(role?: "admin", options: { allowPasswordChange?: boo
 }
 
 export function sendError(res: Response, err: unknown) {
-  if (err instanceof AccountError) { res.status(err.status).json({ error: err.message }); return; }
+  if (err instanceof AccountError || err instanceof BillingError) { res.status(err.status).json({ error: err.message }); return; }
   logger.error({ err }, "Portal request failed");
   res.status(500).json({ error: "Something went wrong on the relay. Try again." });
 }
