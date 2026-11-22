@@ -158,15 +158,6 @@ type unattendedUpdate struct {
 	state, text string // state is ready, calling, connected, offline or locked
 }
 
-// linkRequest is a remote access link the UI wants registered so its shared
-// URL can open sessions. serveUnattended creates the link on the relay (when
-// it has no id yet), stores it in links.json, and keeps re-registering the
-// host under its code after every session until the link expires.
-type linkRequest struct {
-	name  string
-	hours int
-}
-
 // callTTL matches callTTL in artifacts/api-server/src/lib/deskline.ts.
 const callTTL = 2 * time.Minute
 
@@ -180,7 +171,7 @@ const callTTL = 2 * time.Minute
 // linksPath is where saved remote access links live ("" when unavailable).
 // After a session opened through a shared link ends, the host re-registers
 // under that link so the same URL can open more sessions until it expires.
-func serveUnattended(ctx context.Context, origin, key, name, linksPath string, stopSession, initiate, newLink <-chan struct{}, updates chan<- unattendedUpdate) {
+func serveUnattended(ctx context.Context, origin, key, name, linksPath string, stopSession, initiate <-chan struct{}, newLink <-chan linkRequest, updates chan<- unattendedUpdate) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	backoff := 2 * time.Second

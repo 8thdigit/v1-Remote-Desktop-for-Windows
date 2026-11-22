@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -188,4 +189,98 @@ func linksPathFor(configPath string) string {
 		return ""
 	}
 	return filepath.Join(filepath.Dir(configPath), linksFile)
+}
+
+// linkRequest is a remote access link the UI wants registered so its shared
+// URL can open sessions. serveUnattended creates the link on the relay,
+// stores it in links.json, and keeps re-registering the host under its code
+// after every session until the link expires or is revoked.
+type linkRequest struct {
+	id    uint64 // unique per request, for retry bookkeeping between rounds
+	name  string
+	hours int
+}
+
+var linkSeq uint64
+
+// newLinkRequest stamps a request with a fresh id.
+func newLinkRequest(name string, hours int) linkRequest {
+	linkSeq++
+	return linkRequest{id: linkSeq, name: name, hours: hours}
+}
+
+// listLinks summarizes saved links for menus and status text. Expired links
+// are dropped from the file as a side effect when linksPath is known.
+func listLinks(linksPath string, now time.Time) []string {
+	if linksPath == "" {
+		return nil
+	}
+	all, err := loadLinks(linksPath, now)
+	if err != nil {
+		return []string{"Saved links could not be read: " + err.Error()}
+	}
+	fresh := make([]savedLink, 0, len(all))
+	for _, l := range all {
+		if !l.expired(now) {
+			fresh = append(fresh, l)
+		}
+	}
+	if len(fresh) != len(all) {
+		_ = saveLinks(linksPath, fresh)
+	}
+	out := make([]string, 0, len(fresh)+1)
+	for _, l := range fresh {
+		status := timeLeft(l.ExpiresAt, now)
+		if l.Name != "" {
+			status = l.Name + " — " + status
+		}
+		out = append(out, l.shareURL()+"  ("+status+")")
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// revokeLink drops a saved link locally and asks the relay to stop honouring
+// its shared URL. The key stored with the link proves ownership.
+func revokeLink(linksPath, id string, now time.Time) error {
+	r, err := newRelay(savedLinkRelay(linksPath, id, now))
+	if err != nil {
+		return err
+	}
+	links, err := loadLinks(linksPath, now)
+	if err != nil {
+		return err
+	}
+	var target *savedLink
+	for i := range links {
+		if links[i].ID == id {
+			target = &links[i]
+		}
+	}
+	if target == nil {
+		return errors.New("that link is no longer saved on this PC")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	if err := r.revokeLink(ctx, target.ID, target.Key); err != nil {
+		return err
+	}
+	rest, _ := removeLink(links, id)
+	return saveLinks(linksPath, rest)
+}
+
+// savedLinkRelay finds the relay origin a saved link belongs to.
+func savedLinkRelay(linksPath, id string, now time.Time) string {
+	links, err := loadLinks(linksPath, now)
+	if err != nil {
+		return ""
+	}
+	for _, l := range links {
+		if l.ID == id {
+			return l.Relay
+		}
+	}
+	return ""
 }
