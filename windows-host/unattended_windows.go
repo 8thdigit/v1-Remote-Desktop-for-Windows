@@ -333,7 +333,7 @@ func runUnattended(configPath string, config unattendedConfig, announce, openWin
 		}
 		item(mfSeparator, 0, "")
 		if l, _ := loadLink(linksPath, time.Now()); l != nil {
-			item(mfGrayed, 0, l.shareURL()+"  (access code "+l.Pin+")")
+			item(mfGrayed, 0, l.shareURL())
 			item(mfString, copyLinkButton, "Copy remote access URL and code")
 			item(mfString, clearLinkButton, "Clear remote access URL")
 		} else if state != "connected" && !linkBusy {
@@ -433,11 +433,11 @@ func runUnattended(configPath string, config unattendedConfig, announce, openWin
 						linkUpdate("Could not create the remote access URL: " + err.Error())
 						return
 					}
-					linkUpdate("Remote access URL created. Copy it and share it with its access code (valid " + formatValidity(l.Hours) + ").")
+					linkUpdate("Remote access URL created (valid " + formatValidity(l.Hours) + "). Copy it and send it: one click connects.")
 				}()
 			case copyLinkButton:
 				if l, _ := loadLink(linksPath, time.Now()); l != nil && copyText(window, l.shareText()) {
-					linkNote = "Copied the URL and access code to the clipboard."
+					linkNote = "Copied. Paste the URL to the people who should connect."
 				}
 			case clearLinkButton:
 				if linkBusy {

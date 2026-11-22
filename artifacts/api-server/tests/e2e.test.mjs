@@ -154,10 +154,16 @@ test("remote access URL: create from the PC, open with the access code, clear it
   const joined = await visitor("POST", "/msfwr/link/join", { code: link.code, pin: link.pin });
   assert.equal(joined.status, 200);
   assert.equal((await pc("POST", "/msfwr/tick", undefined, { authorization: `Bearer ${reg.json.token}` })).json.state, "live");
+  const other = client();
+  const both = await other("POST", "/msfwr/link/join", { code: link.code, pin: link.pin });
+  assert.equal(both.status, 200, "a second person can connect through the same URL");
+  assert.equal((await other("GET", `/msfwr/link/info?code=${link.code}`)).json.viewers, 2);
   await visitor("POST", "/msfwr/end", undefined, { authorization: `Bearer ${joined.json.token}` });
+  assert.equal((await pc("POST", "/msfwr/tick", undefined, { authorization: `Bearer ${reg.json.token}` })).json.state, "live", "still live for the other person");
+  await other("POST", "/msfwr/end", undefined, { authorization: `Bearer ${both.json.token}` });
 
   const status = await pc("GET", `/msfwr/link/status?id=${link.id}&key=${pcKey("r")}`);
-  assert.equal(status.json.link.sessions, 1);
+  assert.equal(status.json.link.sessions, 2);
   assert.equal((await pc("POST", "/msfwr/link/revoke", { id: link.id, key: pcKey("r") })).status, 204);
   assert.equal((await visitor("GET", `/msfwr/link/info?code=${link.code}`)).status, 404);
   // The PC re-sending a cleared link does not bring it back unless it has the pin (a restore).

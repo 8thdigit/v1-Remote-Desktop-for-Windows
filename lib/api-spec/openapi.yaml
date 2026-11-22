@@ -480,6 +480,7 @@ components:
         name: {type: string}
         online: {type: boolean}
         busy: {type: boolean}
+        viewers: {type: integer, minimum: 0, description: People connected through this URL right now}
         expiresAt: {type: number}
     MsfwrLinkJoin:
       type: object
@@ -591,6 +592,7 @@ components:
         state: {type: string, enum: [waiting, pending, live]}
         ra: {type: string}
         operator: {type: string}
+        viewers: {type: integer, minimum: 0}
         createdAt: {type: number}
         liveAt: {type: number}
     AdminOverview:
@@ -624,6 +626,7 @@ components:
         link: {$ref: "#/components/schemas/MsfwrLink"}
         online: {type: boolean}
         busy: {type: boolean}
+        viewers: {type: integer, minimum: 0}
     MsfwrViewer:
       type: object
       required: [token, verification, preapproved]

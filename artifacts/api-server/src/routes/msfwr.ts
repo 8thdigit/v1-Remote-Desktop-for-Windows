@@ -165,6 +165,7 @@ router.post("/link/join", (req, res) => {
       pin: [403, "That access code is not correct."],
       offline: [409, "The PC is offline or locked right now. Try again when it is on and signed in."],
       busy: [409, "Someone is already connected to this PC. Try again when that session ends."],
+      full: [409, "Too many people are connected to this PC through its URL. Try again later."],
     } as const;
     const [status, error] = answers[result.error];
     res.status(status).json({error});
@@ -192,8 +193,10 @@ router.post("/approve", (req, res) => {
 router.post("/end", (req, res) => {
   const s = auth(req, res);
   if (!s) return;
-  if (s.state === "live") activity.add("end", `Session ${s.name ? `with ${s.name} ` : ""}ended${s.operator ? ` (${s.operator.name})` : ""}`);
-  store.end(s);
+  const live = s.state === "live";
+  if (store.leave(s, req.headers.authorization) && live) {
+    activity.add("end", `Session ${s.name ? `with ${s.name} ` : ""}ended${s.operator ? ` (${s.operator.name})` : ""}`);
+  }
   res.sendStatus(204);
 });
 router.post("/tick", raw({type:"image/jpeg", limit:"768kb", inflate:false}), (req, res) => {

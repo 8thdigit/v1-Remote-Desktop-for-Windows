@@ -12,6 +12,8 @@ export const linkTTL = 24 * 60 * 60_000;
 export const linkTTLs = [1, 2, 4, 5, 8, 12, 24, 48, 72, 120];
 // Wrong access codes allowed on one link before it locks for lockMs.
 export const linkTries = 8;
+// People who can be connected through one PC's remote access URL at once.
+export const linkViewers = 10;
 const lockMs = 15 * 60_000;
 const maxRecords = 400;
 
@@ -50,7 +52,9 @@ export type Session = {
   id: string;
   code: string;
   host: string;
-  viewer?: string;
+  // Viewer tokens and when each was last seen. A session through a remote
+  // access URL can have several viewers at once; any other has at most one.
+  viewers: Map<string, number>;
   operator?: Operator;
   verification?: string;
   state: "waiting" | "pending" | "live";
@@ -67,7 +71,6 @@ export type Session = {
   liveAt?: number;
   expires: number;
   hostSeen: number;
-  viewerSeen: number;
   frame?: Buffer;
   sequence: number;
   lastFrame: number;
@@ -133,18 +136,30 @@ export function createMsfwrStore(clock = Date.now) {
   const links = new Map<string, Link>(); // by code
   const records: RequestRecord[] = [];
 
+  // Drops viewers that stopped polling. A joined session whose viewers are
+  // all gone is over.
   const expired = (s: Session) => {
     const now = clock();
+    for (const [token, seen] of s.viewers) {
+      if (now - seen > peerTTL) { s.viewers.delete(token); peers.delete(token); }
+    }
     return s.expires <= now || now - s.hostSeen > peerTTL ||
-      (!!s.viewer && now - s.viewerSeen > peerTTL);
+      (s.state !== "waiting" && s.viewers.size === 0);
   };
   const end = (s: Session) => {
     if (codes.get(s.code) === s) codes.delete(s.code);
     if (standings.get(s.code) === s) standings.delete(s.code);
     peers.delete(s.host);
-    if (s.viewer) peers.delete(s.viewer);
+    for (const token of s.viewers.keys()) peers.delete(token);
+    s.viewers.clear();
     s.frame = undefined;
     s.input = [];
+  };
+  const addViewer = (s: Session) => {
+    const token = randomBytes(32).toString("base64url");
+    s.viewers.set(token, clock());
+    peers.set(token, {session: s, role: "viewer"});
+    return token;
   };
   // Closes requests whose time ran out or whose PC went away.
   const settle = () => {
@@ -170,8 +185,8 @@ export function createMsfwrStore(clock = Date.now) {
     const now = clock();
     return {
       id: randomBytes(9).toString("base64url"),
-      code, host: randomBytes(32).toString("base64url"), state: "waiting", preapproved, name,
-      createdAt: now, expires: now + inviteTTL, hostSeen: now, viewerSeen: 0, sequence: 0, lastFrame: 0, input: [],
+      code, host: randomBytes(32).toString("base64url"), viewers: new Map(), state: "waiting", preapproved, name,
+      createdAt: now, expires: now + inviteTTL, hostSeen: now, sequence: 0, lastFrame: 0, input: [],
     };
   };
   const accepted = (s: Session, by?: string) => {
@@ -192,6 +207,7 @@ export function createMsfwrStore(clock = Date.now) {
     state: s.state,
     ra: s.ra,
     operator: s.operator?.name,
+    viewers: s.viewers.size,
     createdAt: s.createdAt,
     liveAt: s.liveAt,
   });
@@ -332,11 +348,8 @@ export function createMsfwrStore(clock = Date.now) {
       s.call = undefined;
       s.operator = operator;
       s.via = via;
-      const token = randomBytes(32).toString("base64url");
+      const token = addViewer(s);
       const now = clock();
-      s.viewer = token;
-      s.viewerSeen = now;
-      peers.set(token, {session: s, role: "viewer"});
       if (s.preapproved) {
         s.state = "live";
         s.liveAt = now;
@@ -390,7 +403,8 @@ export function createMsfwrStore(clock = Date.now) {
       const link = linkFor(id, key);
       if (!link) return;
       const s = linkHost(link);
-      return {link: publicLink(link), online: !!s, busy: !!s && s.state !== "waiting"};
+      const viewers = s && s.state === "live" && s.via === "link" ? s.viewers.size : 0;
+      return {link: publicLink(link), online: !!s, busy: !!s && s.state !== "waiting", viewers};
     },
     linkRevoke(id: string, key: string) {
       const link = linkFor(id, key);
@@ -403,7 +417,13 @@ export function createMsfwrStore(clock = Date.now) {
       const link = findLink(code);
       if (!link) return;
       const s = linkHost(link);
-      return {code: link.code, name: link.name || s?.name || "", online: !!s, busy: !!s && s.state !== "waiting", expiresAt: link.expiresAt};
+      // A PC already shared through its URL can take more people.
+      const shared = !!s && s.state === "live" && s.via === "link";
+      return {
+        code: link.code, name: link.name || s?.name || "", online: !!s,
+        busy: !!s && s.state !== "waiting" && !(shared && s.viewers.size < linkViewers),
+        viewers: shared ? s.viewers.size : 0, expiresAt: link.expiresAt,
+      };
     },
     // Opens a session through a link once the access code matches.
     linkJoin(code: string, pin: string) {
@@ -419,6 +439,12 @@ export function createMsfwrStore(clock = Date.now) {
       link.failures = 0;
       const s = linkHost(link);
       if (!s) return {error: "offline" as const};
+      // Others already connected through the URL: join them in the same session.
+      if (s.state === "live" && s.via === "link") {
+        if (s.viewers.size >= linkViewers) return {error: "full" as const};
+        link.sessions += 1;
+        return {viewer: {token: addViewer(s), verification: "", preapproved: true}, name: s.name ?? link.name};
+      }
       if (s.state !== "waiting") return {error: "busy" as const};
       const viewer = store.join(s.code, undefined, "link");
       if (!viewer) return {error: "offline" as const};
@@ -434,8 +460,20 @@ export function createMsfwrStore(clock = Date.now) {
       if (expired(s)) { end(s); return; }
       if (role && role !== peer.role) return;
       if (peer.role === "host") s.hostSeen = clock();
-      else s.viewerSeen = clock();
+      else if (s.viewers.has(token)) s.viewers.set(token, clock());
+      else return;
       return s;
+    },
+    // A viewer leaves. The session ends when the host or its last viewer leaves.
+    leave(s: Session, header: string | undefined) {
+      const token = /^Bearer ([\w-]{43})$/.exec(header ?? "")?.[1];
+      if (token && s.viewers.has(token) && s.viewers.size > 1) {
+        s.viewers.delete(token);
+        peers.delete(token);
+        return false;
+      }
+      end(s);
+      return true;
     },
     approve(s: Session) {
       if (s.state !== "pending") return false;

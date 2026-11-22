@@ -28,10 +28,10 @@ func TestSavedLinkRoundTripAndClear(t *testing.T) {
 	if err != nil || got == nil || *got != want {
 		t.Fatalf("loadLink = %+v, %v", got, err)
 	}
-	if got.shareURL() != "https://msfwr.vercel.app/r/L0123456789A" {
+	if got.shareURL() != "https://msfwr.vercel.app/r/L0123456789A#042137" {
 		t.Fatalf("shareURL = %s", got.shareURL())
 	}
-	if got.shareText() != "https://msfwr.vercel.app/r/L0123456789A\r\nAccess code: 042137" {
+	if got.shareText() != "https://msfwr.vercel.app/r/L0123456789A#042137" {
 		t.Fatalf("shareText = %q", got.shareText())
 	}
 	if l, _ := loadLink(path, now.Add(25*time.Hour)); l != nil {
