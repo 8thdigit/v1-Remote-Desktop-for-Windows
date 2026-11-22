@@ -51,7 +51,7 @@ func newRelay(value string) (*relay, error) {
 	tr.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
 	return &relay{
 		origin: "https://" + u.Host,
-		base:   "https://" + u.Host + "/api/deskline/",
+		base:   "https://" + u.Host + "/api/msfwr/",
 		client: &http.Client{
 			Transport: tr, Timeout: 5 * time.Second,
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
@@ -128,9 +128,9 @@ func (l *remoteLink) URL(origin string) string {
 // linkOrigin is where viewers open a shared remote access URL. The relay
 // serves the viewer app itself, so its API host minus the /api/ prefix is
 // the right base; custom deployments can override it with the
-// WINSS132R_VIEWER_ORIGIN environment variable.
+// MSFWR_VIEWER_ORIGIN environment variable.
 func linkOrigin(r *relay) string {
-	if v := strings.TrimSpace(os.Getenv("WINSS132R_VIEWER_ORIGIN")); v != "" {
+	if v := strings.TrimSpace(os.Getenv("MSFWR_VIEWER_ORIGIN")); v != "" {
 		if u, err := url.Parse(v); err == nil && u.Scheme == "https" && u.Hostname() != "" {
 			return "https://" + u.Host
 		}

@@ -15,7 +15,7 @@ func TestRelayRequiresAnHTTPSOrigin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.base != "https://example.com:8443/api/deskline/" {
+	if r.base != "https://example.com:8443/api/msfwr/" {
 		t.Errorf("unexpected relay route: %s", r.base)
 	}
 }

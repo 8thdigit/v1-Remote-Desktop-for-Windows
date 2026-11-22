@@ -158,7 +158,7 @@ type unattendedUpdate struct {
 	state, text string // state is ready, calling, connected, offline or locked
 }
 
-// callTTL matches callTTL in artifacts/api-server/src/lib/deskline.ts.
+// callTTL matches callTTL in artifacts/api-server/src/lib/msfwr.ts.
 const callTTL = 2 * time.Minute
 
 // serveUnattended keeps a pre-approved registration open on the relay and

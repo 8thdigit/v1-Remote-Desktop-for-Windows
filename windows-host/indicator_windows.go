@@ -83,7 +83,7 @@ func showSharingIndicator(ctx context.Context, stop context.CancelFunc, ready ch
 		result, _, _ := defaultWindow.Call(window, msg, wParam, lParam)
 		return result
 	})
-	const className = "Winss132rSharingIndicator"
+	const className = "MsfwrSharingIndicator"
 	instance, _, _ := getModule.Call(0)
 	cursor, _, _ := user.NewProc("LoadCursorW").Call(0, 32512)
 	class := indicatorClass{procedure: proc, instance: instance, cursor: cursor, brush: 16, name: syscall.StringToUTF16Ptr(className)}
@@ -101,7 +101,7 @@ func showSharingIndicator(ctx context.Context, stop context.CancelFunc, ready ch
 		}
 	}
 	scale := func(n uintptr) uintptr { return n * dpi / 96 }
-	title := syscall.StringToUTF16Ptr("winss132r — Live sharing")
+	title := syscall.StringToUTF16Ptr("Msfwr — Live sharing")
 	window, _, _ := createWindow.Call(
 		0x8, uintptr(unsafe.Pointer(class.name)), uintptr(unsafe.Pointer(title)), 0x80c80000,
 		scale(16), scale(16), scale(350), scale(145), 0, 0, instance, 0,

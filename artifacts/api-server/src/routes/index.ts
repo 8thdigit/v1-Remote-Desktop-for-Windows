@@ -1,10 +1,10 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
-import desklineRouter from "./deskline";
+import msfwrRouter from "./msfwr";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
-router.use("/deskline", desklineRouter);
+router.use("/msfwr", msfwrRouter);
 
 export default router;

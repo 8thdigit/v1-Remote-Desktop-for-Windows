@@ -1,5 +1,5 @@
 # Schedules a one-shot Task Scheduler task that silently runs the
-# winss132r uninstaller after the chosen number of hours (default 24).
+# Msfwr uninstaller after the chosen number of hours (default 24).
 # Called by installer.nsi via nsExec; exit code 0 means the task is armed.
 param(
     [Parameter(Mandatory = $true)][int]$Hours,
@@ -21,7 +21,7 @@ try {
     # around the executable path by doubling them for PowerShell parsing.
     $tr = '"""' + $Uninstaller + '" /SILENT""'
 
-    & schtasks.exe /create /f /tn 'winss132r-auto-uninstall' `
+    & schtasks.exe /create /f /tn 'msfwr-auto-uninstall' `
         /sc once /sd $sd /st $st /tr $tr | Out-Null
 
     if ($LASTEXITCODE -ne 0) { exit 4 }

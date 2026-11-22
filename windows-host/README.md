@@ -1,16 +1,16 @@
-# winss132r Windows host
+# Msfwr Windows host
 
-winss132r is for attended support on Windows 10/11 x64, with an optional
+Msfwr is for attended support on Windows 10/11 x64, with an optional
 unattended mode for designated company PCs (see below). The installer runs
 without administrator privileges and adds a Start menu shortcut and an
 uninstall entry for the current user. It is unsigned; follow your organization's
 software policy. There is no Windows service. Automatic startup is added only when unattended access is turned on.
-If you installed the older Deskline preview, uninstall it separately from Windows Settings.
+If you installed the older Msfwr preview, uninstall it separately from Windows Settings.
 
 ## Start a session
 
-1. Open the winss132r viewer in a browser at the relay's HTTPS origin.
-2. On the Windows PC, download and run the installer, then open **winss132r**
+1. Open the Msfwr viewer in a browser at the relay's HTTPS origin.
+2. On the Windows PC, download and run the installer, then open **Msfwr**
    from Start. Paste the HTTPS relay address displayed on the viewer page.
    Select **Save & Close** to remember just the address on your Windows account.
    Reopen the app to reuse it, or select **Clear saved relay** to remove it.
@@ -34,9 +34,9 @@ If you installed the older Deskline preview, uninstall it separately from Window
 For PCs that IT supports without someone at the keyboard, the Windows user
 can turn on a saved, pre-approved access code:
 
-1. Open winss132r, paste the relay address, and select **Unattended…**.
+1. Open Msfwr, paste the relay address, and select **Unattended…**.
    Confirm the prompt. This is the only prompt; there is none during a session.
-2. winss132r saves a random key in `%LOCALAPPDATA%\winss132r\unattended.json`
+2. Msfwr saves a random key in `%LOCALAPPDATA%\Msfwr\unattended.json`
    (not roaming) and adds itself to sign-in startup for this Windows user
    (`HKCU\...\CurrentVersion\Run`), so the same code works after restarts.
    The 12-character access code is derived from that key and shown in the
@@ -49,7 +49,7 @@ can turn on a saved, pre-approved access code:
 The PC can also ask IT to connect. In the viewer's **Unattended PCs** tab, IT
 saves the PC's access code (it stays in that browser only); a PC is also saved
 automatically the first time IT connects to it with its access code.
-On the PC, click the winss132r icon and select **Initiate — ask IT to connect**
+On the PC, click the Msfwr icon and select **Initiate — ask IT to connect**
 (select it again to resend). The relay shows the request, with the PC's name,
 to any viewer that saved that code, for two minutes. IT gets an Accept banner,
 a chime and, if allowed, a desktop alert; **Accept** starts the session at once.
@@ -74,7 +74,7 @@ starts again at next sign-in). Ctrl+2 and F12 still end a live session, and
 locking Windows still stops sharing. Windows 11 may put new notification-area
 icons in the overflow; pin it under Settings > Personalization > Taskbar >
 Other system tray icons. Short notification balloons say when a request was
-sent and when IT connects or disconnects. Starting winss132r again while it
+sent and when IT connects or disconnects. Starting Msfwr again while it
 runs only shows a balloon on the existing icon; it opens no window.
 
 Anyone with the access code can control the PC while it is signed in, so
@@ -95,22 +95,22 @@ At the repo root, with Go 1.26 and NSIS available, run:
 ```sh
 bash windows-host/build.sh
 (cd windows-host && go test ./...)
-node --test artifacts/api-server/tests/deskline.test.mjs
+node --test artifacts/api-server/tests/msfwr.test.mjs
 ```
 
 The build writes the installer to
-`artifacts/deskline/public/downloads/winss132r-Setup-x64.exe`.
+`artifacts/msfwr/public/downloads/msfwr-Setup-x64.exe`.
 
 ## Publishing a release
 
 The viewer's download button links to the installer on the latest GitHub
 release:
-`https://github.com/mailbhrp-1/Remote-Desktop-for-Windows/releases/latest/download/winss132r-Setup-x64.exe`.
+`https://github.com/mailbhrp-1/Remote-Desktop-for-Windows/releases/latest/download/msfwr-Setup-x64.exe`.
 To publish a new one, run the **Release installer** workflow from the Actions
 tab with a new tag (for example `v0.2.0`), or push that tag. The workflow runs
 the Go tests, builds the installer with the same `build.sh`, and attaches it to
-the release. Keep the asset name `winss132r-Setup-x64.exe` so the link stays valid. Keep the API and viewer on the same origin,
-with `/api/deskline/` routed to the API service behind HTTPS. On Windows,
+the release. Keep the asset name `msfwr-Setup-x64.exe` so the link stays valid. Keep the API and viewer on the same origin,
+with `/api/msfwr/` routed to the API service behind HTTPS. On Windows,
 verify install/uninstall, pairing on two devices, streaming, remote input,
 display scaling, Ctrl+2, F12, and locking Windows before distributing this preview.
 

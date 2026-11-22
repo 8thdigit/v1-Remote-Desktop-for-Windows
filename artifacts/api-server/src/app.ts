@@ -9,7 +9,7 @@ const app: Express = express();
 app.use(
   pinoHttp({
     logger,
-    autoLogging: { ignore: (req) => /^\/api\/deskline\/(?:tick|frame|input)(?:\?|$)/.test(req.url ?? "") },
+    autoLogging: { ignore: (req) => /^\/api\/msfwr\/(?:tick|frame|input)(?:\?|$)/.test(req.url ?? "") },
     serializers: {
       req(req) {
         return {

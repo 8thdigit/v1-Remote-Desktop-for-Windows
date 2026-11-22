@@ -51,7 +51,7 @@ func main() {
 	err := startHost()
 	if err != nil {
 		user.NewProc("MessageBoxW").Call(0, uintptr(unsafe.Pointer(textPtr(err.Error()))),
-			uintptr(unsafe.Pointer(textPtr("winss132r"))), 0x10)
+			uintptr(unsafe.Pointer(textPtr("Msfwr"))), 0x10)
 	}
 }
 
@@ -62,7 +62,7 @@ func unattendedPath() string {
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(dir, "winss132r", unattendedFile)
+	return filepath.Join(dir, "Msfwr", unattendedFile)
 }
 
 // startHost opens unattended mode when it is set up on this PC (including
@@ -101,13 +101,13 @@ func runClient(unattendedConfigPath string) (*unattendedConfig, error) {
 		stopMenu = 0x210
 	)
 	const idleText = "Start a session to get a fresh one-time code. Nothing is shared until you approve."
-	const idleTitle = "winss132r — Windows support"
-	const liveTitle = "winss132r — LIVE: sharing and remote control"
+	const idleTitle = "Msfwr — Windows support"
+	const liveTitle = "Msfwr — LIVE: sharing and remote control"
 	configDir, configErr := os.UserConfigDir()
 	var path, saved string
 	initialStatus := idleText
 	if configErr == nil {
-		path = filepath.Join(configDir, "winss132r", "relay.txt")
+		path = filepath.Join(configDir, "Msfwr", "relay.txt")
 		var err error
 		saved, err = loadRelayAddress(path)
 		if err != nil {
@@ -116,7 +116,7 @@ func runClient(unattendedConfigPath string) (*unattendedConfig, error) {
 	}
 	instance, _, _ := getModule.Call(0)
 	cursor, _, _ := user.NewProc("LoadCursorW").Call(0, 32512)
-	className := textPtr("Winss132rSupportClient")
+	className := textPtr("MsfwrSupportClient")
 	taskbarMessage, _, _ := registerWindowMessage.Call(uintptr(unsafe.Pointer(textPtr("TaskbarButtonCreated"))))
 	overlay := newTaskbarOverlay()
 	defer func() { overlay.close() }()
@@ -273,7 +273,7 @@ func runClient(unattendedConfigPath string) (*unattendedConfig, error) {
 				}
 				if !ask(window, "Turn on unattended access for this PC?\n\n"+
 					"IT will be able to view and control this PC at any time with a saved access code, without asking you first. "+
-					"winss132r will start when you sign in and run only as an icon in the notification area (no window), which turns green while someone is connected. "+
+					"Msfwr will start when you sign in and run only as an icon in the notification area (no window), which turns green while someone is connected. "+
 					"Click that icon to see the access code, to Initiate a session, or to turn this off.") {
 					break
 				}

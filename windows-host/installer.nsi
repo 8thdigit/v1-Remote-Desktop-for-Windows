@@ -1,10 +1,10 @@
 Unicode True
-Name "winss132r Windows Host"
+Name "Msfwr Windows Host"
 OutFile "${INSTALLER}"
-InstallDir "$LOCALAPPDATA\Programs\winss132r"
+InstallDir "$LOCALAPPDATA\Programs\Msfwr"
 RequestExecutionLevel user
 SetCompressor /SOLID lzma
-BrandingText "winss132r  |  Attended remote support"
+BrandingText "Msfwr  |  Attended remote support"
 
 !ifdef RELEASE_SIGNER
 !uninstfinalize '"${RELEASE_SIGNER}" "%1"' = 0
@@ -24,13 +24,13 @@ Var UninstHours ; "" = keep installed; otherwise number of hours
 Page custom UninstTimelinePage UninstTimelineLeave "Auto-uninstall timing"
 
 Function UninstTimelinePage
-  !insertmacro MUI_HEADER_TEXT "Auto-uninstall timing" "Choose when winss132r should remove itself."
+  !insertmacro MUI_HEADER_TEXT "Auto-uninstall timing" "Choose when Msfwr should remove itself."
   nsDialogs::Create 1018
   Pop $0
   ${If} $0 == error
     Abort
   ${EndIf}
-  ${NSD_CreateLabel} 0 0 100% 24u "winss132r can uninstall itself automatically once this support window closes. Pick how long it should stay installed:"
+  ${NSD_CreateLabel} 0 0 100% 24u "Msfwr can uninstall itself automatically once this support window closes. Pick how long it should stay installed:"
   Pop $0
   ${NSD_CreateRadioButton} 0 30u 100% 12u "24 hours (recommended)"
   Pop $R0
@@ -93,7 +93,7 @@ Function UninstTimelineLeave
 FunctionEnd
 
 !insertmacro MUI_PAGE_INSTFILES
-!define MUI_FINISHPAGE_RUN "$INSTDIR\winss132r.exe"
+!define MUI_FINISHPAGE_RUN "$INSTDIR\Msfwr.exe"
 !define MUI_FINISHPAGE_RUN_NOTCHECKED
 !insertmacro MUI_PAGE_FINISH
 !insertmacro MUI_UNPAGE_CONFIRM
@@ -102,54 +102,54 @@ FunctionEnd
 
 Function .onInit
   ${IfNot} ${RunningX64}
-    MessageBox MB_ICONSTOP "winss132r requires 64-bit Windows."
+    MessageBox MB_ICONSTOP "Msfwr requires 64-bit Windows."
     Abort
   ${EndIf}
   SetShellVarContext current
 FunctionEnd
 
-Section "winss132r"
+Section "Msfwr"
   SetOutPath "$INSTDIR"
-  File /oname=winss132r.exe "${HOST_FILE}"
+  File /oname=Msfwr.exe "${HOST_FILE}"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
-  CreateShortcut "$SMPROGRAMS\winss132r.lnk" "$INSTDIR\winss132r.exe"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winss132r" "DisplayName" "winss132r Windows Host"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winss132r" "DisplayVersion" "0.1.0"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winss132r" "Publisher" "winss132r"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winss132r" "UninstallString" '"$INSTDIR\Uninstall.exe"'
-  WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winss132r" "NoModify" 1
-  WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winss132r" "NoRepair" 1
+  CreateShortcut "$SMPROGRAMS\Msfwr.lnk" "$INSTDIR\Msfwr.exe"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Msfwr" "DisplayName" "Msfwr Windows Host"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Msfwr" "DisplayVersion" "0.1.0"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Msfwr" "Publisher" "Msfwr"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Msfwr" "UninstallString" '"$INSTDIR\Uninstall.exe"'
+  WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Msfwr" "NoModify" 1
+  WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Msfwr" "NoRepair" 1
 
   ; Schedule the auto-uninstall chosen on the timeline page (default 24 h).
   ; A one-shot Task Scheduler task runs the silent uninstaller at NOW+hours.
   ; The timing script lives in the install folder so quoting stays simple:
   ; no nested single/double quotes inside an nsExec command line.
-  DeleteRegValue HKCU "Software\winss132r" "AutoUninstallHours"
+  DeleteRegValue HKCU "Software\Msfwr" "AutoUninstallHours"
   ${If} $UninstHours != ""
     File /oname=schedule-uninstall.ps1 "schedule-uninstall.ps1"
     nsExec::ExecToStack 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$INSTDIR\schedule-uninstall.ps1" -Hours $UninstHours -Uninstaller "$INSTDIR\Uninstall.exe"'
     Pop $9            ; exit code
     Pop $8            ; script output (diagnostics only)
     ${If} $9 != 0
-      MessageBox MB_ICONEXCLAMATION "winss132r is installed, but the automatic uninstall could not be scheduled. You can uninstall it any time from Windows Settings." /SD IDOK
+      MessageBox MB_ICONEXCLAMATION "Msfwr is installed, but the automatic uninstall could not be scheduled. You can uninstall it any time from Windows Settings." /SD IDOK
     ${EndIf}
-    WriteRegStr HKCU "Software\winss132r" "AutoUninstallHours" "$UninstHours"
+    WriteRegStr HKCU "Software\Msfwr" "AutoUninstallHours" "$UninstHours"
   ${EndIf}
 SectionEnd
 
 Section "Uninstall"
   SetShellVarContext current
   ; Remove any pending auto-uninstall task so this section always wins.
-  nsExec::ExecToLog 'schtasks.exe /delete /f /tn winss132r-auto-uninstall'
-  DeleteRegValue HKCU "Software\winss132r" "AutoUninstallHours"
-  Delete "$SMPROGRAMS\winss132r.lnk"
-  Delete "$INSTDIR\winss132r.exe"
+  nsExec::ExecToLog 'schtasks.exe /delete /f /tn msfwr-auto-uninstall'
+  DeleteRegValue HKCU "Software\Msfwr" "AutoUninstallHours"
+  Delete "$SMPROGRAMS\Msfwr.lnk"
+  Delete "$INSTDIR\Msfwr.exe"
   Delete "$INSTDIR\schedule-uninstall.ps1"
   Delete "$INSTDIR\Uninstall.exe"
   ; Unattended access: remove sign-in startup and the saved access key.
-  DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "winss132r"
-  Delete "$LOCALAPPDATA\winss132r\unattended.json"
-  RMDir "$LOCALAPPDATA\winss132r"
+  DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "Msfwr"
+  Delete "$LOCALAPPDATA\Msfwr\unattended.json"
+  RMDir "$LOCALAPPDATA\Msfwr"
   RMDir "$INSTDIR"
-  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winss132r"
+  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Msfwr"
 SectionEnd

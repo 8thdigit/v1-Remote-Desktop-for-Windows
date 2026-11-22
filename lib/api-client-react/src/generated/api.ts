@@ -25,21 +25,21 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
-  DesklineCall,
-  DesklineCallList,
-  DesklineCallQuery,
-  DesklineCode,
-  DesklineInput,
-  DesklineInvite,
-  DesklineLink,
-  DesklineLinkCreate,
-  DesklineLinkRegister,
-  DesklineLinkStatus,
-  DesklineStandingKey,
-  DesklineTick,
-  DesklineViewer,
-  GetDesklineFrameParams,
-  GetDesklineLinkStatusParams,
+  MsfwrCall,
+  MsfwrCallList,
+  MsfwrCallQuery,
+  MsfwrCode,
+  MsfwrInput,
+  MsfwrInvite,
+  MsfwrLink,
+  MsfwrLinkCreate,
+  MsfwrLinkRegister,
+  MsfwrLinkStatus,
+  MsfwrStandingKey,
+  MsfwrTick,
+  MsfwrViewer,
+  GetMsfwrFrameParams,
+  GetMsfwrLinkStatusParams,
   HealthStatus
 } from './api.schemas';
 
@@ -172,17 +172,17 @@ export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, 
 
 
 
-export const getCreateDesklineInviteUrl = () => {
+export const getCreateMsfwrInviteUrl = () => {
 
 
 
 
-  return `/api/deskline/invite`
+  return `/api/msfwr/invite`
 }
 
-export const createDesklineInvite = async ( options?: Parameters<typeof customFetch>[1]): Promise<DesklineInvite> => {
+export const createMsfwrInvite = async ( options?: Parameters<typeof customFetch>[1]): Promise<MsfwrInvite> => {
 
-  return customFetch<DesklineInvite>(getCreateDesklineInviteUrl(),
+  return customFetch<MsfwrInvite>(getCreateMsfwrInviteUrl(),
   {
     ...options,
     method: 'POST'
@@ -195,13 +195,13 @@ export const createDesklineInvite = async ( options?: Parameters<typeof customFe
 
 
 
-export const getCreateDesklineInviteMutationKey = () => ['createDesklineInvite'] as const;
+export const getCreateMsfwrInviteMutationKey = () => ['createMsfwrInvite'] as const;
 
-export const getCreateDesklineInviteMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDesklineInvite>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof createDesklineInvite>>, TError,void, TContext> => {
+export const getCreateMsfwrInviteMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createMsfwrInvite>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createMsfwrInvite>>, TError,void, TContext> => {
 
-const mutationKey = getCreateDesklineInviteMutationKey();
+const mutationKey = getCreateMsfwrInviteMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -211,10 +211,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createDesklineInvite>>, void> = () => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createMsfwrInvite>>, void> = () => {
 
 
-          return  createDesklineInvite(requestOptions)
+          return  createMsfwrInvite(requestOptions)
         }
 
 
@@ -224,34 +224,34 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type CreateDesklineInviteMutationResult = NonNullable<Awaited<ReturnType<typeof createDesklineInvite>>>
+    export type CreateMsfwrInviteMutationResult = NonNullable<Awaited<ReturnType<typeof createMsfwrInvite>>>
 
-    export type CreateDesklineInviteMutationError = ErrorType<unknown>
+    export type CreateMsfwrInviteMutationError = ErrorType<unknown>
 
 
-    export const useCreateDesklineInvite = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDesklineInvite>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+    export const useCreateMsfwrInvite = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createMsfwrInvite>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof createDesklineInvite>>,
+        Awaited<ReturnType<typeof createMsfwrInvite>>,
         TError,
         void,
         TContext
       > => {
-      return useMutation(getCreateDesklineInviteMutationOptions(options), queryClient);
+      return useMutation(getCreateMsfwrInviteMutationOptions(options), queryClient);
     }
 
-export const getRegisterDesklineStandingUrl = () => {
+export const getRegisterMsfwrStandingUrl = () => {
 
 
 
 
-  return `/api/deskline/standing`
+  return `/api/msfwr/standing`
 }
 
 /**
  * Unattended host registration. The access code is derived from the host's saved key; a viewer that joins it is live without approval.
  */
-export const registerDesklineStanding = async (desklineStandingKey: DesklineStandingKey, options?: Parameters<typeof customFetch>[1]): Promise<DesklineInvite> => {
+export const registerMsfwrStanding = async (msfwrStandingKey: MsfwrStandingKey, options?: Parameters<typeof customFetch>[1]): Promise<MsfwrInvite> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -267,12 +267,12 @@ export const registerDesklineStanding = async (desklineStandingKey: DesklineStan
     }
     return headers;
   };
-return customFetch<DesklineInvite>(getRegisterDesklineStandingUrl(),
+return customFetch<MsfwrInvite>(getRegisterMsfwrStandingUrl(),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(desklineStandingKey)
+    body: JSON.stringify(msfwrStandingKey)
   }
 );}
 
@@ -280,13 +280,13 @@ return customFetch<DesklineInvite>(getRegisterDesklineStandingUrl(),
 
 
 
-export const getRegisterDesklineStandingMutationKey = () => ['registerDesklineStanding'] as const;
+export const getRegisterMsfwrStandingMutationKey = () => ['registerMsfwrStanding'] as const;
 
-export const getRegisterDesklineStandingMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerDesklineStanding>>, TError,RegisterDesklineStandingMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof registerDesklineStanding>>, TError,RegisterDesklineStandingMutationVariables, TContext> => {
+export const getRegisterMsfwrStandingMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerMsfwrStanding>>, TError,RegisterMsfwrStandingMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof registerMsfwrStanding>>, TError,RegisterMsfwrStandingMutationVariables, TContext> => {
 
-const mutationKey = getRegisterDesklineStandingMutationKey();
+const mutationKey = getRegisterMsfwrStandingMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -296,10 +296,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof registerDesklineStanding>>, RegisterDesklineStandingMutationVariables> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof registerMsfwrStanding>>, RegisterMsfwrStandingMutationVariables> = (props) => {
           const {data} = props ?? {};
 
-          return  registerDesklineStanding(data,requestOptions)
+          return  registerMsfwrStanding(data,requestOptions)
         }
 
 
@@ -309,34 +309,34 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type RegisterDesklineStandingMutationResult = NonNullable<Awaited<ReturnType<typeof registerDesklineStanding>>>
-    export type RegisterDesklineStandingMutationBody = BodyType<DesklineStandingKey>
-    export type RegisterDesklineStandingMutationError = ErrorType<unknown>
-    export type RegisterDesklineStandingMutationVariables = {data: BodyType<DesklineStandingKey>}
+    export type RegisterMsfwrStandingMutationResult = NonNullable<Awaited<ReturnType<typeof registerMsfwrStanding>>>
+    export type RegisterMsfwrStandingMutationBody = BodyType<MsfwrStandingKey>
+    export type RegisterMsfwrStandingMutationError = ErrorType<unknown>
+    export type RegisterMsfwrStandingMutationVariables = {data: BodyType<MsfwrStandingKey>}
 
-    export const useRegisterDesklineStanding = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerDesklineStanding>>, TError,RegisterDesklineStandingMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+    export const useRegisterMsfwrStanding = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerMsfwrStanding>>, TError,RegisterMsfwrStandingMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof registerDesklineStanding>>,
+        Awaited<ReturnType<typeof registerMsfwrStanding>>,
         TError,
-        RegisterDesklineStandingMutationVariables,
+        RegisterMsfwrStandingMutationVariables,
         TContext
       > => {
-      return useMutation(getRegisterDesklineStandingMutationOptions(options), queryClient);
+      return useMutation(getRegisterMsfwrStandingMutationOptions(options), queryClient);
     }
 
-export const getCallDesklineUrl = () => {
+export const getCallMsfwrUrl = () => {
 
 
 
 
-  return `/api/deskline/call`
+  return `/api/msfwr/call`
 }
 
 /**
  * An unattended host presses Initiate. Viewers that already know its access code see the request for two minutes and accept it by joining.
  */
-export const callDeskline = async (desklineCall?: DesklineCall, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+export const callMsfwr = async (msfwrCall?: MsfwrCall, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -352,12 +352,12 @@ export const callDeskline = async (desklineCall?: DesklineCall, options?: Parame
     }
     return headers;
   };
-return customFetch<void>(getCallDesklineUrl(),
+return customFetch<void>(getCallMsfwrUrl(),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(desklineCall)
+    body: JSON.stringify(msfwrCall)
   }
 );}
 
@@ -365,13 +365,13 @@ return customFetch<void>(getCallDesklineUrl(),
 
 
 
-export const getCallDesklineMutationKey = () => ['callDeskline'] as const;
+export const getCallMsfwrMutationKey = () => ['callMsfwr'] as const;
 
-export const getCallDesklineMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof callDeskline>>, TError,CallDesklineMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof callDeskline>>, TError,CallDesklineMutationVariables, TContext> => {
+export const getCallMsfwrMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof callMsfwr>>, TError,CallMsfwrMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof callMsfwr>>, TError,CallMsfwrMutationVariables, TContext> => {
 
-const mutationKey = getCallDesklineMutationKey();
+const mutationKey = getCallMsfwrMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -381,10 +381,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof callDeskline>>, CallDesklineMutationVariables> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof callMsfwr>>, CallMsfwrMutationVariables> = (props) => {
           const {data} = props ?? {};
 
-          return  callDeskline(data,requestOptions)
+          return  callMsfwr(data,requestOptions)
         }
 
 
@@ -394,34 +394,34 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type CallDesklineMutationResult = NonNullable<Awaited<ReturnType<typeof callDeskline>>>
-    export type CallDesklineMutationBody = BodyType<DesklineCall> | undefined
-    export type CallDesklineMutationError = ErrorType<unknown>
-    export type CallDesklineMutationVariables = {data?: BodyType<DesklineCall>}
+    export type CallMsfwrMutationResult = NonNullable<Awaited<ReturnType<typeof callMsfwr>>>
+    export type CallMsfwrMutationBody = BodyType<MsfwrCall> | undefined
+    export type CallMsfwrMutationError = ErrorType<unknown>
+    export type CallMsfwrMutationVariables = {data?: BodyType<MsfwrCall>}
 
-    export const useCallDeskline = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof callDeskline>>, TError,CallDesklineMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+    export const useCallMsfwr = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof callMsfwr>>, TError,CallMsfwrMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof callDeskline>>,
+        Awaited<ReturnType<typeof callMsfwr>>,
         TError,
-        CallDesklineMutationVariables,
+        CallMsfwrMutationVariables,
         TContext
       > => {
-      return useMutation(getCallDesklineMutationOptions(options), queryClient);
+      return useMutation(getCallMsfwrMutationOptions(options), queryClient);
     }
 
-export const getListDesklineCallsUrl = () => {
+export const getListMsfwrCallsUrl = () => {
 
 
 
 
-  return `/api/deskline/calls`
+  return `/api/msfwr/calls`
 }
 
 /**
  * Which of the viewer's saved access codes have a pending Initiate request, and which of them are online (waiting) or in a session. Codes that are not listed are offline.
  */
-export const listDesklineCalls = async (desklineCallQuery: DesklineCallQuery, options?: Parameters<typeof customFetch>[1]): Promise<DesklineCallList> => {
+export const listMsfwrCalls = async (msfwrCallQuery: MsfwrCallQuery, options?: Parameters<typeof customFetch>[1]): Promise<MsfwrCallList> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -437,12 +437,12 @@ export const listDesklineCalls = async (desklineCallQuery: DesklineCallQuery, op
     }
     return headers;
   };
-return customFetch<DesklineCallList>(getListDesklineCallsUrl(),
+return customFetch<MsfwrCallList>(getListMsfwrCallsUrl(),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(desklineCallQuery)
+    body: JSON.stringify(msfwrCallQuery)
   }
 );}
 
@@ -450,13 +450,13 @@ return customFetch<DesklineCallList>(getListDesklineCallsUrl(),
 
 
 
-export const getListDesklineCallsMutationKey = () => ['listDesklineCalls'] as const;
+export const getListMsfwrCallsMutationKey = () => ['listMsfwrCalls'] as const;
 
-export const getListDesklineCallsMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof listDesklineCalls>>, TError,ListDesklineCallsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof listDesklineCalls>>, TError,ListDesklineCallsMutationVariables, TContext> => {
+export const getListMsfwrCallsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof listMsfwrCalls>>, TError,ListMsfwrCallsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof listMsfwrCalls>>, TError,ListMsfwrCallsMutationVariables, TContext> => {
 
-const mutationKey = getListDesklineCallsMutationKey();
+const mutationKey = getListMsfwrCallsMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -466,10 +466,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof listDesklineCalls>>, ListDesklineCallsMutationVariables> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof listMsfwrCalls>>, ListMsfwrCallsMutationVariables> = (props) => {
           const {data} = props ?? {};
 
-          return  listDesklineCalls(data,requestOptions)
+          return  listMsfwrCalls(data,requestOptions)
         }
 
 
@@ -479,34 +479,34 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type ListDesklineCallsMutationResult = NonNullable<Awaited<ReturnType<typeof listDesklineCalls>>>
-    export type ListDesklineCallsMutationBody = BodyType<DesklineCallQuery>
-    export type ListDesklineCallsMutationError = ErrorType<unknown>
-    export type ListDesklineCallsMutationVariables = {data: BodyType<DesklineCallQuery>}
+    export type ListMsfwrCallsMutationResult = NonNullable<Awaited<ReturnType<typeof listMsfwrCalls>>>
+    export type ListMsfwrCallsMutationBody = BodyType<MsfwrCallQuery>
+    export type ListMsfwrCallsMutationError = ErrorType<unknown>
+    export type ListMsfwrCallsMutationVariables = {data: BodyType<MsfwrCallQuery>}
 
-    export const useListDesklineCalls = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof listDesklineCalls>>, TError,ListDesklineCallsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+    export const useListMsfwrCalls = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof listMsfwrCalls>>, TError,ListMsfwrCallsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof listDesklineCalls>>,
+        Awaited<ReturnType<typeof listMsfwrCalls>>,
         TError,
-        ListDesklineCallsMutationVariables,
+        ListMsfwrCallsMutationVariables,
         TContext
       > => {
-      return useMutation(getListDesklineCallsMutationOptions(options), queryClient);
+      return useMutation(getListMsfwrCallsMutationOptions(options), queryClient);
     }
 
-export const getCreateDesklineLinkUrl = () => {
+export const getCreateMsfwrLinkUrl = () => {
 
 
 
 
-  return `/api/deskline/link/create`
+  return `/api/msfwr/link/create`
 }
 
 /**
  * Create a shareable remote access URL from the client app. The host PC registers a waiting session under the link's code; every viewer that opens the shared URL starts a new session without approval, until the link expires (24 hours by default) or is revoked. Requires the unattended access key of the PC.
  */
-export const createDesklineLink = async (desklineLinkCreate: DesklineLinkCreate, options?: Parameters<typeof customFetch>[1]): Promise<DesklineLink> => {
+export const createMsfwrLink = async (msfwrLinkCreate: MsfwrLinkCreate, options?: Parameters<typeof customFetch>[1]): Promise<MsfwrLink> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -522,12 +522,12 @@ export const createDesklineLink = async (desklineLinkCreate: DesklineLinkCreate,
     }
     return headers;
   };
-return customFetch<DesklineLink>(getCreateDesklineLinkUrl(),
+return customFetch<MsfwrLink>(getCreateMsfwrLinkUrl(),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(desklineLinkCreate)
+    body: JSON.stringify(msfwrLinkCreate)
   }
 );}
 
@@ -535,13 +535,13 @@ return customFetch<DesklineLink>(getCreateDesklineLinkUrl(),
 
 
 
-export const getCreateDesklineLinkMutationKey = () => ['createDesklineLink'] as const;
+export const getCreateMsfwrLinkMutationKey = () => ['createMsfwrLink'] as const;
 
-export const getCreateDesklineLinkMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDesklineLink>>, TError,CreateDesklineLinkMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof createDesklineLink>>, TError,CreateDesklineLinkMutationVariables, TContext> => {
+export const getCreateMsfwrLinkMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createMsfwrLink>>, TError,CreateMsfwrLinkMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createMsfwrLink>>, TError,CreateMsfwrLinkMutationVariables, TContext> => {
 
-const mutationKey = getCreateDesklineLinkMutationKey();
+const mutationKey = getCreateMsfwrLinkMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -551,10 +551,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createDesklineLink>>, CreateDesklineLinkMutationVariables> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createMsfwrLink>>, CreateMsfwrLinkMutationVariables> = (props) => {
           const {data} = props ?? {};
 
-          return  createDesklineLink(data,requestOptions)
+          return  createMsfwrLink(data,requestOptions)
         }
 
 
@@ -564,34 +564,34 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type CreateDesklineLinkMutationResult = NonNullable<Awaited<ReturnType<typeof createDesklineLink>>>
-    export type CreateDesklineLinkMutationBody = BodyType<DesklineLinkCreate>
-    export type CreateDesklineLinkMutationError = ErrorType<unknown>
-    export type CreateDesklineLinkMutationVariables = {data: BodyType<DesklineLinkCreate>}
+    export type CreateMsfwrLinkMutationResult = NonNullable<Awaited<ReturnType<typeof createMsfwrLink>>>
+    export type CreateMsfwrLinkMutationBody = BodyType<MsfwrLinkCreate>
+    export type CreateMsfwrLinkMutationError = ErrorType<unknown>
+    export type CreateMsfwrLinkMutationVariables = {data: BodyType<MsfwrLinkCreate>}
 
-    export const useCreateDesklineLink = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDesklineLink>>, TError,CreateDesklineLinkMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+    export const useCreateMsfwrLink = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createMsfwrLink>>, TError,CreateMsfwrLinkMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof createDesklineLink>>,
+        Awaited<ReturnType<typeof createMsfwrLink>>,
         TError,
-        CreateDesklineLinkMutationVariables,
+        CreateMsfwrLinkMutationVariables,
         TContext
       > => {
-      return useMutation(getCreateDesklineLinkMutationOptions(options), queryClient);
+      return useMutation(getCreateMsfwrLinkMutationOptions(options), queryClient);
     }
 
-export const getRegisterDesklineLinkUrl = () => {
+export const getRegisterMsfwrLinkUrl = () => {
 
 
 
 
-  return `/api/deskline/link/register`
+  return `/api/msfwr/link/register`
 }
 
 /**
  * The host re-registers its waiting session under an existing link id after each session ends, so the shared URL keeps accepting viewers until it expires or is revoked.
  */
-export const registerDesklineLink = async (desklineLinkRegister: DesklineLinkRegister, options?: Parameters<typeof customFetch>[1]): Promise<DesklineInvite> => {
+export const registerMsfwrLink = async (msfwrLinkRegister: MsfwrLinkRegister, options?: Parameters<typeof customFetch>[1]): Promise<MsfwrInvite> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -607,12 +607,12 @@ export const registerDesklineLink = async (desklineLinkRegister: DesklineLinkReg
     }
     return headers;
   };
-return customFetch<DesklineInvite>(getRegisterDesklineLinkUrl(),
+return customFetch<MsfwrInvite>(getRegisterMsfwrLinkUrl(),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(desklineLinkRegister)
+    body: JSON.stringify(msfwrLinkRegister)
   }
 );}
 
@@ -620,13 +620,13 @@ return customFetch<DesklineInvite>(getRegisterDesklineLinkUrl(),
 
 
 
-export const getRegisterDesklineLinkMutationKey = () => ['registerDesklineLink'] as const;
+export const getRegisterMsfwrLinkMutationKey = () => ['registerMsfwrLink'] as const;
 
-export const getRegisterDesklineLinkMutationOptions = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerDesklineLink>>, TError,RegisterDesklineLinkMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof registerDesklineLink>>, TError,RegisterDesklineLinkMutationVariables, TContext> => {
+export const getRegisterMsfwrLinkMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerMsfwrLink>>, TError,RegisterMsfwrLinkMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof registerMsfwrLink>>, TError,RegisterMsfwrLinkMutationVariables, TContext> => {
 
-const mutationKey = getRegisterDesklineLinkMutationKey();
+const mutationKey = getRegisterMsfwrLinkMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -636,10 +636,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof registerDesklineLink>>, RegisterDesklineLinkMutationVariables> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof registerMsfwrLink>>, RegisterMsfwrLinkMutationVariables> = (props) => {
           const {data} = props ?? {};
 
-          return  registerDesklineLink(data,requestOptions)
+          return  registerMsfwrLink(data,requestOptions)
         }
 
 
@@ -649,23 +649,23 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type RegisterDesklineLinkMutationResult = NonNullable<Awaited<ReturnType<typeof registerDesklineLink>>>
-    export type RegisterDesklineLinkMutationBody = BodyType<DesklineLinkRegister>
-    export type RegisterDesklineLinkMutationError = ErrorType<void>
-    export type RegisterDesklineLinkMutationVariables = {data: BodyType<DesklineLinkRegister>}
+    export type RegisterMsfwrLinkMutationResult = NonNullable<Awaited<ReturnType<typeof registerMsfwrLink>>>
+    export type RegisterMsfwrLinkMutationBody = BodyType<MsfwrLinkRegister>
+    export type RegisterMsfwrLinkMutationError = ErrorType<void>
+    export type RegisterMsfwrLinkMutationVariables = {data: BodyType<MsfwrLinkRegister>}
 
-    export const useRegisterDesklineLink = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerDesklineLink>>, TError,RegisterDesklineLinkMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+    export const useRegisterMsfwrLink = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerMsfwrLink>>, TError,RegisterMsfwrLinkMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof registerDesklineLink>>,
+        Awaited<ReturnType<typeof registerMsfwrLink>>,
         TError,
-        RegisterDesklineLinkMutationVariables,
+        RegisterMsfwrLinkMutationVariables,
         TContext
       > => {
-      return useMutation(getRegisterDesklineLinkMutationOptions(options), queryClient);
+      return useMutation(getRegisterMsfwrLinkMutationOptions(options), queryClient);
     }
 
-export const getGetDesklineLinkStatusUrl = (params: GetDesklineLinkStatusParams,) => {
+export const getGetMsfwrLinkStatusUrl = (params: GetMsfwrLinkStatusParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
@@ -677,15 +677,15 @@ export const getGetDesklineLinkStatusUrl = (params: GetDesklineLinkStatusParams,
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/api/deskline/link/status?${stringifiedParams}` : `/api/deskline/link/status`
+  return stringifiedParams.length > 0 ? `/api/msfwr/link/status?${stringifiedParams}` : `/api/msfwr/link/status`
 }
 
 /**
  * Current state of a link for the client app: validity, whether the host is registered and online, and how many sessions were opened.
  */
-export const getDesklineLinkStatus = async (params: GetDesklineLinkStatusParams, options?: Parameters<typeof customFetch>[1]): Promise<DesklineLinkStatus> => {
+export const getMsfwrLinkStatus = async (params: GetMsfwrLinkStatusParams, options?: Parameters<typeof customFetch>[1]): Promise<MsfwrLinkStatus> => {
 
-  return customFetch<DesklineLinkStatus>(getGetDesklineLinkStatusUrl(params),
+  return customFetch<MsfwrLinkStatus>(getGetMsfwrLinkStatusUrl(params),
   {
     ...options,
     method: 'GET'
@@ -698,66 +698,66 @@ export const getDesklineLinkStatus = async (params: GetDesklineLinkStatusParams,
 
 
 
-export const getGetDesklineLinkStatusQueryKey = (params?: GetDesklineLinkStatusParams,) => {
+export const getGetMsfwrLinkStatusQueryKey = (params?: GetMsfwrLinkStatusParams,) => {
     return [
-    `/api/deskline/link/status`, ...(params ? [params] : [])
+    `/api/msfwr/link/status`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetDesklineLinkStatusQueryOptions = <TData = Awaited<ReturnType<typeof getDesklineLinkStatus>>, TError = ErrorType<unknown>>(params: GetDesklineLinkStatusParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDesklineLinkStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+export const getGetMsfwrLinkStatusQueryOptions = <TData = Awaited<ReturnType<typeof getMsfwrLinkStatus>>, TError = ErrorType<unknown>>(params: GetMsfwrLinkStatusParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMsfwrLinkStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetDesklineLinkStatusQueryKey(params);
+  const queryKey =  queryOptions?.queryKey ?? getGetMsfwrLinkStatusQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDesklineLinkStatus>>> = ({ signal }) => getDesklineLinkStatus(params, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMsfwrLinkStatus>>> = ({ signal }) => getMsfwrLinkStatus(params, { signal, ...requestOptions });
 
 
 
 
 
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDesklineLinkStatus>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMsfwrLinkStatus>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
 }
 
-export type GetDesklineLinkStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getDesklineLinkStatus>>>
-export type GetDesklineLinkStatusQueryError = ErrorType<unknown>
+export type GetMsfwrLinkStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getMsfwrLinkStatus>>>
+export type GetMsfwrLinkStatusQueryError = ErrorType<unknown>
 
 
-export function useGetDesklineLinkStatus<TData = Awaited<ReturnType<typeof getDesklineLinkStatus>>, TError = ErrorType<unknown>>(
- params: GetDesklineLinkStatusParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDesklineLinkStatus>>, TError, TData>> & Pick<
+export function useGetMsfwrLinkStatus<TData = Awaited<ReturnType<typeof getMsfwrLinkStatus>>, TError = ErrorType<unknown>>(
+ params: GetMsfwrLinkStatusParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMsfwrLinkStatus>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getDesklineLinkStatus>>,
+          Awaited<ReturnType<typeof getMsfwrLinkStatus>>,
           TError,
-          Awaited<ReturnType<typeof getDesklineLinkStatus>>
+          Awaited<ReturnType<typeof getMsfwrLinkStatus>>
         > , 'initialData'
       >, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetDesklineLinkStatus<TData = Awaited<ReturnType<typeof getDesklineLinkStatus>>, TError = ErrorType<unknown>>(
- params: GetDesklineLinkStatusParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDesklineLinkStatus>>, TError, TData>> & Pick<
+export function useGetMsfwrLinkStatus<TData = Awaited<ReturnType<typeof getMsfwrLinkStatus>>, TError = ErrorType<unknown>>(
+ params: GetMsfwrLinkStatusParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMsfwrLinkStatus>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getDesklineLinkStatus>>,
+          Awaited<ReturnType<typeof getMsfwrLinkStatus>>,
           TError,
-          Awaited<ReturnType<typeof getDesklineLinkStatus>>
+          Awaited<ReturnType<typeof getMsfwrLinkStatus>>
         > , 'initialData'
       >, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetDesklineLinkStatus<TData = Awaited<ReturnType<typeof getDesklineLinkStatus>>, TError = ErrorType<unknown>>(
- params: GetDesklineLinkStatusParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDesklineLinkStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+export function useGetMsfwrLinkStatus<TData = Awaited<ReturnType<typeof getMsfwrLinkStatus>>, TError = ErrorType<unknown>>(
+ params: GetMsfwrLinkStatusParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMsfwrLinkStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useGetDesklineLinkStatus<TData = Awaited<ReturnType<typeof getDesklineLinkStatus>>, TError = ErrorType<unknown>>(
- params: GetDesklineLinkStatusParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDesklineLinkStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+export function useGetMsfwrLinkStatus<TData = Awaited<ReturnType<typeof getMsfwrLinkStatus>>, TError = ErrorType<unknown>>(
+ params: GetMsfwrLinkStatusParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMsfwrLinkStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getGetDesklineLinkStatusQueryOptions(params,options)
+  const queryOptions = getGetMsfwrLinkStatusQueryOptions(params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -770,18 +770,18 @@ export function useGetDesklineLinkStatus<TData = Awaited<ReturnType<typeof getDe
 
 
 
-export const getRevokeDesklineLinkUrl = () => {
+export const getRevokeMsfwrLinkUrl = () => {
 
 
 
 
-  return `/api/deskline/link/revoke`
+  return `/api/msfwr/link/revoke`
 }
 
 /**
  * Revoke a link at once; any live session under it is ended.
  */
-export const revokeDesklineLink = async (desklineLinkRegister: DesklineLinkRegister, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+export const revokeMsfwrLink = async (msfwrLinkRegister: MsfwrLinkRegister, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -797,12 +797,12 @@ export const revokeDesklineLink = async (desklineLinkRegister: DesklineLinkRegis
     }
     return headers;
   };
-return customFetch<void>(getRevokeDesklineLinkUrl(),
+return customFetch<void>(getRevokeMsfwrLinkUrl(),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(desklineLinkRegister)
+    body: JSON.stringify(msfwrLinkRegister)
   }
 );}
 
@@ -810,13 +810,13 @@ return customFetch<void>(getRevokeDesklineLinkUrl(),
 
 
 
-export const getRevokeDesklineLinkMutationKey = () => ['revokeDesklineLink'] as const;
+export const getRevokeMsfwrLinkMutationKey = () => ['revokeMsfwrLink'] as const;
 
-export const getRevokeDesklineLinkMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeDesklineLink>>, TError,RevokeDesklineLinkMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof revokeDesklineLink>>, TError,RevokeDesklineLinkMutationVariables, TContext> => {
+export const getRevokeMsfwrLinkMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeMsfwrLink>>, TError,RevokeMsfwrLinkMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof revokeMsfwrLink>>, TError,RevokeMsfwrLinkMutationVariables, TContext> => {
 
-const mutationKey = getRevokeDesklineLinkMutationKey();
+const mutationKey = getRevokeMsfwrLinkMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -826,10 +826,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof revokeDesklineLink>>, RevokeDesklineLinkMutationVariables> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof revokeMsfwrLink>>, RevokeMsfwrLinkMutationVariables> = (props) => {
           const {data} = props ?? {};
 
-          return  revokeDesklineLink(data,requestOptions)
+          return  revokeMsfwrLink(data,requestOptions)
         }
 
 
@@ -839,31 +839,31 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type RevokeDesklineLinkMutationResult = NonNullable<Awaited<ReturnType<typeof revokeDesklineLink>>>
-    export type RevokeDesklineLinkMutationBody = BodyType<DesklineLinkRegister>
-    export type RevokeDesklineLinkMutationError = ErrorType<unknown>
-    export type RevokeDesklineLinkMutationVariables = {data: BodyType<DesklineLinkRegister>}
+    export type RevokeMsfwrLinkMutationResult = NonNullable<Awaited<ReturnType<typeof revokeMsfwrLink>>>
+    export type RevokeMsfwrLinkMutationBody = BodyType<MsfwrLinkRegister>
+    export type RevokeMsfwrLinkMutationError = ErrorType<unknown>
+    export type RevokeMsfwrLinkMutationVariables = {data: BodyType<MsfwrLinkRegister>}
 
-    export const useRevokeDesklineLink = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeDesklineLink>>, TError,RevokeDesklineLinkMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+    export const useRevokeMsfwrLink = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeMsfwrLink>>, TError,RevokeMsfwrLinkMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof revokeDesklineLink>>,
+        Awaited<ReturnType<typeof revokeMsfwrLink>>,
         TError,
-        RevokeDesklineLinkMutationVariables,
+        RevokeMsfwrLinkMutationVariables,
         TContext
       > => {
-      return useMutation(getRevokeDesklineLinkMutationOptions(options), queryClient);
+      return useMutation(getRevokeMsfwrLinkMutationOptions(options), queryClient);
     }
 
-export const getJoinDesklineUrl = () => {
+export const getJoinMsfwrUrl = () => {
 
 
 
 
-  return `/api/deskline/join`
+  return `/api/msfwr/join`
 }
 
-export const joinDeskline = async (desklineCode: DesklineCode, options?: Parameters<typeof customFetch>[1]): Promise<DesklineViewer> => {
+export const joinMsfwr = async (msfwrCode: MsfwrCode, options?: Parameters<typeof customFetch>[1]): Promise<MsfwrViewer> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -879,12 +879,12 @@ export const joinDeskline = async (desklineCode: DesklineCode, options?: Paramet
     }
     return headers;
   };
-return customFetch<DesklineViewer>(getJoinDesklineUrl(),
+return customFetch<MsfwrViewer>(getJoinMsfwrUrl(),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(desklineCode)
+    body: JSON.stringify(msfwrCode)
   }
 );}
 
@@ -892,13 +892,13 @@ return customFetch<DesklineViewer>(getJoinDesklineUrl(),
 
 
 
-export const getJoinDesklineMutationKey = () => ['joinDeskline'] as const;
+export const getJoinMsfwrMutationKey = () => ['joinMsfwr'] as const;
 
-export const getJoinDesklineMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof joinDeskline>>, TError,JoinDesklineMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof joinDeskline>>, TError,JoinDesklineMutationVariables, TContext> => {
+export const getJoinMsfwrMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof joinMsfwr>>, TError,JoinMsfwrMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof joinMsfwr>>, TError,JoinMsfwrMutationVariables, TContext> => {
 
-const mutationKey = getJoinDesklineMutationKey();
+const mutationKey = getJoinMsfwrMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -908,10 +908,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof joinDeskline>>, JoinDesklineMutationVariables> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof joinMsfwr>>, JoinMsfwrMutationVariables> = (props) => {
           const {data} = props ?? {};
 
-          return  joinDeskline(data,requestOptions)
+          return  joinMsfwr(data,requestOptions)
         }
 
 
@@ -921,33 +921,33 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type JoinDesklineMutationResult = NonNullable<Awaited<ReturnType<typeof joinDeskline>>>
-    export type JoinDesklineMutationBody = BodyType<DesklineCode>
-    export type JoinDesklineMutationError = ErrorType<unknown>
-    export type JoinDesklineMutationVariables = {data: BodyType<DesklineCode>}
+    export type JoinMsfwrMutationResult = NonNullable<Awaited<ReturnType<typeof joinMsfwr>>>
+    export type JoinMsfwrMutationBody = BodyType<MsfwrCode>
+    export type JoinMsfwrMutationError = ErrorType<unknown>
+    export type JoinMsfwrMutationVariables = {data: BodyType<MsfwrCode>}
 
-    export const useJoinDeskline = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof joinDeskline>>, TError,JoinDesklineMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+    export const useJoinMsfwr = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof joinMsfwr>>, TError,JoinMsfwrMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof joinDeskline>>,
+        Awaited<ReturnType<typeof joinMsfwr>>,
         TError,
-        JoinDesklineMutationVariables,
+        JoinMsfwrMutationVariables,
         TContext
       > => {
-      return useMutation(getJoinDesklineMutationOptions(options), queryClient);
+      return useMutation(getJoinMsfwrMutationOptions(options), queryClient);
     }
 
-export const getEndDesklineUrl = () => {
+export const getEndMsfwrUrl = () => {
 
 
 
 
-  return `/api/deskline/end`
+  return `/api/msfwr/end`
 }
 
-export const endDeskline = async ( options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+export const endMsfwr = async ( options?: Parameters<typeof customFetch>[1]): Promise<void> => {
 
-  return customFetch<void>(getEndDesklineUrl(),
+  return customFetch<void>(getEndMsfwrUrl(),
   {
     ...options,
     method: 'POST'
@@ -960,13 +960,13 @@ export const endDeskline = async ( options?: Parameters<typeof customFetch>[1]):
 
 
 
-export const getEndDesklineMutationKey = () => ['endDeskline'] as const;
+export const getEndMsfwrMutationKey = () => ['endMsfwr'] as const;
 
-export const getEndDesklineMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof endDeskline>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof endDeskline>>, TError,void, TContext> => {
+export const getEndMsfwrMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof endMsfwr>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof endMsfwr>>, TError,void, TContext> => {
 
-const mutationKey = getEndDesklineMutationKey();
+const mutationKey = getEndMsfwrMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -976,10 +976,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof endDeskline>>, void> = () => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof endMsfwr>>, void> = () => {
 
 
-          return  endDeskline(requestOptions)
+          return  endMsfwr(requestOptions)
         }
 
 
@@ -989,31 +989,31 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type EndDesklineMutationResult = NonNullable<Awaited<ReturnType<typeof endDeskline>>>
+    export type EndMsfwrMutationResult = NonNullable<Awaited<ReturnType<typeof endMsfwr>>>
 
-    export type EndDesklineMutationError = ErrorType<unknown>
+    export type EndMsfwrMutationError = ErrorType<unknown>
 
 
-    export const useEndDeskline = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof endDeskline>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+    export const useEndMsfwr = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof endMsfwr>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof endDeskline>>,
+        Awaited<ReturnType<typeof endMsfwr>>,
         TError,
         void,
         TContext
       > => {
-      return useMutation(getEndDesklineMutationOptions(options), queryClient);
+      return useMutation(getEndMsfwrMutationOptions(options), queryClient);
     }
 
-export const getSendDesklineInputUrl = () => {
+export const getSendMsfwrInputUrl = () => {
 
 
 
 
-  return `/api/deskline/input`
+  return `/api/msfwr/input`
 }
 
-export const sendDesklineInput = async (desklineInput: DesklineInput, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+export const sendMsfwrInput = async (msfwrInput: MsfwrInput, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -1029,12 +1029,12 @@ export const sendDesklineInput = async (desklineInput: DesklineInput, options?: 
     }
     return headers;
   };
-return customFetch<void>(getSendDesklineInputUrl(),
+return customFetch<void>(getSendMsfwrInputUrl(),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(desklineInput)
+    body: JSON.stringify(msfwrInput)
   }
 );}
 
@@ -1042,13 +1042,13 @@ return customFetch<void>(getSendDesklineInputUrl(),
 
 
 
-export const getSendDesklineInputMutationKey = () => ['sendDesklineInput'] as const;
+export const getSendMsfwrInputMutationKey = () => ['sendMsfwrInput'] as const;
 
-export const getSendDesklineInputMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendDesklineInput>>, TError,SendDesklineInputMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof sendDesklineInput>>, TError,SendDesklineInputMutationVariables, TContext> => {
+export const getSendMsfwrInputMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendMsfwrInput>>, TError,SendMsfwrInputMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof sendMsfwrInput>>, TError,SendMsfwrInputMutationVariables, TContext> => {
 
-const mutationKey = getSendDesklineInputMutationKey();
+const mutationKey = getSendMsfwrInputMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -1058,10 +1058,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendDesklineInput>>, SendDesklineInputMutationVariables> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendMsfwrInput>>, SendMsfwrInputMutationVariables> = (props) => {
           const {data} = props ?? {};
 
-          return  sendDesklineInput(data,requestOptions)
+          return  sendMsfwrInput(data,requestOptions)
         }
 
 
@@ -1071,33 +1071,33 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type SendDesklineInputMutationResult = NonNullable<Awaited<ReturnType<typeof sendDesklineInput>>>
-    export type SendDesklineInputMutationBody = BodyType<DesklineInput>
-    export type SendDesklineInputMutationError = ErrorType<unknown>
-    export type SendDesklineInputMutationVariables = {data: BodyType<DesklineInput>}
+    export type SendMsfwrInputMutationResult = NonNullable<Awaited<ReturnType<typeof sendMsfwrInput>>>
+    export type SendMsfwrInputMutationBody = BodyType<MsfwrInput>
+    export type SendMsfwrInputMutationError = ErrorType<unknown>
+    export type SendMsfwrInputMutationVariables = {data: BodyType<MsfwrInput>}
 
-    export const useSendDesklineInput = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendDesklineInput>>, TError,SendDesklineInputMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+    export const useSendMsfwrInput = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendMsfwrInput>>, TError,SendMsfwrInputMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof sendDesklineInput>>,
+        Awaited<ReturnType<typeof sendMsfwrInput>>,
         TError,
-        SendDesklineInputMutationVariables,
+        SendMsfwrInputMutationVariables,
         TContext
       > => {
-      return useMutation(getSendDesklineInputMutationOptions(options), queryClient);
+      return useMutation(getSendMsfwrInputMutationOptions(options), queryClient);
     }
 
-export const getApproveDesklineUrl = () => {
+export const getApproveMsfwrUrl = () => {
 
 
 
 
-  return `/api/deskline/approve`
+  return `/api/msfwr/approve`
 }
 
-export const approveDeskline = async ( options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+export const approveMsfwr = async ( options?: Parameters<typeof customFetch>[1]): Promise<void> => {
 
-  return customFetch<void>(getApproveDesklineUrl(),
+  return customFetch<void>(getApproveMsfwrUrl(),
   {
     ...options,
     method: 'POST'
@@ -1110,13 +1110,13 @@ export const approveDeskline = async ( options?: Parameters<typeof customFetch>[
 
 
 
-export const getApproveDesklineMutationKey = () => ['approveDeskline'] as const;
+export const getApproveMsfwrMutationKey = () => ['approveMsfwr'] as const;
 
-export const getApproveDesklineMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveDeskline>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof approveDeskline>>, TError,void, TContext> => {
+export const getApproveMsfwrMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveMsfwr>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof approveMsfwr>>, TError,void, TContext> => {
 
-const mutationKey = getApproveDesklineMutationKey();
+const mutationKey = getApproveMsfwrMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -1126,10 +1126,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof approveDeskline>>, void> = () => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof approveMsfwr>>, void> = () => {
 
 
-          return  approveDeskline(requestOptions)
+          return  approveMsfwr(requestOptions)
         }
 
 
@@ -1139,34 +1139,34 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type ApproveDesklineMutationResult = NonNullable<Awaited<ReturnType<typeof approveDeskline>>>
+    export type ApproveMsfwrMutationResult = NonNullable<Awaited<ReturnType<typeof approveMsfwr>>>
 
-    export type ApproveDesklineMutationError = ErrorType<unknown>
+    export type ApproveMsfwrMutationError = ErrorType<unknown>
 
 
-    export const useApproveDeskline = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveDeskline>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+    export const useApproveMsfwr = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveMsfwr>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof approveDeskline>>,
+        Awaited<ReturnType<typeof approveMsfwr>>,
         TError,
         void,
         TContext
       > => {
-      return useMutation(getApproveDesklineMutationOptions(options), queryClient);
+      return useMutation(getApproveMsfwrMutationOptions(options), queryClient);
     }
 
-export const getTickDesklineUrl = () => {
+export const getTickMsfwrUrl = () => {
 
 
 
 
-  return `/api/deskline/tick`
+  return `/api/msfwr/tick`
 }
 
 /**
  * Host heartbeat; optional raw JPEG body when the approved screen changes.
  */
-export const tickDeskline = async (tickDesklineBody?: Blob, options?: Parameters<typeof customFetch>[1]): Promise<DesklineTick> => {
+export const tickMsfwr = async (tickMsfwrBody?: Blob, options?: Parameters<typeof customFetch>[1]): Promise<MsfwrTick> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -1182,12 +1182,12 @@ export const tickDeskline = async (tickDesklineBody?: Blob, options?: Parameters
     }
     return headers;
   };
-return customFetch<DesklineTick>(getTickDesklineUrl(),
+return customFetch<MsfwrTick>(getTickMsfwrUrl(),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'image/jpeg', ...getHeaders(options?.headers) },
-    body: tickDesklineBody
+    body: tickMsfwrBody
   }
 );}
 
@@ -1195,13 +1195,13 @@ return customFetch<DesklineTick>(getTickDesklineUrl(),
 
 
 
-export const getTickDesklineMutationKey = () => ['tickDeskline'] as const;
+export const getTickMsfwrMutationKey = () => ['tickMsfwr'] as const;
 
-export const getTickDesklineMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof tickDeskline>>, TError,TickDesklineMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof tickDeskline>>, TError,TickDesklineMutationVariables, TContext> => {
+export const getTickMsfwrMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof tickMsfwr>>, TError,TickMsfwrMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof tickMsfwr>>, TError,TickMsfwrMutationVariables, TContext> => {
 
-const mutationKey = getTickDesklineMutationKey();
+const mutationKey = getTickMsfwrMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -1211,10 +1211,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof tickDeskline>>, TickDesklineMutationVariables> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof tickMsfwr>>, TickMsfwrMutationVariables> = (props) => {
           const {data} = props ?? {};
 
-          return  tickDeskline(data,requestOptions)
+          return  tickMsfwr(data,requestOptions)
         }
 
 
@@ -1224,23 +1224,23 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type TickDesklineMutationResult = NonNullable<Awaited<ReturnType<typeof tickDeskline>>>
-    export type TickDesklineMutationBody = BodyType<Blob> | undefined
-    export type TickDesklineMutationError = ErrorType<unknown>
-    export type TickDesklineMutationVariables = {data?: BodyType<Blob>}
+    export type TickMsfwrMutationResult = NonNullable<Awaited<ReturnType<typeof tickMsfwr>>>
+    export type TickMsfwrMutationBody = BodyType<Blob> | undefined
+    export type TickMsfwrMutationError = ErrorType<unknown>
+    export type TickMsfwrMutationVariables = {data?: BodyType<Blob>}
 
-    export const useTickDeskline = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof tickDeskline>>, TError,TickDesklineMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+    export const useTickMsfwr = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof tickMsfwr>>, TError,TickMsfwrMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof tickDeskline>>,
+        Awaited<ReturnType<typeof tickMsfwr>>,
         TError,
-        TickDesklineMutationVariables,
+        TickMsfwrMutationVariables,
         TContext
       > => {
-      return useMutation(getTickDesklineMutationOptions(options), queryClient);
+      return useMutation(getTickMsfwrMutationOptions(options), queryClient);
     }
 
-export const getGetDesklineFrameUrl = (params?: GetDesklineFrameParams,) => {
+export const getGetMsfwrFrameUrl = (params?: GetMsfwrFrameParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
@@ -1252,12 +1252,12 @@ export const getGetDesklineFrameUrl = (params?: GetDesklineFrameParams,) => {
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/api/deskline/frame?${stringifiedParams}` : `/api/deskline/frame`
+  return stringifiedParams.length > 0 ? `/api/msfwr/frame?${stringifiedParams}` : `/api/msfwr/frame`
 }
 
-export const getDesklineFrame = async (params?: GetDesklineFrameParams, options?: Parameters<typeof customFetch>[1]): Promise<Blob | void> => {
+export const getMsfwrFrame = async (params?: GetMsfwrFrameParams, options?: Parameters<typeof customFetch>[1]): Promise<Blob | void> => {
 
-  return customFetch<Blob | void>(getGetDesklineFrameUrl(params),
+  return customFetch<Blob | void>(getGetMsfwrFrameUrl(params),
   {
     ...options,
     method: 'GET'
@@ -1270,66 +1270,66 @@ export const getDesklineFrame = async (params?: GetDesklineFrameParams, options?
 
 
 
-export const getGetDesklineFrameQueryKey = (params?: GetDesklineFrameParams,) => {
+export const getGetMsfwrFrameQueryKey = (params?: GetMsfwrFrameParams,) => {
     return [
-    `/api/deskline/frame`, ...(params ? [params] : [])
+    `/api/msfwr/frame`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetDesklineFrameQueryOptions = <TData = Awaited<ReturnType<typeof getDesklineFrame>>, TError = ErrorType<unknown>>(params?: GetDesklineFrameParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDesklineFrame>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+export const getGetMsfwrFrameQueryOptions = <TData = Awaited<ReturnType<typeof getMsfwrFrame>>, TError = ErrorType<unknown>>(params?: GetMsfwrFrameParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMsfwrFrame>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetDesklineFrameQueryKey(params);
+  const queryKey =  queryOptions?.queryKey ?? getGetMsfwrFrameQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDesklineFrame>>> = ({ signal }) => getDesklineFrame(params, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMsfwrFrame>>> = ({ signal }) => getMsfwrFrame(params, { signal, ...requestOptions });
 
 
 
 
 
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDesklineFrame>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMsfwrFrame>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
 }
 
-export type GetDesklineFrameQueryResult = NonNullable<Awaited<ReturnType<typeof getDesklineFrame>>>
-export type GetDesklineFrameQueryError = ErrorType<unknown>
+export type GetMsfwrFrameQueryResult = NonNullable<Awaited<ReturnType<typeof getMsfwrFrame>>>
+export type GetMsfwrFrameQueryError = ErrorType<unknown>
 
 
-export function useGetDesklineFrame<TData = Awaited<ReturnType<typeof getDesklineFrame>>, TError = ErrorType<unknown>>(
- params: undefined |  GetDesklineFrameParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDesklineFrame>>, TError, TData>> & Pick<
+export function useGetMsfwrFrame<TData = Awaited<ReturnType<typeof getMsfwrFrame>>, TError = ErrorType<unknown>>(
+ params: undefined |  GetMsfwrFrameParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMsfwrFrame>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getDesklineFrame>>,
+          Awaited<ReturnType<typeof getMsfwrFrame>>,
           TError,
-          Awaited<ReturnType<typeof getDesklineFrame>>
+          Awaited<ReturnType<typeof getMsfwrFrame>>
         > , 'initialData'
       >, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetDesklineFrame<TData = Awaited<ReturnType<typeof getDesklineFrame>>, TError = ErrorType<unknown>>(
- params?: GetDesklineFrameParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDesklineFrame>>, TError, TData>> & Pick<
+export function useGetMsfwrFrame<TData = Awaited<ReturnType<typeof getMsfwrFrame>>, TError = ErrorType<unknown>>(
+ params?: GetMsfwrFrameParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMsfwrFrame>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getDesklineFrame>>,
+          Awaited<ReturnType<typeof getMsfwrFrame>>,
           TError,
-          Awaited<ReturnType<typeof getDesklineFrame>>
+          Awaited<ReturnType<typeof getMsfwrFrame>>
         > , 'initialData'
       >, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetDesklineFrame<TData = Awaited<ReturnType<typeof getDesklineFrame>>, TError = ErrorType<unknown>>(
- params?: GetDesklineFrameParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDesklineFrame>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+export function useGetMsfwrFrame<TData = Awaited<ReturnType<typeof getMsfwrFrame>>, TError = ErrorType<unknown>>(
+ params?: GetMsfwrFrameParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMsfwrFrame>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useGetDesklineFrame<TData = Awaited<ReturnType<typeof getDesklineFrame>>, TError = ErrorType<unknown>>(
- params?: GetDesklineFrameParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDesklineFrame>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+export function useGetMsfwrFrame<TData = Awaited<ReturnType<typeof getMsfwrFrame>>, TError = ErrorType<unknown>>(
+ params?: GetMsfwrFrameParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMsfwrFrame>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getGetDesklineFrameQueryOptions(params,options)
+  const queryOptions = getGetMsfwrFrameQueryOptions(params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
