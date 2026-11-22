@@ -47,6 +47,30 @@ export const formatRaId = (raId: string) => `RA-${raId}`;
 // The signed-in portal user (a company or an admin) connected as viewer.
 export type Operator = { id: string; name: string; raId: string };
 
+// What the store reports to the billing layer when a live session ends, for
+// the session history and quota counting. The accountId is resolved by the
+// caller from the RA ID.
+export type EndedSession = {
+  raId: string;
+  pcName: string;
+  mode: "attended" | "unattended" | "link";
+  operator: string;
+  operatorId?: string;
+  startedAt: number;
+  endedAt: number;
+  durationMs: number;
+  viewers: number;
+};
+
+// Optional lifecycle hooks. They are best-effort and must never throw into
+// the session store; the store swallows their errors. onLive fires once when
+// a session first becomes live (for quota counting); onEnd fires once when a
+// live session ends (for history).
+export type StoreHooks = {
+  onLive?: (session: Session) => void;
+  onEnd?: (ended: EndedSession) => void;
+};
+
 export type Session = {
   // Internal id, used by the admin console; never the access code.
   id: string;
@@ -69,6 +93,12 @@ export type Session = {
   call?: { name: string; until: number; ra?: string; record: string };
   createdAt: number;
   liveAt?: number;
+  // The most viewers connected at once while the session was live, for the
+  // ended-session record.
+  peakViewers?: number;
+  // Set once an ended live session has been recorded, so a later sweep that
+  // also calls end() does not record it twice.
+  recorded?: boolean;
   expires: number;
   hostSeen: number;
   frame?: Buffer;
@@ -127,7 +157,7 @@ function publicLink(link: Link) {
   return rest;
 }
 
-export function createMsfwrStore(clock = Date.now) {
+export function createMsfwrStore(clock = Date.now, hooks: StoreHooks = {}) {
   const codes = new Map<string, Session>();
   const peers = new Map<string, { session: Session; role: "host" | "viewer" }>();
   // Unattended sessions by access code, including live ones (which are no
@@ -146,7 +176,27 @@ export function createMsfwrStore(clock = Date.now) {
     return s.expires <= now || now - s.hostSeen > peerTTL ||
       (s.state !== "waiting" && s.viewers.size === 0);
   };
+  // Reports an ended live session to the billing layer, exactly once.
+  const report = (s: Session) => {
+    if (s.recorded || !s.liveAt || !hooks.onEnd) return;
+    s.recorded = true;
+    const now = clock();
+    try {
+      hooks.onEnd({
+        raId: s.ra ?? "",
+        pcName: s.name || s.call?.name || "",
+        mode: s.via === "link" ? "link" : s.preapproved ? "unattended" : "attended",
+        operator: s.operator?.name ?? "",
+        operatorId: s.operator?.id,
+        startedAt: s.liveAt,
+        endedAt: now,
+        durationMs: Math.max(0, now - s.liveAt),
+        viewers: Math.max(s.peakViewers ?? 0, s.viewers.size),
+      });
+    } catch { /* hooks must never break the session store */ }
+  };
   const end = (s: Session) => {
+    report(s);
     if (codes.get(s.code) === s) codes.delete(s.code);
     if (standings.get(s.code) === s) standings.delete(s.code);
     peers.delete(s.host);
@@ -159,7 +209,17 @@ export function createMsfwrStore(clock = Date.now) {
     const token = randomBytes(32).toString("base64url");
     s.viewers.set(token, clock());
     peers.set(token, {session: s, role: "viewer"});
+    s.peakViewers = Math.max(s.peakViewers ?? 0, s.viewers.size);
     return token;
+  };
+  // Marks a session live and counts it once, for quota.
+  const goLive = (s: Session) => {
+    const now = clock();
+    s.liveAt = now;
+    s.expires = now + sessionTTL;
+    s.state = "live";
+    s.peakViewers = Math.max(s.peakViewers ?? 0, s.viewers.size);
+    try { hooks.onLive?.(s); } catch { /* best-effort */ }
   };
   // Closes requests whose time ran out or whose PC went away.
   const settle = () => {
@@ -349,11 +409,8 @@ export function createMsfwrStore(clock = Date.now) {
       s.operator = operator;
       s.via = via;
       const token = addViewer(s);
-      const now = clock();
       if (s.preapproved) {
-        s.state = "live";
-        s.liveAt = now;
-        s.expires = now + sessionTTL;
+        goLive(s);
         return {token, verification: "", preapproved: true};
       }
       const verification = String(randomInt(100000, 1000000));
@@ -477,10 +534,7 @@ export function createMsfwrStore(clock = Date.now) {
     },
     approve(s: Session) {
       if (s.state !== "pending") return false;
-      const now = clock();
-      s.liveAt = now;
-      s.expires = now + sessionTTL;
-      s.state = "live";
+      goLive(s);
       return true;
     },
     tick(s: Session, frame?: Buffer) {

@@ -292,3 +292,44 @@ test("up to ten people share one URL session; a company session is not joinable 
   assert.ok(store.authenticate(bearer(b.token), "viewer"));
   assert.equal(store.authenticate(bearer(a.token), "viewer"), undefined, "a silent viewer times out");
 });
+
+test("live-start fires onLive once and end records the ended session once", () => {
+  let now = 1_000_000;
+  const live = [];
+  const ended = [];
+  const store = createMsfwrStore(() => now, {
+    onLive: (s) => live.push(s.ra),
+    onEnd: (e) => ended.push(e),
+  });
+  const key = "k".repeat(43);
+  const reg = store.standing(key, "Reception PC", "123456");
+  const viewer = store.join(reg.code, { id: "op1", name: "Acme IT", raId: "123456" });
+  assert.ok(viewer.preapproved);
+  assert.deepEqual(live, ["123456"], "onLive fired once with the RA ID");
+  const host = store.authenticate(bearer(reg.token), "host");
+  now += 125_000;
+  store.end(host);
+  assert.equal(ended.length, 1, "onEnd fired exactly once");
+  assert.equal(ended[0].raId, "123456");
+  assert.equal(ended[0].mode, "unattended");
+  assert.equal(ended[0].operator, "Acme IT");
+  assert.equal(ended[0].durationMs, 125_000);
+  assert.equal(ended[0].viewers, 1);
+  // A second end() must not record again.
+  store.end(host);
+  assert.equal(ended.length, 1, "ended session is recorded only once");
+});
+
+test("a waiting registration that never goes live is not recorded", () => {
+  let now = 1_000_000;
+  const live = [];
+  const ended = [];
+  const store = createMsfwrStore(() => now, { onLive: (s) => live.push(s), onEnd: (e) => ended.push(e) });
+  const key = "k".repeat(43);
+  const reg = store.standing(key, "PC", "123456");
+  const host = store.authenticate(bearer(reg.token), "host");
+  now += 25_000; // host stops polling
+  store.sweep();
+  assert.equal(live.length, 0);
+  assert.equal(ended.length, 0, "a session that never went live is not in history");
+});
