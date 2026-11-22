@@ -32,9 +32,15 @@ func (l savedLink) expired(now time.Time) bool {
 	return now.UnixMilli() >= l.ExpiresAt
 }
 
-// shareURL is the address people open to connect, such as
-// https://msfwr.vercel.app/r/L0123456789A.
+// shareURL is the one-click address people open to connect, such as
+// https://msfwr.vercel.app/r/L0123456789A#042137. The access code after the
+// # is read by the page in the browser and never sent to a server log.
 func (l savedLink) shareURL() string {
+	return l.pageURL() + "#" + l.Pin
+}
+
+// pageURL is the link without its access code.
+func (l savedLink) pageURL() string {
 	link := remoteLink{Code: l.Code}
 	r, err := newRelay(l.Relay)
 	if err != nil {
@@ -43,9 +49,9 @@ func (l savedLink) shareURL() string {
 	return link.URL(linkOrigin(r))
 }
 
-// shareText is what Copy puts on the clipboard: the link and its access code.
+// shareText is what Copy puts on the clipboard: the one-click URL.
 func (l savedLink) shareText() string {
-	return l.shareURL() + "\r\nAccess code: " + l.Pin
+	return l.shareURL()
 }
 
 const linksFile = "links.json"
@@ -235,7 +241,7 @@ func linkSummary(l *savedLink, now time.Time) string {
 	if l == nil {
 		return "No remote access URL. Choose how long it stays valid, then Create."
 	}
-	return "Valid until " + time.UnixMilli(l.ExpiresAt).Format("Mon 15:04") + " (" + timeLeft(l.ExpiresAt, now) + "). Anyone with the URL and access code can connect."
+	return "Valid until " + time.UnixMilli(l.ExpiresAt).Format("Mon 15:04") + " (" + timeLeft(l.ExpiresAt, now) + "). Anyone who opens the URL connects; several people can at once."
 }
 
 // linksPathFor returns where the remote access URL lives next to the

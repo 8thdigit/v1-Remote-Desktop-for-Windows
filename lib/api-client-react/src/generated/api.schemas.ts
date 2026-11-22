@@ -204,6 +204,11 @@ export interface MsfwrLinkInfo {
   name: string;
   online: boolean;
   busy: boolean;
+  /**
+     * People connected through this URL right now
+     * @minimum 0
+     */
+  viewers?: number;
   expiresAt: number;
 }
 
@@ -374,6 +379,8 @@ export interface AdminSession {
   state: AdminSessionState;
   ra?: string;
   operator?: string;
+  /** @minimum 0 */
+  viewers?: number;
   createdAt: number;
   liveAt?: number;
 }
@@ -397,6 +404,8 @@ export interface MsfwrLinkStatus {
   link: MsfwrLink;
   online: boolean;
   busy: boolean;
+  /** @minimum 0 */
+  viewers?: number;
 }
 
 export interface MsfwrViewer {

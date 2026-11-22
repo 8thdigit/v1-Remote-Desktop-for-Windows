@@ -165,7 +165,7 @@ func newControlPanel(instance, tray uintptr, render func() panelView) (*controlP
 
 	add("BUTTON", "Remote access URL", group, 12, 292, 560, 134, 0)
 	p.linkURL = add("EDIT", "", readOnly, 26, 316, 416, 26, 0)
-	p.copyLink = add("BUTTON", "Copy URL + code", tab, 450, 314, 108, 30, copyLinkButton)
+	p.copyLink = add("BUTTON", "Copy URL", tab, 450, 314, 108, 30, copyLinkButton)
 	add("STATIC", "Access code:", 0, 26, 353, 76, 20, 0)
 	p.linkPin = add("EDIT", "", readOnly, 104, 348, 90, 26, 0)
 	add("STATIC", "Valid for:", 0, 206, 353, 56, 20, 0)

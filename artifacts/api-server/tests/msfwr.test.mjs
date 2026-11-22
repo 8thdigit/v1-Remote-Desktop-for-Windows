@@ -218,8 +218,18 @@ test("a remote access link needs its access code, connects to the PC that made i
   assert.equal(ok.viewer.preapproved, true);
   const s = store.authenticate(bearer(host.token), "host");
   assert.equal(store.tick(s).state, "live");
-  assert.deepEqual(store.linkJoin(link.code, link.pin), {error: "busy"});
-  assert.equal(store.linkStatus(link.id, key("e")).link.sessions, 1);
+  const second = store.linkJoin(link.code, link.pin);
+  assert.ok(second.viewer, "a second person joins the same session through the URL");
+  assert.equal(store.linkInfo(link.code).viewers, 2);
+  assert.equal(store.linkStatus(link.id, key("e")).link.sessions, 2);
+  assert.equal(store.authenticate(bearer(ok.viewer.token), "viewer"), s);
+  assert.equal(store.authenticate(bearer(second.viewer.token), "viewer"), s);
+  // One person leaving keeps the session open for the other.
+  assert.equal(store.leave(s, bearer(ok.viewer.token)), false);
+  assert.equal(store.authenticate(bearer(ok.viewer.token), "viewer"), undefined);
+  assert.equal(store.tick(store.authenticate(bearer(host.token), "host")).state, "live");
+  assert.equal(store.leave(s, bearer(second.viewer.token)), true, "the last one leaving ends it");
+  assert.equal(store.authenticate(bearer(host.token), "host"), undefined);
   assert.equal(store.linkRevoke(link.id, key("f")), false, "only the PC's key can clear it");
   assert.equal(store.linkRevoke(link.id, key("e")), true);
   assert.equal(store.linkInfo(link.code), undefined);
@@ -253,4 +263,32 @@ test("only the PC that owns a link can restore it after a relay restart", () => 
   assert.equal(restored.pin, link.pin);
   const third = createMsfwrStore(() => 10_000_000 + 60_000);
   assert.equal(third.linkRestore({...saved, expiresAt: 10_000_000}), undefined, "expired links are not restored");
+});
+
+test("up to ten people share one URL session; a company session is not joinable through the URL", () => {
+  let now = 9_500_000;
+  const store = createMsfwrStore(() => now);
+  store.standing(key("m"), "OFFICE");
+  const link = store.linkCreate(key("m"), "OFFICE", 2);
+  for (let i = 0; i < 10; i++) assert.ok(store.linkJoin(link.code, link.pin).viewer);
+  assert.deepEqual(store.linkJoin(link.code, link.pin), {error: "full"});
+  assert.equal(store.linkInfo(link.code).busy, true);
+
+  const host = store.standing(key("n"), "DESK", "424242");
+  const link2 = store.linkCreate(key("n"), "DESK", 2);
+  assert.ok(store.connectPc(store.inbox("424242").pcs[0].id, {id: "u1", name: "Acme", raId: "424242"}));
+  assert.ok(store.authenticate(bearer(host.token), "host"));
+  assert.deepEqual(store.linkJoin(link2.code, link2.pin), {error: "busy"});
+
+  // Viewers that stop polling drop out; the session ends when none are left.
+  const s3 = store.standing(key("o"), "KIOSK");
+  const link3 = store.linkCreate(key("o"), "KIOSK", 2);
+  const a = store.linkJoin(link3.code, link3.pin).viewer;
+  now += 10_000;
+  assert.ok(store.authenticate(bearer(s3.token), "host"));
+  const b = store.linkJoin(link3.code, link3.pin).viewer;
+  now += 15_000;
+  assert.ok(store.authenticate(bearer(s3.token), "host"));
+  assert.ok(store.authenticate(bearer(b.token), "viewer"));
+  assert.equal(store.authenticate(bearer(a.token), "viewer"), undefined, "a silent viewer times out");
 });

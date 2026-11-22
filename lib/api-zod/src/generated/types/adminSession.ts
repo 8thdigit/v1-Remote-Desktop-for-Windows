@@ -15,6 +15,8 @@ export interface AdminSession {
   state: AdminSessionState;
   ra?: string;
   operator?: string;
+  /** @minimum 0 */
+  viewers?: number;
   createdAt: number;
   liveAt?: number;
 }

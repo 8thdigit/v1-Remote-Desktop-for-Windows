@@ -1,16 +1,26 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { getMsfwrLinkInfo, joinMsfwrLink, type MsfwrLinkInfo } from '@workspace/api-client-react';
 import { ArrowRight, Clock, KeyRound, Laptop, Radio, ShieldCheck } from 'lucide-react';
 import LiveSession from '@/LiveSession';
 import { errorText, statusOf } from '@/lib/auth';
 
-// The page a remote access URL opens (https://…/r/L0123456789A). Whoever has
-// the URL and its six-digit access code connects to the PC that created it.
-// No sign-in is needed: the URL and code are the credential.
+// The page a remote access URL opens (https://…/r/L0123456789A#123456).
+// Whoever has the URL and its six-digit access code connects to the PC that
+// created it. The PC shares the URL with the code after the #, which browsers
+// never send to a server, so one click connects. Several people can be
+// connected through the same URL at once. No sign-in is needed.
+
+// The access code carried in the URL after the #, if any.
+function codeFromHash() {
+  if (typeof window === 'undefined') return '';
+  const digits = decodeURIComponent(window.location.hash.slice(1)).replace(/\D/g, '');
+  return digits.length === 6 ? digits : '';
+}
 export default function LinkPage({ code }: { code: string }) {
   const [info, setInfo] = useState<MsfwrLinkInfo | null>(null);
   const [missing, setMissing] = useState<string | null>(null);
-  const [pin, setPin] = useState('');
+  const [pin, setPin] = useState(codeFromHash);
+  const autoTried = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [session, setSession] = useState<{ token: string } | null>(null);
@@ -42,14 +52,12 @@ export default function LinkPage({ code }: { code: string }) {
     document.title = session ? 'Msfwr — Connected session' : `${info?.name || 'Remote access'} — Msfwr`;
   }, [info?.name, session]);
 
-  async function connect(e: FormEvent) {
-    e.preventDefault();
+  async function join(value: string) {
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
-      const viewer = await joinMsfwrLink({ code: upper, pin: pin.replace(/\D/g, '') });
-      setPin('');
+      const viewer = await joinMsfwrLink({ code: upper, pin: value.replace(/\D/g, '') });
       setSession({ token: viewer.token });
     } catch (reason) {
       setError(errorText(reason, 'Could not connect. Try again.'));
@@ -57,6 +65,21 @@ export default function LinkPage({ code }: { code: string }) {
       setBusy(false);
     }
   }
+
+  function connect(e: FormEvent) {
+    e.preventDefault();
+    void join(pin);
+  }
+
+  // Opening a URL that carries the access code connects straight away once
+  // the PC is known to be reachable.
+  useEffect(() => {
+    if (autoTried.current || session || !info || pin.length !== 6) return;
+    if (!info.online || info.busy) return;
+    autoTried.current = true;
+    void join(pin);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [info, session]);
 
   if (session) {
     return <LiveSession token={session.token} verification="" preapproved onLeave={(message) => { setSession(null); setNotice(message ?? 'Session ended.'); }} />;
@@ -90,7 +113,10 @@ export default function LinkPage({ code }: { code: string }) {
                 {info && (
                   <p className="flex items-center gap-1.5 text-sm" data-testid="text-link-state">
                     <i className={`h-2 w-2 rounded-full ${info.online ? (info.busy ? 'bg-amber-500' : 'bg-emerald-500') : 'bg-foreground/30'}`} />
-                    {info.online ? (info.busy ? 'In a session right now' : 'Online and ready') : 'Offline or locked'}
+                    {!info.online ? 'Offline or locked'
+                      : info.busy ? 'In a session right now'
+                      : info.viewers ? `${info.viewers} ${info.viewers === 1 ? 'person' : 'people'} connected. You can join them.`
+                      : 'Online and ready'}
                   </p>
                 )}
               </div>
@@ -113,7 +139,7 @@ export default function LinkPage({ code }: { code: string }) {
             {notice && <p className="mt-4 rounded-lg bg-accent/60 px-3 py-2 text-sm">{notice}</p>}
             <button type="submit" disabled={busy || pin.length !== 6 || !info} data-testid="button-link-connect"
               className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 font-bold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-40">
-              {busy ? <span className="dl-pulse">Connecting</span> : <>Connect <ArrowRight className="h-4 w-4" /></>}
+              {busy ? <span className="dl-pulse">Connecting</span> : <>{info?.viewers ? 'Join' : 'Connect'} <ArrowRight className="h-4 w-4" /></>}
             </button>
           </form>
         )}

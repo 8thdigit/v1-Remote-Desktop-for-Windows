@@ -11,5 +11,10 @@ export interface MsfwrLinkInfo {
   name: string;
   online: boolean;
   busy: boolean;
+  /**
+     * People connected through this URL right now
+     * @minimum 0
+     */
+  viewers?: number;
   expiresAt: number;
 }

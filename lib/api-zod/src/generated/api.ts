@@ -176,6 +176,8 @@ export const getMsfwrLinkStatusResponseLinkCodeRegExp = new RegExp('^L[0-9A-F]{1
 export const getMsfwrLinkStatusResponseLinkPinRegExp = new RegExp('^[0-9]{6}$');
 export const getMsfwrLinkStatusResponseLinkSessionsMin = 0;
 
+export const getMsfwrLinkStatusResponseViewersMin = 0;
+
 
 
 export const GetMsfwrLinkStatusResponse = zod.object({
@@ -190,7 +192,8 @@ export const GetMsfwrLinkStatusResponse = zod.object({
   "sessions": zod.int().min(getMsfwrLinkStatusResponseLinkSessionsMin)
 }),
   "online": zod.boolean(),
-  "busy": zod.boolean()
+  "busy": zod.boolean(),
+  "viewers": zod.int().min(getMsfwrLinkStatusResponseViewersMin).optional()
 })
 
 
@@ -227,11 +230,16 @@ export const GetMsfwrLinkInfoQueryParams = zod.object({
   "code": zod.coerce.string().regex(getMsfwrLinkInfoQueryCodeRegExp)
 })
 
+export const getMsfwrLinkInfoResponseViewersMin = 0;
+
+
+
 export const GetMsfwrLinkInfoResponse = zod.object({
   "code": zod.string(),
   "name": zod.string(),
   "online": zod.boolean(),
   "busy": zod.boolean(),
+  "viewers": zod.int().min(getMsfwrLinkInfoResponseViewersMin).optional().describe('People connected through this URL right now'),
   "expiresAt": zod.number()
 })
 
@@ -455,6 +463,12 @@ export const DeleteUserParams = zod.object({
 export const DeleteUserResponse = zod.void()
 
 
+export const getAdminOverviewResponseLiveItemViewersMin = 0;
+
+export const getAdminOverviewResponsePcsItemViewersMin = 0;
+
+
+
 export const GetAdminOverviewResponse = zod.object({
   "live": zod.array(zod.object({
   "id": zod.string(),
@@ -463,6 +477,7 @@ export const GetAdminOverviewResponse = zod.object({
   "state": zod.enum(['waiting', 'pending', 'live']),
   "ra": zod.string().optional(),
   "operator": zod.string().optional(),
+  "viewers": zod.int().min(getAdminOverviewResponseLiveItemViewersMin).optional(),
   "createdAt": zod.number(),
   "liveAt": zod.number().optional()
 })),
@@ -473,6 +488,7 @@ export const GetAdminOverviewResponse = zod.object({
   "state": zod.enum(['waiting', 'pending', 'live']),
   "ra": zod.string().optional(),
   "operator": zod.string().optional(),
+  "viewers": zod.int().min(getAdminOverviewResponsePcsItemViewersMin).optional(),
   "createdAt": zod.number(),
   "liveAt": zod.number().optional()
 })),

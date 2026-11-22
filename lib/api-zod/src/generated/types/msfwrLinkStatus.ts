@@ -11,4 +11,6 @@ export interface MsfwrLinkStatus {
   link: MsfwrLink;
   online: boolean;
   busy: boolean;
+  /** @minimum 0 */
+  viewers?: number;
 }
