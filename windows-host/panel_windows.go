@@ -117,10 +117,12 @@ func newControlPanel(instance, tray uintptr, render func() panelView) (*controlP
 	if atom, _, _ := registerClass.Call(uintptr(unsafe.Pointer(&class))); atom == 0 {
 		return nil, panelError
 	}
-	// WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX: a normal window with a taskbar
-	// button, fixed size.
-	window, _, _ := createWindow.Call(0x10000, uintptr(unsafe.Pointer(class.name)), uintptr(unsafe.Pointer(textPtr("Msfwr"))),
-		0x00ca0000|0x00020000, 0x80000000, 0x80000000, px(600), px(660), 0, 0, instance, 0)
+	// WS_EX_TOOLWINDOW (0x80) with WS_CAPTION|WS_SYSMENU, fixed size: Msfwr
+	// never shows a taskbar button. There is no minimize box because a tool
+	// window would minimize to the desktop corner; Close and Hide hide it, and
+	// the tray icon or the Start shortcut brings it back.
+	window, _, _ := createWindow.Call(0x80, uintptr(unsafe.Pointer(class.name)), uintptr(unsafe.Pointer(textPtr("Msfwr"))),
+		0x00ca0000, 0x80000000, 0x80000000, px(600), px(660), 0, 0, instance, 0)
 	if window == 0 {
 		return nil, panelError
 	}
