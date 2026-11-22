@@ -82,23 +82,20 @@ no minimize button; reopen it from the icon or from Start. When Msfwr starts at 
 notification area and does not open the window. The relay does not report
 who the viewer is, so the window shows when a session started, not a name.
 
-### Notification-area icon
+### No taskbar or notification-area presence
 
-Apart from the Msfwr window above, which opens only when you ask for it, there
-is no window and no pop-up during a session; only an icon in the notification area. It shows a
-sync-arrows icon that is blue when ready, amber when the relay can't be
-reached, and green while IT is connected. Its tooltip reads
-**Connect: +01** while a session is live, counting sessions since the app
-started (+02 for the second, and so on). Left-click the icon to open the Msfwr
-window; right-click it for a small menu with the status, the access code, the connection count,
-**Copy access code**, **Initiate**, **Stop current session**, **Turn off unattended access…**
+Msfwr shows nothing while it is idle: no taskbar button and no
+notification-area (tray) icon. Unattended access runs from a hidden window.
+Open the **Msfwr** window from its Start shortcut for the status, the access
+code, the connection count, **Copy access code**, **Initiate**, **Stop current
+session**, **Create remote access URL…**, **Turn off unattended access…**
 (deletes the key and the startup entry), and **Exit** (unattended access
-starts again at next sign-in). Ctrl+2 and F12 still end a live session, and
-locking Windows still stops sharing. Windows 11 may put new notification-area
-icons in the overflow; pin it under Settings > Personalization > Taskbar >
-Other system tray icons. Short notification balloons say when a request was
-sent and when IT connects or disconnects. Starting Msfwr again while it
-runs brings its existing Msfwr window to the front instead of starting a second copy.
+starts again at next sign-in). Starting Msfwr again while it runs brings its
+existing window to the front instead of starting a second copy.
+
+While IT is connected, the always-on-top **Live sharing** indicator appears on
+the screen, so a session is never silent on the PC. Ctrl+2 and F12 end a live
+session, and locking Windows stops sharing.
 
 Anyone with the access code can control the PC while it is signed in, so
 treat the code like a password. To change it, turn unattended access off and
