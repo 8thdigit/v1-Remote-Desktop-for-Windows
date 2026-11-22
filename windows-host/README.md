@@ -59,15 +59,36 @@ The **Unattended PCs** tab also shows each saved PC as online, in a session or
 offline, lets IT label and connect to it directly, and keeps a history of new
 and previous requests (waiting, accepted, missed, dismissed) in that browser.
 
+### The Msfwr window
+
+Open **Msfwr** from Start (or left-click the notification-area icon, or pick
+**Open Msfwr** in its menu) to see the Msfwr window while unattended access is
+on. It shows:
+
+- **Status**: ready, request sent, connected, offline or locked, with the
+  latest detail, this PC's name and the relay address.
+- **Access code** with **Copy access code**.
+- **Controls**: **Initiate**, **Stop current session** and
+  **Create remote access URL…**, plus **Turn off unattended…** and **Exit**.
+- **Connections**: whether IT is connected now and for how long, the number
+  of sessions since Msfwr started, a list of recent sessions (kept in memory
+  only), and the active remote access URLs with **Copy URL** and **Revoke URL**.
+- **Version**, for example `Msfwr v0.3.2 · Windows x64`.
+
+Closing the window (or **Hide**) only hides it; unattended access keeps
+running from the icon. When Msfwr starts at sign-in it stays in the
+notification area and does not open the window. The relay does not report
+who the viewer is, so the window shows when a session started, not a name.
+
 ### Notification-area icon
 
-There is no window and no taskbar button while unattended access runs, and no
-pop-ups during a session; only an icon in the notification area. It shows a
+Apart from the Msfwr window above, which opens only when you ask for it, there
+is no window and no pop-up during a session; only an icon in the notification area. It shows a
 sync-arrows icon that is blue when ready, amber when the relay can't be
 reached, and green while IT is connected. Its tooltip reads
 **Connect: +01** while a session is live, counting sessions since the app
-started (+02 for the second, and so on). Click the icon (left or right) for a
-small menu with the status, the access code, the connection count,
+started (+02 for the second, and so on). Left-click the icon to open the Msfwr
+window; right-click it for a small menu with the status, the access code, the connection count,
 **Copy access code**, **Initiate**, **Stop current session**, **Turn off unattended access…**
 (deletes the key and the startup entry), and **Exit** (unattended access
 starts again at next sign-in). Ctrl+2 and F12 still end a live session, and
@@ -75,7 +96,7 @@ locking Windows still stops sharing. Windows 11 may put new notification-area
 icons in the overflow; pin it under Settings > Personalization > Taskbar >
 Other system tray icons. Short notification balloons say when a request was
 sent and when IT connects or disconnects. Starting Msfwr again while it
-runs only shows a balloon on the existing icon; it opens no window.
+runs brings its existing Msfwr window to the front instead of starting a second copy.
 
 Anyone with the access code can control the PC while it is signed in, so
 treat the code like a password. To change it, turn unattended access off and

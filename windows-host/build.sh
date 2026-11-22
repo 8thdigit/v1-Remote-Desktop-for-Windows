@@ -23,11 +23,21 @@ if [[ $# -ne 0 ]]; then
   target="$tmp/msfwr-Setup-x64.exe"
   signing=(-DRELEASE_SIGNER="$2")
 fi
-CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags='-s -w -H=windowsgui' -o "$host" .
+# Version shown in the Msfwr window and in Windows Settings > Apps. The release
+# workflow sets MSFWR_VERSION to the tag; local builds use git describe.
+version="${MSFWR_VERSION:-$(git -C "$root" describe --tags --always 2>/dev/null || echo dev)}"
+if [[ ! $version =~ ^v?[0-9A-Za-z][0-9A-Za-z.+-]{0,63}$ ]]; then
+  version=dev
+fi
+display_version="${version#v}"
+if [[ ! $display_version =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+  display_version=0.0.0
+fi
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w -H=windowsgui -X main.version=$version" -o "$host" .
 if (( ${#signing[@]} )); then
   "$2" "$host"
 fi
-"$compiler" -V2 -DHOST_FILE="$host" -DINSTALLER="$target" "${signing[@]}" installer.nsi
+"$compiler" -V2 -DHOST_FILE="$host" -DINSTALLER="$target" -DVERSION="$display_version" "${signing[@]}" installer.nsi
 if (( ${#signing[@]} )); then
   release="$(mktemp -d "$PWD/dist/release.XXXXXXXX")"
   mv -- "$host" "$target" "$release/"

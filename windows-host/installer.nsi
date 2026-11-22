@@ -1,4 +1,7 @@
 Unicode True
+!ifndef VERSION
+!define VERSION "0.0.0"
+!endif
 Name "Msfwr Windows Host"
 OutFile "${INSTALLER}"
 InstallDir "$LOCALAPPDATA\Programs\Msfwr"
@@ -115,7 +118,7 @@ Section "Msfwr"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   CreateShortcut "$SMPROGRAMS\Msfwr.lnk" "$INSTDIR\Msfwr.exe"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Msfwr" "DisplayName" "Msfwr Windows Host"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Msfwr" "DisplayVersion" "0.1.0"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Msfwr" "DisplayVersion" "${VERSION}"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Msfwr" "Publisher" "Msfwr"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Msfwr" "UninstallString" '"$INSTDIR\Uninstall.exe"'
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Msfwr" "NoModify" 1
