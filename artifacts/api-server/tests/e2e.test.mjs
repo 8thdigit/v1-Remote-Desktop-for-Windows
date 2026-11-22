@@ -30,10 +30,10 @@ before(async () => {
 after(() => { server?.kill(); rmSync(dataDir, { recursive: true, force: true }); });
 
 // A tiny cookie-keeping client, like one browser.
-function client() {
+function client(root = base) {
   let cookie = "";
   return async function call(method, route, body, headers = {}) {
-    const res = await fetch(base + route, {
+    const res = await fetch(root + route, {
       method,
       headers: { ...(body !== undefined ? { "content-type": "application/json" } : {}), ...(cookie ? { cookie } : {}), ...headers },
       body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -51,13 +51,14 @@ const pcKey = (c) => c.repeat(43);
 
 test("admin signs in, creates a company with a login ID and RA ID, and the company signs in", async () => {
   const admin = client();
-  assert.equal((await admin("GET", "/auth/status")).json.setupRequired, false);
+  assert.equal((await admin("GET", "/auth/status")).json.user, undefined);
   assert.equal((await admin("POST", "/auth/login", { username: "root", password: "wrong-password" })).status, 401);
   const me = await admin("POST", "/auth/login", { username: "root", password: "admin-pass-123" });
   assert.equal(me.status, 200);
   assert.equal(me.json.role, "admin");
+  assert.equal(me.json.mustChangePassword, false, "an ADMIN_PASSWORD admin is not asked to change it");
 
-  const created = await admin("POST", "/admin/users", { username: "acme", displayName: "Acme Ltd", password: "acme-pass-123", role: "company", raId: "RA-424242" });
+  const created = await admin("POST", "/admin/users", { username: "acme", displayName: "Acme Ltd", password: "acme-temp-123", role: "company", raId: "RA-424242" });
   assert.equal(created.status, 201, JSON.stringify(created.json));
   assert.equal(created.json.raId, "424242");
   assert.equal((await admin("POST", "/admin/users", { username: "other", password: "other-pass-123", role: "company", raId: "424242" })).status, 409, "RA IDs are unique");
@@ -66,7 +67,13 @@ test("admin signs in, creates a company with a login ID and RA ID, and the compa
   assert.equal((await admin("GET", "/admin/users")).json.users.length, 3);
 
   const acme = client();
-  assert.equal((await acme("POST", "/auth/login", { username: "ACME", password: "acme-pass-123" })).status, 200);
+  const first = await acme("POST", "/auth/login", { username: "ACME", password: "acme-temp-123" });
+  assert.equal(first.status, 200);
+  assert.equal(first.json.mustChangePassword, true, "an admin-set password is temporary");
+  assert.equal((await acme("GET", "/msfwr/inbox")).status, 403, "nothing opens before choosing a password");
+  assert.equal((await acme("POST", "/auth/password", { current: "acme-temp-123", next: "acme-temp-123" })).status, 400);
+  assert.equal((await acme("POST", "/auth/password", { current: "acme-temp-123", next: "acme-pass-123" })).status, 204);
+  assert.equal((await acme("GET", "/auth/status")).json.user.mustChangePassword, false);
   assert.equal((await acme("GET", "/admin/users")).status, 403, "companies cannot use the admin console");
   const inbox = await acme("GET", "/msfwr/inbox");
   assert.deepEqual([inbox.json.raId, inbox.json.company, inbox.json.pcs.length], ["424242", "Acme Ltd", 0]);
@@ -106,9 +113,10 @@ test("a PC pointed at the company's RA ID: Initiate reaches only that company, w
 
   const admin = client();
   await admin("POST", "/auth/login", { username: "root", password: "admin-pass-123" });
-  await admin("POST", "/admin/users", { username: "rival", password: "rival-pass-123", role: "company", raId: "515151" });
+  await admin("POST", "/admin/users", { username: "rival", password: "rival-temp-123", role: "company", raId: "515151" });
   const rival = client();
-  await rival("POST", "/auth/login", { username: "rival", password: "rival-pass-123" });
+  await rival("POST", "/auth/login", { username: "rival", password: "rival-temp-123" });
+  await rival("POST", "/auth/password", { current: "rival-temp-123", next: "rival-pass-123" });
   assert.equal((await rival("GET", "/msfwr/inbox")).json.requests.length, 0);
   assert.equal((await rival("POST", "/msfwr/accept", { id: inbox.requests[0].id })).status, 404);
 
@@ -169,4 +177,35 @@ test("accounts survive a relay restart", async () => {
   }
   const acme = client();
   assert.equal((await acme("POST", "/auth/login", { username: "acme", password: "acme-pass-123" })).status, 200);
+  assert.equal((await client()("POST", "/auth/login", { username: "admin", password: "121212" })).status, 401, "no default admin once accounts exist");
+});
+
+test("a new relay has a default admin with PIN 121212 that must be changed at first sign-in", async () => {
+  const freshPort = port + 1;
+  const freshDir = mkdtempSync(path.join(tmpdir(), "msfwr-e2e-default-"));
+  const env = { ...process.env, PORT: String(freshPort), MSFWR_DATA_DIR: freshDir, NODE_ENV: "production", DATABASE_URL: "" };
+  delete env.ADMIN_PASSWORD;
+  delete env.ADMIN_USERNAME;
+  const fresh = spawn(process.execPath, [path.join(here, "..", "dist", "index.mjs")], { env, stdio: "ignore" });
+  try {
+    const freshBase = `http://127.0.0.1:${freshPort}/api`;
+    for (let i = 0; i < 100; i++) {
+      try { if ((await fetch(`${freshBase}/healthz`)).ok) break; } catch { /* starting */ }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    const admin = client(freshBase);
+    const me = await admin("POST", "/auth/login", { username: "admin", password: "121212" });
+    assert.equal(me.status, 200, JSON.stringify(me.json));
+    assert.deepEqual([me.json.role, me.json.mustChangePassword], ["admin", true]);
+    assert.equal((await admin("GET", "/admin/users")).status, 403, "the console stays closed until the PIN is changed");
+    assert.equal((await admin("POST", "/auth/password", { current: "121212", next: "short" })).status, 400);
+    assert.equal((await admin("POST", "/auth/password", { current: "121212", next: "my-new-admin-pass" })).status, 204);
+    assert.equal((await admin("GET", "/admin/users")).status, 200);
+    assert.equal((await client(freshBase)("POST", "/auth/login", { username: "admin", password: "121212" })).status, 401, "the default PIN stops working");
+    assert.equal((await client(freshBase)("POST", "/auth/login", { username: "admin", password: "my-new-admin-pass" })).status, 200);
+  } finally {
+    fresh.kill();
+    await new Promise((r) => fresh.once("exit", r));
+    rmSync(freshDir, { recursive: true, force: true });
+  }
 });

@@ -314,7 +314,6 @@ export const ConnectMsfwrPcResponse = zod.object({
 
 
 export const GetAuthStatusResponse = zod.object({
-  "setupRequired": zod.boolean(),
   "user": zod.object({
   "id": zod.string(),
   "username": zod.string(),
@@ -323,37 +322,9 @@ export const GetAuthStatusResponse = zod.object({
   "raId": zod.string(),
   "disabled": zod.boolean(),
   "createdAt": zod.number(),
-  "lastLoginAt": zod.number().optional()
+  "lastLoginAt": zod.number().optional(),
+  "mustChangePassword": zod.boolean().optional()
 }).optional()
-})
-
-
-export const setupAdminBodySetupCodeMax = 32;
-
-export const setupAdminBodyUsernameMax = 64;
-
-export const setupAdminBodyDisplayNameMax = 80;
-
-export const setupAdminBodyPasswordMax = 200;
-
-
-
-export const SetupAdminBody = zod.object({
-  "setupCode": zod.string().max(setupAdminBodySetupCodeMax),
-  "username": zod.string().max(setupAdminBodyUsernameMax),
-  "displayName": zod.string().max(setupAdminBodyDisplayNameMax).optional(),
-  "password": zod.string().max(setupAdminBodyPasswordMax)
-})
-
-export const SetupAdminResponse = zod.object({
-  "id": zod.string(),
-  "username": zod.string(),
-  "displayName": zod.string(),
-  "role": zod.enum(['admin', 'company']),
-  "raId": zod.string(),
-  "disabled": zod.boolean(),
-  "createdAt": zod.number(),
-  "lastLoginAt": zod.number().optional()
 })
 
 
@@ -376,7 +347,8 @@ export const LoginResponse = zod.object({
   "raId": zod.string(),
   "disabled": zod.boolean(),
   "createdAt": zod.number(),
-  "lastLoginAt": zod.number().optional()
+  "lastLoginAt": zod.number().optional(),
+  "mustChangePassword": zod.boolean().optional()
 })
 
 
@@ -406,7 +378,8 @@ export const ListUsersResponse = zod.object({
   "raId": zod.string(),
   "disabled": zod.boolean(),
   "createdAt": zod.number(),
-  "lastLoginAt": zod.number().optional()
+  "lastLoginAt": zod.number().optional(),
+  "mustChangePassword": zod.boolean().optional()
 }))
 })
 
@@ -437,7 +410,8 @@ export const CreateUserResponse = zod.object({
   "raId": zod.string(),
   "disabled": zod.boolean(),
   "createdAt": zod.number(),
-  "lastLoginAt": zod.number().optional()
+  "lastLoginAt": zod.number().optional(),
+  "mustChangePassword": zod.boolean().optional()
 })
 
 
@@ -469,7 +443,8 @@ export const UpdateUserResponse = zod.object({
   "raId": zod.string(),
   "disabled": zod.boolean(),
   "createdAt": zod.number(),
-  "lastLoginAt": zod.number().optional()
+  "lastLoginAt": zod.number().optional(),
+  "mustChangePassword": zod.boolean().optional()
 })
 
 

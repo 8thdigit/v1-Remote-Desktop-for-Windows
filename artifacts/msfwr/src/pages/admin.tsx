@@ -334,6 +334,9 @@ function UsersPanel({ users, me, now, loading, onRole, onToggle, onRename, onRes
                     <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${u.disabled ? 'text-muted-foreground' : 'text-emerald-700'}`}>
                       <i className={`h-1.5 w-1.5 rounded-full ${u.disabled ? 'bg-foreground/30' : 'bg-emerald-500'}`} /> {u.disabled ? 'Disabled' : 'Active'}
                     </span>
+                    {u.mustChangePassword && !u.disabled && (
+                      <span className="mt-0.5 block text-[11px] text-amber-700" data-testid={`text-temp-password-${u.username}`}>Temporary password</span>
+                    )}
                   </td>
                   <td className="px-1 py-2.5 text-xs text-muted-foreground">{relativeTime(u.lastLoginAt, now)}</td>
                   <td className="px-1 py-2.5 text-right">
@@ -455,7 +458,7 @@ function CreateUser({ open, onClose, onCreated }: { open: boolean; onClose: () =
               <input className={`${inputCls} mt-1 font-mono`} value={raId} onChange={(e) => setRaId(e.target.value.toUpperCase())} maxLength={9}
                 placeholder="RA-123456" spellCheck={false} data-testid="input-new-ra" />
             </label>
-            <div className="text-xs font-semibold text-muted-foreground">Password
+            <div className="text-xs font-semibold text-muted-foreground">Temporary password <span className="font-normal">(they choose their own at first sign-in)</span>
               <div className="mt-1"><PasswordField value={password} onChange={setPassword} /></div>
             </div>
             <fieldset>
@@ -511,7 +514,7 @@ function ResetPassword({ user, onClose, onReset }: { user: Account | null; onClo
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Reset password for {user?.displayName}</DialogTitle>
-          <DialogDescription>{done ? 'Share the new password with them privately.' : 'They are signed out everywhere and must use the new password.'}</DialogDescription>
+          <DialogDescription>{done ? 'Share the new password with them privately.' : 'They are signed out everywhere, sign in with this password, then choose their own.'}</DialogDescription>
         </DialogHeader>
         {done ? (
           <>

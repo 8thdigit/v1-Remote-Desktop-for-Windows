@@ -9,7 +9,7 @@ import Admin from '@/pages/admin';
 import LinkPage from '@/pages/link';
 import Privacy from '@/pages/privacy';
 import Project from '@/pages/project';
-import { SetupAdmin, SignIn } from '@/pages/sign-in';
+import { FirstPassword, SignIn } from '@/pages/sign-in';
 import { AuthProvider, useAuthStatus } from '@/lib/auth';
 import {
   Redirect,
@@ -37,8 +37,8 @@ function Signed({ children, admin = false }: { children: ReactNode; admin?: bool
       </div>
     );
   }
-  if (status.data.setupRequired) return <SetupAdmin />;
   if (!status.data.user) return <SignIn />;
+  if (status.data.user.mustChangePassword) return <FirstPassword username={status.data.user.username} />;
   if (admin && status.data.user.role !== 'admin') {
     return (
       <div className="dl-shell grid min-h-[100dvh] place-items-center px-4 text-center text-sm">

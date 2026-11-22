@@ -1,8 +1,12 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { getGetAuthStatusQueryKey, login, setupAdmin } from '@workspace/api-client-react';
+import { changePassword, getGetAuthStatusQueryKey, login, logout } from '@workspace/api-client-react';
 import { ArrowRight, KeyRound, Lock, Radio, ShieldCheck, UserRound } from 'lucide-react';
 import { errorText } from '@/lib/auth';
+
+// The password just used to sign in, kept in memory only so the first-password
+// screen does not ask for it again. It is dropped once that screen opens.
+let signInPassword = '';
 
 function Shell({ children }: { children: ReactNode }) {
   return (
@@ -56,7 +60,8 @@ export function SignIn() {
     setBusy(true);
     setError(null);
     try {
-      await login({ username: username.trim(), password });
+      const user = await login({ username: username.trim(), password });
+      if (user.mustChangePassword) signInPassword = password;
       setPassword('');
       await client.invalidateQueries({ queryKey: getGetAuthStatusQueryKey() });
     } catch (reason) {
@@ -87,58 +92,67 @@ export function SignIn() {
   );
 }
 
-export function SetupAdmin() {
+// Shown after signing in with a password someone else chose: the default
+// admin PIN, or one an admin set for a company. Nothing else opens until the
+// account has its own password.
+export function FirstPassword({ username }: { username: string }) {
   const client = useQueryClient();
-  const [code, setCode] = useState('');
-  const [displayName, setDisplayName] = useState('');
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('');
+  const [remembered] = useState(() => signInPassword);
+  const [current, setCurrent] = useState(remembered);
+  useEffect(() => { signInPassword = ''; }, []);
+  const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  useEffect(() => { document.title = 'Set up Msfwr'; }, []);
+  useEffect(() => { document.title = 'Choose a new password — Msfwr'; }, []);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (password !== confirm) { setError('The two passwords do not match.'); return; }
+    if (next !== confirm) { setError('The two new passwords do not match.'); return; }
     setBusy(true);
     setError(null);
     try {
-      await setupAdmin({ setupCode: code.trim(), username: username.trim(), displayName: displayName.trim() || undefined, password });
+      await changePassword({ current, next });
       await client.invalidateQueries({ queryKey: getGetAuthStatusQueryKey() });
     } catch (reason) {
-      setError(errorText(reason, 'Could not create the admin account.'));
+      setError(errorText(reason, 'Could not change the password.'));
     } finally {
       setBusy(false);
     }
+  }
+
+  async function signOut() {
+    await logout().catch(() => {});
+    await client.invalidateQueries({ queryKey: getGetAuthStatusQueryKey() });
   }
 
   return (
     <Shell>
       <form onSubmit={submit} className="dl-rise rounded-3xl border bg-card/90 p-6 shadow-[0_30px_70px_-45px_hsl(200_32%_13%/0.7)] md:p-8">
         <p className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/8 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.16em] text-primary">
-          First-time setup
+          First sign-in
         </p>
-        <h1 className="mt-3 text-2xl font-extrabold tracking-tight">Create the admin account</h1>
+        <h1 className="mt-3 text-2xl font-extrabold tracking-tight">Choose a new password</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          The admin creates company logins at /admin. Copy the setup code from the relay's log on Render
-          (it reads "create the admin account with setup code …"), or set ADMIN_PASSWORD on the relay instead.
+          <span className="font-semibold text-foreground">{username}</span> is using a temporary password. Pick your own to continue.
         </p>
         <div className="mt-6 space-y-4">
-          <Field id="setup-code" label="Setup code from the relay log" icon={KeyRound} value={code} onChange={(e) => setCode(e.target.value.toUpperCase())}
-            autoComplete="off" spellCheck={false} required className="font-mono" data-testid="input-setup-code" autoFocus />
-          <Field id="display-name" label="Your name" icon={UserRound} value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={60} placeholder="e.g. Siv" />
-          <Field id="setup-username" label="Login ID" icon={UserRound} value={username} onChange={(e) => setUsername(e.target.value.toLowerCase())}
-            autoComplete="username" autoCapitalize="none" spellCheck={false} required maxLength={32} />
-          <Field id="setup-password" label="Password (8+ characters)" icon={Lock} type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-            autoComplete="new-password" required minLength={8} />
-          <Field id="setup-confirm" label="Confirm password" icon={Lock} type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)}
-            autoComplete="new-password" required minLength={8} />
+          {!remembered && (
+            <Field id="current-password" label="Current password" icon={KeyRound} type="password" value={current} onChange={(e) => setCurrent(e.target.value)}
+              autoComplete="current-password" required data-testid="input-current-password" autoFocus />
+          )}
+          <Field id="new-password" label="New password (8+ characters)" icon={Lock} type="password" value={next} onChange={(e) => setNext(e.target.value)}
+            autoComplete="new-password" required minLength={8} data-testid="input-new-password" autoFocus={!!remembered} />
+          <Field id="confirm-password" label="Confirm new password" icon={Lock} type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)}
+            autoComplete="new-password" required minLength={8} data-testid="input-confirm-password" />
         </div>
-        {error && <p role="alert" className="mt-4 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
-        <button type="submit" disabled={busy || !code || !username || password.length < 8} data-testid="button-setup"
+        {error && <p role="alert" data-testid="text-password-error" className="mt-4 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+        <button type="submit" disabled={busy || !current || next.length < 8 || !confirm} data-testid="button-set-password"
           className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 font-bold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-40">
-          {busy ? <span className="dl-pulse">Creating</span> : <>Create admin and sign in <ArrowRight className="h-4 w-4" /></>}
+          {busy ? <span className="dl-pulse">Saving</span> : <>Save password and continue <ArrowRight className="h-4 w-4" /></>}
+        </button>
+        <button type="button" onClick={() => void signOut()} className="mt-3 w-full text-center text-xs font-semibold text-muted-foreground underline underline-offset-4">
+          Sign out
         </button>
       </form>
     </Shell>

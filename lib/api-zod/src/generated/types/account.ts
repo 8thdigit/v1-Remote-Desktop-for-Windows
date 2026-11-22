@@ -16,4 +16,5 @@ export interface Account {
   disabled: boolean;
   createdAt: number;
   lastLoginAt?: number;
+  mustChangePassword?: boolean;
 }

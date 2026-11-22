@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import path from "node:path";
 import type { NextFunction, Request, Response } from "express";
 import {
@@ -18,9 +17,9 @@ export const activity = createActivityLog();
 
 export const COOKIE = "msfwr_session";
 
-// While no account exists, the first admin can be created with this code,
-// which only the person who can read the relay's log sees.
-export let setupCode = "";
+// The built-in admin's password when ADMIN_PASSWORD is not set. It only
+// works until the first sign-in, which requires choosing a new password.
+export const DEFAULT_ADMIN_PIN = "121212";
 
 async function open(): Promise<Accounts> {
   const url = process.env["DATABASE_URL"];
@@ -36,13 +35,10 @@ async function open(): Promise<Accounts> {
   if (accounts.empty) {
     const username = (process.env["ADMIN_USERNAME"] || "admin").toLowerCase();
     const password = process.env["ADMIN_PASSWORD"];
-    if (password) {
-      await accounts.create({ username, displayName: "Administrator", password, role: "admin" });
-      logger.warn({ username }, "Created the first admin account from ADMIN_PASSWORD");
-    } else {
-      setupCode = randomBytes(5).toString("hex").toUpperCase();
-      logger.warn(`No login accounts yet. Open /admin and create the admin account with setup code ${setupCode}`);
-    }
+    await accounts.ensureDefaultAdmin({ username, password: password || DEFAULT_ADMIN_PIN, mustChangePassword: !password });
+    logger.warn({ username }, password
+      ? "Created the admin account from ADMIN_PASSWORD"
+      : "Created the default admin account. Sign in at /admin with the default PIN and choose a new password");
   }
   return accounts;
 }
@@ -55,8 +51,6 @@ export function accountsReady() {
   });
   return opening;
 }
-
-export function clearSetupCode() { setupCode = ""; }
 
 function readCookie(req: Request, name: string) {
   const header = req.headers.cookie;
@@ -102,12 +96,18 @@ function jsonOnly(req: Request, res: Response) {
   return false;
 }
 
-export function requireUser(role?: "admin") {
+// Every signed-in route except changing the password is closed until an
+// account with a default or admin-set password chooses its own.
+export function requireUser(role?: "admin", options: { allowPasswordChange?: boolean } = {}) {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!jsonOnly(req, res)) return;
       const user = await currentUser(req);
       if (!user) { res.status(401).json({ error: "Sign in to continue." }); return; }
+      if (user.mustChangePassword && !options.allowPasswordChange) {
+        res.status(403).json({ error: "Choose a new password before continuing." });
+        return;
+      }
       if (role && user.role !== role) { res.status(403).json({ error: "Only admins can do that." }); return; }
       req.account = user;
       next();

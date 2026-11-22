@@ -23,6 +23,6 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
-  // Load the login accounts now so the setup code (if any) is logged at start.
+  // Load the login accounts now so the default admin exists from the start.
   accountsReady().catch((err) => logger.error({ err }, "Could not load login accounts"));
 });

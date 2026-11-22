@@ -52,7 +52,7 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 - Viewer: Vercel builds `artifacts/msfwr` from `vercel.json` and serves it statically. `/api/*` is rewritten to the relay, so the viewer keeps a same-origin API.
 - Relay: Render runs `artifacts/api-server` from `render.yaml` as a single always-on instance at https://msfwr-relay.onrender.com. Sessions live in memory, so never run more than one instance and never move the relay to serverless functions.
-- Accounts are saved in `$MSFWR_DATA_DIR/accounts.json` (a Render disk at /var/data), or in PostgreSQL when `DATABASE_URL` is set. Set `ADMIN_PASSWORD` once to create the first admin (login ID `admin`); otherwise the relay log prints a setup code for `/admin`.
+- Accounts are saved in `$MSFWR_DATA_DIR/accounts.json` (a Render disk at /var/data), or in PostgreSQL when `DATABASE_URL` is set. A new relay creates the admin account (login ID `admin`) with the default PIN `121212`, which must be changed at first sign-in; set `ADMIN_PASSWORD` to start with your own password instead. Accounts an admin creates or resets also get a temporary password that the owner changes at first sign-in.
 - If the Render URL changes, update the `/api/:path*` destination in `vercel.json`.
 - Windows hosts can point their relay URL at either the Vercel domain or the Render domain; set `MSFWR_VIEWER_ORIGIN` to the Vercel domain so shared links open the Vercel viewer.
 
