@@ -30,6 +30,7 @@ services:
         generateValue: true
       # The first admin account (login ID "admin" unless ADMIN_USERNAME is
       # set) is created from this when no account exists yet. Without it the
-      # relay logs a one-time setup code to use at /admin instead.
+      # admin starts with the default PIN 121212 and must change it at first
+      # sign-in.
       - key: ADMIN_PASSWORD
         sync: false

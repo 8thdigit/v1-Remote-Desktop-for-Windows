@@ -1,8 +1,7 @@
-import { timingSafeEqual } from "node:crypto";
 import { Router } from "express";
-import { ChangePasswordBody, LoginBody, SetupAdminBody } from "@workspace/api-zod";
+import { ChangePasswordBody, LoginBody } from "@workspace/api-zod";
 import {
-  accountsReady, activity, clearLogin, clearSetupCode, currentUser, limiter, requireUser, sendError, setLogin, setupCode,
+  accountsReady, activity, clearLogin, currentUser, limiter, requireUser, sendError, setLogin,
 } from "../lib/portal";
 import { formatRaId } from "../lib/msfwr";
 
@@ -19,32 +18,9 @@ router.use((_req, res, next) => {
 
 router.get("/status", async (req, res) => {
   try {
-    const accounts = await accountsReady();
+    await accountsReady();
     const user = await currentUser(req);
-    res.json({ setupRequired: accounts.empty, ...(user ? { user } : {}) });
-  } catch (err) { sendError(res, err); }
-});
-
-router.post("/setup", async (req, res) => {
-  try {
-    const accounts = await accountsReady();
-    if (!accounts.empty || !setupCode) { res.status(409).json({ error: "The admin account already exists. Sign in instead." }); return; }
-    const address = req.ip ?? "";
-    if (byAddress.blocked(address)) { res.status(429).json({ error: "Too many attempts. Wait 15 minutes." }); return; }
-    const body = SetupAdminBody.safeParse(req.body);
-    if (!body.success) { res.status(400).json({ error: "Fill in the setup code, a login ID and a password." }); return; }
-    const given = Buffer.from(body.data.setupCode.trim().toUpperCase());
-    const expected = Buffer.from(setupCode);
-    if (given.length !== expected.length || !timingSafeEqual(given, expected)) {
-      byAddress.fail(address);
-      res.status(403).json({ error: "That setup code is not correct. Find it in the relay's log." });
-      return;
-    }
-    const user = await accounts.create({ ...body.data, role: "admin" });
-    clearSetupCode();
-    setLogin(req, res, accounts.issue(user.id));
-    activity.add("setup", `${user.displayName} created the first admin account`, user.username);
-    res.status(201).json(user);
+    res.json(user ? { user } : {});
   } catch (err) { sendError(res, err); }
 });
 
@@ -80,7 +56,7 @@ router.post("/logout", (req, res) => {
   res.sendStatus(204);
 });
 
-router.post("/password", requireUser(), async (req, res) => {
+router.post("/password", requireUser(undefined, { allowPasswordChange: true }), async (req, res) => {
   try {
     const accounts = await accountsReady();
     const body = ChangePasswordBody.safeParse(req.body);

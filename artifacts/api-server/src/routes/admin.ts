@@ -24,7 +24,7 @@ router.post("/users", async (req, res) => {
     const accounts = await accountsReady();
     const body = CreateUserBody.safeParse(req.body);
     if (!body.success) { res.status(400).json({ error: "Fill in a login ID, a password and a role." }); return; }
-    const user = await accounts.create(body.data);
+    const user = await accounts.create({ ...body.data, mustChangePassword: true });
     activity.add("user-created", `${req.account!.displayName} created ${user.role === "admin" ? "admin" : "company"} ${user.displayName} (${formatRaId(user.raId)})`, req.account!.username);
     res.status(201).json(user);
   } catch (err) { sendError(res, err); }

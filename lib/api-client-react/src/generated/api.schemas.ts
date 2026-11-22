@@ -282,6 +282,7 @@ export interface Account {
   disabled: boolean;
   createdAt: number;
   lastLoginAt?: number;
+  mustChangePassword?: boolean;
 }
 
 export interface AccountList {
@@ -331,19 +332,7 @@ export interface AccountUpdate {
 }
 
 export interface AuthStatus {
-  setupRequired: boolean;
   user?: Account;
-}
-
-export interface AuthSetup {
-  /** @maxLength 32 */
-  setupCode: string;
-  /** @maxLength 64 */
-  username: string;
-  /** @maxLength 80 */
-  displayName?: string;
-  /** @maxLength 200 */
-  password: string;
 }
 
 export interface AuthLogin {

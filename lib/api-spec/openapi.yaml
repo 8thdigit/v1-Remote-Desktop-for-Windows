@@ -224,24 +224,10 @@ paths:
       operationId: getAuthStatus
       responses:
         "200":
-          description: Whether setup is needed and who is signed in
+          description: Who is signed in
           content:
             application/json:
               schema: {$ref: "#/components/schemas/AuthStatus"}
-  /auth/setup:
-    post:
-      operationId: setupAdmin
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: "#/components/schemas/AuthSetup"}
-      responses:
-        "201":
-          description: The first admin account
-          content:
-            application/json:
-              schema: {$ref: "#/components/schemas/Account"}
   /auth/login:
     post:
       operationId: login
@@ -554,6 +540,7 @@ components:
         disabled: {type: boolean}
         createdAt: {type: number}
         lastLoginAt: {type: number}
+        mustChangePassword: {type: boolean}
     AccountList:
       type: object
       required: [users]
@@ -580,18 +567,8 @@ components:
         raId: {type: string, maxLength: 16}
     AuthStatus:
       type: object
-      required: [setupRequired]
       properties:
-        setupRequired: {type: boolean}
         user: {$ref: "#/components/schemas/Account"}
-    AuthSetup:
-      type: object
-      required: [setupCode, username, password]
-      properties:
-        setupCode: {type: string, maxLength: 32}
-        username: {type: string, maxLength: 64}
-        displayName: {type: string, maxLength: 80}
-        password: {type: string, maxLength: 200}
     AuthLogin:
       type: object
       required: [username, password]

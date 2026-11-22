@@ -8,6 +8,5 @@
 import type { Account } from './account';
 
 export interface AuthStatus {
-  setupRequired: boolean;
   user?: Account;
 }

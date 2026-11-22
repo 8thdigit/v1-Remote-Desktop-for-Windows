@@ -23,6 +23,10 @@ export type Account = {
   disabled: boolean;
   createdAt: number;
   lastLoginAt?: number;
+  // Set while the account still has a password someone else chose (the
+  // default admin PIN, or one an admin set). The owner must pick a new
+  // password before using anything else.
+  mustChangePassword?: boolean;
   // Bumped when the password changes or the account is disabled, which
   // invalidates every login token issued before.
   version: number;
@@ -174,7 +178,30 @@ export async function createAccounts(backend: Backend, options: { secret?: strin
       return u && !u.disabled ? publicAccount(u) : undefined;
     },
 
-    async create(input: { username: string; displayName?: string; password: string; role: Role; raId?: string }) {
+    // Creates the built-in admin when there are no accounts at all, with a
+    // default password the admin must change at first sign-in.
+    async ensureDefaultAdmin(input: { username: string; password: string; mustChangePassword: boolean }) {
+      if (users.length) return undefined;
+      const username = String(input.username).trim().toLowerCase();
+      if (!USERNAME.test(username)) throw new AccountError(400, "ADMIN_USERNAME is not a valid login ID.");
+      const account: Account = {
+        id: randomBytes(9).toString("base64url"),
+        username,
+        displayName: "Administrator",
+        role: "admin",
+        raId: newRaId(),
+        disabled: false,
+        createdAt: clock(),
+        mustChangePassword: input.mustChangePassword,
+        version: 1,
+        ...(await hashPassword(input.password)),
+      };
+      users.push(account);
+      await persist();
+      return publicAccount(account);
+    },
+
+    async create(input: { username: string; displayName?: string; password: string; role: Role; raId?: string; mustChangePassword?: boolean }) {
       const username = String(input.username ?? "").trim().toLowerCase();
       if (!USERNAME.test(username)) throw new AccountError(400, "Login IDs are 3-32 characters: letters, digits, dot, dash or underscore.");
       if (byUsername(username)) throw new AccountError(409, "That login ID is already taken.");
@@ -190,6 +217,7 @@ export async function createAccounts(backend: Backend, options: { secret?: strin
         raId,
         disabled: false,
         createdAt: clock(),
+        mustChangePassword: input.mustChangePassword ?? false,
         version: 1,
         ...(await hashPassword(input.password)),
       };
@@ -210,6 +238,8 @@ export async function createAccounts(backend: Backend, options: { secret?: strin
         const problem = checkPassword(change.password);
         if (problem) throw new AccountError(400, problem);
         Object.assign(u, await hashPassword(change.password));
+        // An admin chose this password, so the owner picks their own next.
+        u.mustChangePassword = actorId !== id;
         u.version += 1;
       }
       if (change.displayName !== undefined) u.displayName = cleanName(change.displayName) || u.username;
@@ -240,7 +270,9 @@ export async function createAccounts(backend: Backend, options: { secret?: strin
       if (!timingSafeEqual(key, Buffer.from(u.hash, "base64"))) throw new AccountError(403, "The current password is not correct.");
       const problem = checkPassword(next);
       if (problem) throw new AccountError(400, problem);
+      if (next === current) throw new AccountError(400, "Choose a new password that is different from the current one.");
       Object.assign(u, await hashPassword(next));
+      u.mustChangePassword = false;
       u.version += 1;
       await persist();
       return publicAccount(u);
