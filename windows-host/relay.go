@@ -23,6 +23,11 @@ type relay struct {
 	origin      string
 	base, token string
 	client      *http.Client
+	// long serves requests the relay holds open (input long polls).
+	long *http.Client
+	// pulls asks the relay to keep input for /pull instead of returning it
+	// with each tick.
+	pulls bool
 }
 
 type invite struct{ Code, Token string }
@@ -47,13 +52,16 @@ func newRelay(value string) (*relay, error) {
 	}
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	tr.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+	// Frame uploads and the input long poll run side by side; keep both
+	// connections warm instead of reconnecting (TLS) for each request.
+	tr.MaxIdleConnsPerHost = 4
+	tr.IdleConnTimeout = 90 * time.Second
+	noRedirect := func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	return &relay{
 		origin: "https://" + u.Host,
 		base:   "https://" + u.Host + "/api/deskline/",
-		client: &http.Client{
-			Transport: tr, Timeout: 5 * time.Second,
-			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-		},
+		client: &http.Client{Transport: tr, Timeout: 8 * time.Second, CheckRedirect: noRedirect},
+		long:   &http.Client{Transport: tr, Timeout: 16 * time.Second, CheckRedirect: noRedirect},
 	}, nil
 }
 
@@ -65,6 +73,16 @@ type statusError struct {
 }
 
 func (e *statusError) Error() string { return e.text }
+
+// transient reports errors worth retrying within a live session: network
+// failures, timeouts and relay overload, but not an ended session.
+func transient(err error) bool {
+	var s *statusError
+	if errors.As(err, &s) {
+		return s.status == 429 || s.status >= 500
+	}
+	return !errors.Is(err, context.Canceled)
+}
 
 func (r *relay) post(ctx context.Context, path string, jpeg []byte, response any) error {
 	return r.send(ctx, path, jpeg, "image/jpeg", response)
@@ -78,7 +96,16 @@ func (r *relay) postJSON(ctx context.Context, path string, body, response any) e
 	return r.send(ctx, path, data, "application/json", response)
 }
 
+// pull waits (up to about ten seconds) for viewer input.
+func (r *relay) pull(ctx context.Context, response *tick) error {
+	return r.do(ctx, r.long, "pull", nil, "", response)
+}
+
 func (r *relay) send(ctx context.Context, path string, payload []byte, contentType string, response any) error {
+	return r.do(ctx, r.client, path, payload, contentType, response)
+}
+
+func (r *relay) do(ctx context.Context, client *http.Client, path string, payload []byte, contentType string, response any) error {
 	req, err := http.NewRequestWithContext(ctx, "POST", r.base+path, bytes.NewReader(payload))
 	if err != nil {
 		return err
@@ -89,7 +116,10 @@ func (r *relay) send(ctx context.Context, path string, payload []byte, contentTy
 	if r.token != "" {
 		req.Header.Set("Authorization", "Bearer "+r.token)
 	}
-	res, err := r.client.Do(req)
+	if r.pulls && path == "tick" {
+		req.Header.Set("X-Deskline-Pull", "1")
+	}
+	res, err := client.Do(req)
 	if err != nil {
 		return err
 	}

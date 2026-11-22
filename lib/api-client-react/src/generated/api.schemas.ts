@@ -80,6 +80,11 @@ export interface DesklineStandingKey {
 export interface DesklineCall {
   /** @maxLength 64 */
   name?: string;
+  /**
+     * RA ID of the portal user who should get the request
+     * @maxLength 16
+     */
+  ra?: string;
 }
 
 export interface DesklineCallQuery {
@@ -125,6 +130,196 @@ export interface DesklineViewer {
   preapproved: boolean;
 }
 
+export type AccountRole = typeof AccountRole[keyof typeof AccountRole];
+
+
+export const AccountRole = {
+  admin: 'admin',
+  ra: 'ra',
+} as const;
+
+export interface Account {
+  id: string;
+  username: string;
+  displayName: string;
+  role: AccountRole;
+  raId: string;
+  disabled: boolean;
+  createdAt: number;
+  lastLoginAt?: number;
+}
+
+export interface AccountList {
+  users: Account[];
+}
+
+export type AccountCreateRole = typeof AccountCreateRole[keyof typeof AccountCreateRole];
+
+
+export const AccountCreateRole = {
+  admin: 'admin',
+  ra: 'ra',
+} as const;
+
+export interface AccountCreate {
+  /** @maxLength 32 */
+  username: string;
+  /** @maxLength 60 */
+  displayName?: string;
+  /** @maxLength 200 */
+  password: string;
+  role: AccountCreateRole;
+}
+
+export type AccountUpdateRole = typeof AccountUpdateRole[keyof typeof AccountUpdateRole];
+
+
+export const AccountUpdateRole = {
+  admin: 'admin',
+  ra: 'ra',
+} as const;
+
+export interface AccountUpdate {
+  /** @maxLength 60 */
+  displayName?: string;
+  /** @maxLength 200 */
+  password?: string;
+  role?: AccountUpdateRole;
+  disabled?: boolean;
+}
+
+export interface AuthStatus {
+  setupRequired: boolean;
+  user?: Account;
+}
+
+export interface AuthSetup {
+  /** @maxLength 64 */
+  setupCode: string;
+  /** @maxLength 32 */
+  username: string;
+  /** @maxLength 60 */
+  displayName?: string;
+  /** @maxLength 200 */
+  password: string;
+}
+
+export interface AuthLogin {
+  /** @maxLength 64 */
+  username: string;
+  /** @maxLength 200 */
+  password: string;
+}
+
+export interface PasswordChange {
+  /** @maxLength 200 */
+  current: string;
+  /** @maxLength 200 */
+  next: string;
+}
+
+export interface Operator {
+  id: string;
+  name: string;
+  raId: string;
+}
+
+export type DesklineRequestMode = typeof DesklineRequestMode[keyof typeof DesklineRequestMode];
+
+
+export const DesklineRequestMode = {
+  unattended: 'unattended',
+  attended: 'attended',
+} as const;
+
+export type DesklineRequestStatus = typeof DesklineRequestStatus[keyof typeof DesklineRequestStatus];
+
+
+export const DesklineRequestStatus = {
+  waiting: 'waiting',
+  accepted: 'accepted',
+  missed: 'missed',
+} as const;
+
+export interface DesklineRequest {
+  id: string;
+  name: string;
+  mode: DesklineRequestMode;
+  at: number;
+  until: number;
+  status: DesklineRequestStatus;
+  closedAt?: number;
+  ra?: string;
+  acceptedBy?: Operator;
+}
+
+export interface DesklineInbox {
+  raId: string;
+  requests: DesklineRequest[];
+}
+
+export interface DesklineAccept {
+  /** @maxLength 40 */
+  id: string;
+}
+
+export interface DesklineInputBatch {
+  /**
+     * @minItems 1
+     * @maxItems 32
+     */
+  items: DesklineInput[];
+}
+
+export type AdminSessionMode = typeof AdminSessionMode[keyof typeof AdminSessionMode];
+
+
+export const AdminSessionMode = {
+  unattended: 'unattended',
+  attended: 'attended',
+} as const;
+
+export type AdminSessionState = typeof AdminSessionState[keyof typeof AdminSessionState];
+
+
+export const AdminSessionState = {
+  waiting: 'waiting',
+  pending: 'pending',
+  live: 'live',
+} as const;
+
+export interface AdminSession {
+  id: string;
+  name: string;
+  mode: AdminSessionMode;
+  state: AdminSessionState;
+  operator?: Operator;
+  createdAt: number;
+  liveAt?: number;
+  frames: number;
+  bytes: number;
+}
+
+export interface AdminActivity {
+  at: number;
+  kind: string;
+  actor?: string;
+  text: string;
+}
+
+export type AdminOverviewHosts = {
+  unattended: number;
+  attended: number;
+};
+
+export interface AdminOverview {
+  live: AdminSession[];
+  hosts: AdminOverviewHosts;
+  requests: DesklineRequest[];
+  activity: AdminActivity[];
+  storage: string;
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -134,5 +329,11 @@ export type GetDesklineFrameParams = {
  * @minimum 0
  */
 after?: number;
+/**
+ * Hold the request up to this many milliseconds for a new frame.
+ * @minimum 0
+ * @maximum 10000
+ */
+wait?: number;
 };
 

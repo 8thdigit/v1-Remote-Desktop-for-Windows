@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { listDesklineCalls, useJoinDeskline } from '@workspace/api-client-react';
+import { acceptDesklineRequest, getDesklineInbox, listDesklineCalls, useJoinDeskline, type DesklineRequest } from '@workspace/api-client-react';
 import { Link } from 'wouter';
 import {
   ArrowRight, Bell, BellOff, BellRing, Check, Clock, Copy, Download, Eye, EyeOff, History, Laptop, Monitor,
-  Pencil, Plus, Radio, ShieldCheck, Trash2, UserRound, Volume2, VolumeX, X,
+  Inbox, Pencil, Plus, ShieldCheck, Trash2, UserRound, Volume2, VolumeX, X,
 } from 'lucide-react';
 import LiveSession from '@/LiveSession';
+import { Brand, RaBadge, UserMenu } from '@/components/user-menu';
+import { errorText, raLabel, statusOf, useAuth } from '@/lib/auth';
 import {
   HEX, MAX_PCS, loadPCs, loadRequests, mergeCalls, relativeTime, setRequestStatus, storePCs, storeRequests,
   type RequestEntry, type RequestStatus, type SavedPC,
 } from '@/lib/unattended';
 
-type Session = { token: string; verification: string; preapproved: boolean; code: string };
+type Session = { token: string; verification: string; preapproved: boolean; code: string; name?: string };
 type Presence = 'online' | 'busy' | 'offline' | 'unknown';
 type Tab = 'connect' | 'pcs' | 'download';
 
@@ -58,7 +60,13 @@ function chime() {
 }
 
 export default function Home() {
+  const { user, refresh } = useAuth();
   const join = useJoinDeskline();
+  // Requests that PCs sent to this user's RA ID (kept on the relay).
+  const [inbox, setInbox] = useState<DesklineRequest[]>([]);
+  const [hidden, setHidden] = useState<Set<string>>(() => new Set());
+  const [accepting, setAccepting] = useState<string | null>(null);
+  const seenInbox = useRef<Set<string> | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -80,7 +88,8 @@ export default function Home() {
   const [alerts, setAlerts] = useState<NotificationPermission | 'unsupported'>(
     () => (typeof Notification === 'undefined' ? 'unsupported' : Notification.permission));
   const [now, setNow] = useState(Date.now);
-  const relay = typeof window !== 'undefined' && window.location.protocol === 'https:' ? window.location.origin : '';
+  // HTTPS only, except on this computer during development.
+  const relay = typeof window !== 'undefined' && (window.location.protocol === 'https:' || window.location.hostname === 'localhost') ? window.location.origin : '';
   // Served from the latest GitHub release, published by .github/workflows/release.yml.
   const installer = 'https://github.com/mailbhrp-1/Remote-Desktop-for-Windows/releases/latest/download/winss132r-Setup-x64.exe';
 
@@ -111,6 +120,8 @@ export default function Home() {
   }, []);
 
   const waiting = useMemo(() => requests.filter((r) => r.open && r.status === 'waiting'), [requests]);
+  const assigned = useMemo(() => inbox.filter((r) => r.status === 'waiting' && !hidden.has(r.id)), [inbox, hidden]);
+  const waitingCount = waiting.length + assigned.length;
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 5000);
@@ -119,10 +130,47 @@ export default function Home() {
 
   useEffect(() => {
     if (session) { document.title = 'winss132r — Connected session'; return; }
-    document.title = waiting.length
-      ? `(${waiting.length}) Request${waiting.length > 1 ? 's' : ''} to connect — winss132r`
+    document.title = waitingCount
+      ? `(${waitingCount}) Request${waitingCount > 1 ? 's' : ''} to connect — winss132r`
       : 'winss132r — Remote support for Windows';
-  }, [session, waiting.length]);
+  }, [session, waitingCount]);
+
+  // Poll the relay for requests sent to this user's RA ID. These need no
+  // saved access code: the relay only shows them to the RA user they name.
+  useEffect(() => {
+    if (session || !relay) return;
+    let stopped = false;
+    let timer = 0;
+    async function check() {
+      try {
+        const result = await getDesklineInbox();
+        if (stopped) return;
+        setInbox(result.requests);
+        const open = result.requests.filter((r) => r.status === 'waiting');
+        const seen = seenInbox.current;
+        const fresh = seen ? open.filter((r) => !seen.has(r.id)) : [];
+        seenInbox.current = new Set([...(seen ?? []), ...result.requests.map((r) => r.id)]);
+        if (fresh.length) {
+          if (soundRef.current) chime();
+          if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.visibilityState !== 'visible') {
+            for (const f of fresh) {
+              try {
+                const n = new Notification(`${f.name || 'A PC'} sent you a request`, {
+                  body: `Sent to your RA ID ${raLabel(result.raId)}. Open winss132r and select Accept.`, tag: `winss132r-ra-${f.id}`,
+                });
+                n.onclick = () => { window.focus(); n.close(); };
+              } catch { /* notifications unavailable */ }
+            }
+          }
+        }
+      } catch (reason) {
+        if (statusOf(reason) === 401) { void refresh(); return; }
+      }
+      if (!stopped) timer = window.setTimeout(check, document.visibilityState === 'visible' ? 2500 : 8000);
+    }
+    void check();
+    return () => { stopped = true; window.clearTimeout(timer); };
+  }, [session, relay, refresh]);
 
   // Poll the relay for Initiate requests and presence of the saved PCs. It
   // keeps polling (more slowly) while the tab is hidden so a request can
@@ -180,7 +228,8 @@ export default function Home() {
         }
       } catch (reason) {
         if (!stopped) {
-          const status = typeof reason === 'object' && reason !== null && 'status' in reason ? reason.status : undefined;
+          const status = statusOf(reason);
+          if (status === 401) { void refresh(); return; }
           if (status === 404) { setRelayReachable(true); setRelayOutdated(true); }
           else setRelayReachable(false);
         }
@@ -189,7 +238,23 @@ export default function Home() {
     }
     void check();
     return () => { stopped = true; window.clearTimeout(timer); };
-  }, [session, relay, codesKey, updatePCs, updateRequests]);
+  }, [session, relay, codesKey, updatePCs, updateRequests, refresh]);
+
+  async function acceptAssigned(r: DesklineRequest) {
+    setError(null);
+    setNotice(null);
+    setAccepting(r.id);
+    try {
+      const viewer = await acceptDesklineRequest({ id: r.id });
+      setSession({ token: viewer.token, verification: viewer.verification, preapproved: viewer.preapproved, code: '', name: r.name });
+    } catch (reason) {
+      if (statusOf(reason) === 401) { void refresh(); return; }
+      setError(errorText(reason, 'That request is no longer open.'));
+      setHidden((h) => new Set(h).add(r.id));
+    } finally {
+      setAccepting(null);
+    }
+  }
 
   async function connect(value: string, fromRequest = false) {
     setError(null);
@@ -209,11 +274,12 @@ export default function Home() {
           ? list.map((p) => (p.code === value ? { ...p, lastConnectedAt: at } : p))
           : [{ code: value, name: '', addedAt: at, lastConnectedAt: at }, ...list].slice(0, MAX_PCS)));
       }
-      setSession({ token: viewer.token, verification: viewer.verification, preapproved: viewer.preapproved, code: value });
+      setSession({ token: viewer.token, verification: viewer.verification, preapproved: viewer.preapproved, code: value, name: pcTitle(pcsRef.current.find((p) => p.code === value), '') || undefined });
       setCode('');
       return true;
     } catch (reason) {
-      const status = typeof reason === 'object' && reason !== null && 'status' in reason ? reason.status : undefined;
+      const status = statusOf(reason);
+      if (status === 401) { void refresh(); return false; }
       setError(status === 429 ? 'The relay is busy. Wait a minute, then try again.' :
         status === 404 || status === 400 ? (fromRequest || pcs.some((p) => p.code === value)
           ? 'That PC is not available right now. It may be offline, locked, or already in a session.'
@@ -246,6 +312,7 @@ export default function Home() {
         token={session.token}
         verification={session.verification}
         preapproved={session.preapproved}
+        name={session.name}
         onLeave={(message) => {
           setSession(null);
           setNotice(message ?? 'Session ended. The helper is no longer connected.');
@@ -260,26 +327,28 @@ export default function Home() {
     <div className="dl-shell min-h-[100dvh] text-foreground">
       <header className="sticky top-0 z-30 border-b border-foreground/10 bg-background/75 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-3 md:px-8">
-          <div className="flex items-center gap-2.5" data-testid="text-brand">
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-foreground text-background shadow-sm">
-              <Radio className="h-4.5 w-4.5 text-primary" />
-            </span>
-            <div className="leading-tight">
-              <span className="block text-lg font-bold tracking-tight">winss132r</span>
-              <span className="block font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Remote support · Windows</span>
-            </div>
-          </div>
-          <nav aria-label="Sections" className="order-3 flex w-full gap-1 rounded-xl bg-muted/80 p-1 sm:order-none sm:ml-auto sm:w-auto">
+          <Brand />
+          <nav aria-label="Sections" className="order-3 flex w-full gap-1 rounded-xl bg-muted/80 p-1 lg:order-none lg:ml-4 lg:w-auto">
             <TabButton active={tab === 'pcs'} onClick={() => setTab('pcs')} testId="tab-pcs">
               <BellRing className="mr-1.5 h-3.5 w-3.5" /> Requests &amp; PCs
-              {waiting.length > 0
-                ? <span className="ml-1.5 rounded-full bg-primary px-1.5 text-[11px] font-bold text-primary-foreground">{waiting.length}</span>
+              {waitingCount > 0
+                ? <span className="ml-1.5 rounded-full bg-primary px-1.5 text-[11px] font-bold text-primary-foreground">{waitingCount}</span>
                 : pcs.length > 0 && <span className="ml-1.5 rounded-full bg-foreground/10 px-1.5 text-[11px] font-semibold">{pcs.length}</span>}
             </TabButton>
             <TabButton active={tab === 'connect'} onClick={() => setTab('connect')} testId="tab-connect">Connect with a code</TabButton>
             <TabButton active={tab === 'download'} onClick={() => setTab('download')} testId="tab-download">Get the app</TabButton>
           </nav>
-          <RelayDot reachable={relay ? relayReachable : false} watching={pcs.length > 0 && !relayOutdated} />
+          <div className="ml-auto flex items-center gap-2">
+            <RelayDot reachable={relay ? relayReachable : false} watching={!relayOutdated} />
+            {user.role === 'admin' && (
+              <Link href="/admin" data-testid="link-admin-console"
+                className="hidden items-center gap-1.5 rounded-xl border border-foreground/10 bg-card/80 px-3 py-1.5 text-sm font-semibold hover:bg-card md:flex">
+                <ShieldCheck className="h-4 w-4 text-primary" /> Admin
+              </Link>
+            )}
+            <RaBadge compact />
+            <UserMenu />
+          </div>
         </div>
       </header>
 
@@ -290,6 +359,47 @@ export default function Home() {
             the tray's Initiate fails. Redeploy the relay from the latest code, then reload this page.
           </p>
         )}
+        {assigned.length > 0 && (
+          <section aria-label="Requests sent to you" className="mb-6 space-y-3">
+            {assigned.map((r) => {
+              const left = Math.max(0, r.until - now);
+              const total = Math.max(1, r.until - r.at);
+              return (
+                <div key={r.id} role="alert" data-testid={`assigned-${r.id}`}
+                  className="dl-rise relative overflow-hidden rounded-2xl border border-primary/40 bg-card shadow-[0_18px_40px_-24px_hsl(14_78%_40%/0.55)]">
+                  <div className="flex flex-wrap items-center gap-4 p-4 md:p-5">
+                    <span className="relative grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary/12 text-primary">
+                      <span className="dl-ping absolute inset-0 rounded-2xl ring-2 ring-primary/50" />
+                      <BellRing className="h-5 w-5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-mono text-[11px] uppercase tracking-widest text-primary">Sent to you · {raLabel(user.raId)} · {relativeTime(r.at, now)}</p>
+                      <p className="mt-0.5 truncate text-lg font-bold">{r.name || 'A Windows PC'} is asking you to connect</p>
+                      <p className="text-xs text-muted-foreground">
+                        {r.mode === 'unattended' ? 'Unattended PC · connects at once' : 'Attended · you will get a number for the person at the PC to type in'}
+                      </p>
+                    </div>
+                    <div className="flex w-full gap-2 sm:w-auto">
+                      <button type="button" onClick={() => setHidden((h) => new Set(h).add(r.id))} data-testid={`button-dismiss-ra-${r.id}`}
+                        className="flex-1 rounded-xl border px-4 py-2.5 text-sm font-semibold hover:bg-muted sm:flex-none">
+                        Dismiss
+                      </button>
+                      <button type="button" data-testid={`button-accept-ra-${r.id}`} disabled={accepting !== null}
+                        onClick={() => void acceptAssigned(r)}
+                        className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground shadow-sm transition-transform active:scale-[0.98] disabled:opacity-40 sm:flex-none">
+                        {accepting === r.id ? <span className="dl-pulse">Connecting</span> : <>Accept <ArrowRight className="h-4 w-4" /></>}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="h-1 bg-primary/10">
+                    <div className="h-full bg-primary transition-[width] duration-1000" style={{ width: `${(left / total) * 100}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </section>
+        )}
+
         {waiting.length > 0 && (
           <section aria-label="Incoming requests" className="mb-6 space-y-3">
             {waiting.map((r) => {
@@ -345,15 +455,15 @@ export default function Home() {
           </div>
         )}
 
-        {tab !== 'pcs' && waiting.length === 0 && (
+        {tab !== 'pcs' && waitingCount === 0 && (
           <button type="button" onClick={() => setTab('pcs')} data-testid="button-open-requests"
             className="mb-6 flex w-full items-center gap-3 rounded-2xl border border-foreground/10 bg-card/80 px-4 py-3 text-left text-sm shadow-sm hover:bg-card">
             <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary/12 text-primary"><BellRing className="h-4.5 w-4.5" /></span>
             <span className="min-w-0 flex-1">
-              <span className="block font-semibold">Requests from unattended PCs</span>
+              <span className="block font-semibold">Requests for {raLabel(user.raId)}</span>
               <span className="block text-muted-foreground">
                 {pcs.length === 0
-                  ? 'Save a PC\'s access code to get an Accept prompt here when someone at it selects Initiate.'
+                  ? `PCs set to your RA ID (${raLabel(user.raId)}) send their Initiate requests here. No requests waiting.`
                   : `Watching ${pcs.length} saved PC${pcs.length > 1 ? 's' : ''}${presenceSupported && !relayOutdated ? ` · ${onlineCount} online` : ''} · no requests waiting`}
               </span>
             </span>
@@ -421,16 +531,19 @@ export default function Home() {
               </p>
             </section>
 
+            <div className="min-w-0 space-y-6 lg:sticky lg:top-24 lg:self-start">
+            <RaInbox requests={inbox} raId={user.raId} now={now} />
             <RequestHistory requests={requests} pcs={pcs} now={now}
               onClear={() => {
                 if (window.confirm('Clear the request history in this browser? Waiting requests stay.')) {
                   updateRequests((list) => list.filter((r) => r.open && r.status === 'waiting'));
                 }
               }} />
+            </div>
           </div>
         )}
 
-        {tab === 'download' && <DownloadView installer={installer} relay={relay} />}
+        {tab === 'download' && <DownloadView installer={installer} relay={relay} raId={user.raId} />}
       </main>
 
       <footer className="border-t border-foreground/10">
@@ -460,7 +573,7 @@ function RelayDot({ reachable, watching }: { reachable: boolean | null; watching
   const label = reachable === false ? 'Relay unreachable' : reachable && watching ? 'Listening for requests' : 'Relay ready';
   const color = reachable === false ? 'bg-destructive' : 'bg-emerald-500';
   return (
-    <span className="hidden items-center gap-2 rounded-full border border-foreground/10 bg-card/70 px-3 py-1 font-mono text-[11px] text-muted-foreground md:flex" data-testid="text-relay-status">
+    <span className="hidden items-center gap-2 rounded-full border border-foreground/10 bg-card/70 px-3 py-1 font-mono text-[11px] text-muted-foreground 2xl:flex" data-testid="text-relay-status">
       <span className="relative flex h-2 w-2">
         {reachable && watching && <span className={`absolute inline-flex h-full w-full animate-ping rounded-full ${color} opacity-60`} />}
         <span className={`relative inline-flex h-2 w-2 rounded-full ${color}`} />
@@ -626,9 +739,9 @@ function RequestHistory({ requests, pcs, now, onClear }: { requests: RequestEntr
     );
   };
   return (
-    <section aria-labelledby="history-heading" className="dl-rise rounded-2xl border bg-card/90 p-4 shadow-[0_10px_30px_-24px_hsl(200_32%_13%/0.5)] [animation-delay:100ms] md:p-5 lg:sticky lg:top-24 lg:self-start">
+    <section aria-labelledby="history-heading" className="dl-rise rounded-2xl border bg-card/90 p-4 shadow-[0_10px_30px_-24px_hsl(200_32%_13%/0.5)] [animation-delay:100ms] md:p-5">
       <div className="flex items-center justify-between gap-2">
-        <h2 id="history-heading" className="flex items-center gap-2 text-lg font-bold"><History className="h-5 w-5 text-primary" /> Request history</h2>
+        <h2 id="history-heading" className="flex items-center gap-2 text-lg font-bold"><History className="h-5 w-5 text-primary" /> Saved PC requests</h2>
         {requests.length > 0 && <button type="button" onClick={onClear} className="text-xs font-semibold text-muted-foreground hover:text-foreground">Clear</button>}
       </div>
       <div className="mt-3 flex flex-wrap gap-1">
@@ -745,7 +858,44 @@ function ConnectView({ code, setCode, error, pending, onSubmit }: {
   );
 }
 
-function DownloadView({ installer, relay }: { installer: string; relay: string }) {
+const INBOX_LOOK: Record<DesklineRequest['status'], [string, string]> = {
+  waiting: ['Waiting', 'bg-primary/12 text-primary'],
+  accepted: ['Accepted', 'bg-emerald-500/12 text-emerald-700'],
+  missed: ['Missed', 'bg-amber-500/15 text-amber-700'],
+};
+
+function RaInbox({ requests, raId, now }: { requests: DesklineRequest[]; raId: string; now: number }) {
+  return (
+    <section aria-labelledby="inbox-heading" className="dl-rise rounded-2xl border bg-card/90 p-4 shadow-[0_10px_30px_-24px_hsl(200_32%_13%/0.5)] md:p-5">
+      <h2 id="inbox-heading" className="flex items-center gap-2 text-lg font-bold"><Inbox className="h-5 w-5 text-primary" /> Sent to {raLabel(raId)}</h2>
+      {requests.length === 0 ? (
+        <p className="mt-3 text-sm text-muted-foreground">
+          Nothing yet. In the winss132r app on a PC, set the RA ID to <strong className="font-mono text-foreground">{raLabel(raId)}</strong>; when someone there selects Initiate, the request appears here with a chime.
+        </p>
+      ) : (
+        <ul className="mt-2 max-h-72 divide-y divide-foreground/8 overflow-y-auto pr-1">
+          {requests.map((r) => {
+            const [text, cls] = INBOX_LOOK[r.status];
+            return (
+              <li key={r.id} className="flex items-center gap-3 py-2.5" data-testid={`inbox-${r.id}`}>
+                <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${r.status === 'waiting' ? 'bg-primary/12 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                  {r.status === 'waiting' ? <BellRing className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold">{r.name || 'Windows PC'}</p>
+                  <p className="text-[11px] text-muted-foreground">{r.mode} · {relativeTime(r.at, now)}{r.acceptedBy ? ` · ${r.acceptedBy.name}` : ''}</p>
+                </div>
+                <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${cls}`}>{text}</span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function DownloadView({ installer, relay, raId }: { installer: string; relay: string; raId: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <div className="dl-rise mx-auto max-w-2xl">
@@ -766,6 +916,13 @@ function DownloadView({ installer, relay }: { installer: string; relay: string }
             className="flex items-center gap-1.5 border-l bg-card px-3 text-sm font-medium hover:bg-accent">
             {copied ? <><Check className="h-4 w-4" /> Copied</> : <><Copy className="h-4 w-4" /> Copy</>}
           </button>
+        </div>
+        <p className="mt-6 font-mono text-[11px] uppercase tracking-widest text-muted-foreground">Your RA ID — enter it in the app as well</p>
+        <div className="mt-2 flex flex-wrap items-center gap-3 rounded-xl border border-primary/25 bg-primary/8 px-4 py-3">
+          <span className="font-mono text-2xl font-bold tracking-wider text-primary" data-testid="text-download-ra">{raLabel(raId)}</span>
+          <span className="min-w-0 flex-1 text-sm text-muted-foreground">
+            In the app's RA ID box (or tray menu, Set RA ID…), so that selecting Initiate on that PC sends the request straight to your portal.
+          </span>
         </div>
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
           <div className="rounded-2xl bg-muted/60 p-4">

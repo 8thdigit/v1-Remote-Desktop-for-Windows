@@ -151,3 +151,100 @@ test("presence reports online and busy unattended PCs only to viewers that know 
   const attended = store.invite();
   assert.deepEqual(store.presence([attended.code]), []);
 });
+
+const op = (raId, id = "u" + raId) => ({id, name: "Tech " + raId, raId});
+
+test("a request sent to an RA ID reaches only that RA user, who accepts it without the access code", () => {
+  let now = 1_000_000;
+  const store = createDesklineStore(() => now);
+  const host = store.standing("J".repeat(43), "SHOP-PC");
+  const s = store.authenticate(bearer(host.token), "host");
+  assert.equal(store.call(s, "", undefined, "123456"), true);
+  const inbox = store.inbox("123456");
+  assert.equal(inbox.length, 1);
+  assert.equal(inbox[0].status, "waiting");
+  assert.equal(inbox[0].name, "SHOP-PC");
+  assert.equal("code" in inbox[0], false);
+  assert.deepEqual(store.inbox("654321"), []);
+  // Someone else cannot accept it, even with the request id.
+  assert.equal(store.accept(inbox[0].id, op("654321")).error, "missing");
+  // Re-registering (every two minutes) and repeating the call keeps one request.
+  const again = store.standing("J".repeat(43), "SHOP-PC");
+  const s2 = store.authenticate(bearer(again.token), "host");
+  store.call(s2, "", undefined, "123456");
+  assert.equal(store.inbox("123456").length, 1);
+  const {viewer} = store.accept(inbox[0].id, op("123456"));
+  assert.equal(viewer.preapproved, true);
+  assert.equal(s2.state, "live");
+  assert.equal(s2.operator.raId, "123456");
+  const after = store.inbox("123456")[0];
+  assert.equal(after.status, "accepted");
+  assert.equal(after.acceptedBy.raId, "123456");
+  assert.equal(store.accept(inbox[0].id, op("123456")).error, "accepted");
+  assert.equal(store.overview().live.length, 1);
+});
+
+test("an attended host can send its request to an RA ID, which still needs the verification number", () => {
+  let now = 1_000_000;
+  const store = createDesklineStore(() => now);
+  const host = store.invite();
+  const s = store.authenticate(bearer(host.token), "host");
+  assert.equal(store.call(s, "LAPTOP", undefined, "111111"), true);
+  const [r] = store.inbox("111111");
+  assert.equal(r.mode, "attended");
+  const {viewer} = store.accept(r.id, op("111111"));
+  assert.equal(viewer.preapproved, false);
+  assert.match(viewer.verification, /^[0-9]{6}$/);
+  assert.equal(s.state, "pending");
+});
+
+test("unanswered RA requests become missed when they time out or the PC leaves", () => {
+  let now = 1_000_000;
+  const store = createDesklineStore(() => now);
+  const host = store.standing("K".repeat(43));
+  const s = store.authenticate(bearer(host.token), "host");
+  store.call(s, "pc", undefined, "222222");
+  now += 121_000;
+  store.authenticate(bearer(host.token), "host");
+  assert.equal(store.inbox("222222")[0].status, "missed");
+  const second = store.standing("L".repeat(43));
+  store.call(store.authenticate(bearer(second.token), "host"), "pc2", undefined, "222222");
+  store.end(store.authenticate(bearer(second.token), "host"));
+  assert.equal(store.inbox("222222")[0].status, "missed");
+});
+
+test("frames and input wake long polls; admin can end a session by id", async () => {
+  const store = createDesklineStore();
+  const host = store.standing("M".repeat(43));
+  const s = store.authenticate(bearer(host.token), "host");
+  store.join(host.code, op("333333"));
+  const jpeg = Buffer.from([255, 216, 255, 217]);
+  const started = Date.now();
+  const waiting = store.waitFrame(s, 0, 5000);
+  setTimeout(() => store.tick(s, jpeg, true), 20);
+  await waiting;
+  assert.ok(Date.now() - started < 1000);
+  assert.equal(s.sequence, 1);
+  const pulled = store.pull(s, 5000);
+  setTimeout(() => store.enqueue(s, {kind: "key", key: "a"}), 20);
+  assert.deepEqual((await pulled).input, [{kind: "key", key: "a"}]);
+  // A pulling host does not also get input with its tick.
+  store.enqueue(s, {kind: "key", key: "b"});
+  assert.deepEqual(store.tick(s).input, []);
+  assert.equal((await store.pull(s, 10)).input.length, 1);
+  const [live] = store.overview().live;
+  assert.equal(store.endById(live.id), true);
+  assert.equal(store.authenticate(bearer(host.token)), undefined);
+});
+
+test("a live session stays open past 30 minutes while both peers poll", () => {
+  let now = 1_000_000;
+  const store = createDesklineStore(() => now);
+  const host = store.standing("N".repeat(43));
+  const viewer = store.join(host.code, op("444444"));
+  for (let i = 0; i < 400; i++) {
+    now += 10_000;
+    assert.ok(store.authenticate(bearer(host.token), "host"));
+    assert.ok(store.authenticate(bearer(viewer.token), "viewer"));
+  }
+});

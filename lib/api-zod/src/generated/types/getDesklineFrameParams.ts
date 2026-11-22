@@ -11,4 +11,10 @@ export type GetDesklineFrameParams = {
  * @minimum 0
  */
 after?: number;
+/**
+ * Hold the request up to this many milliseconds for a new frame.
+ * @minimum 0
+ * @maximum 10000
+ */
+wait?: number;
 };

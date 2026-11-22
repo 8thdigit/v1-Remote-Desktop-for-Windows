@@ -53,3 +53,6 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Portal accounts when no DATABASE_URL is set
+.data/
