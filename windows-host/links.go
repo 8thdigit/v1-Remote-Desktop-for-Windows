@@ -154,3 +154,38 @@ func formatValidity(hours int) string {
 	}
 	return strconv.Itoa(hours) + " hours"
 }
+
+// timeLeft renders how long until something expires, for status lines like
+// "expires in 5h 20m" or "expired 3m ago".
+func timeLeft(unixMilli int64, now time.Time) string {
+	d := time.Until(time.UnixMilli(unixMilli))
+	neg := d < 0
+	if neg {
+		d = -d
+	}
+	var text string
+	switch {
+	case d < time.Minute:
+		text = "less than a minute"
+	case d < time.Hour:
+		text = twoDigits(int(d.Minutes())) + "m"
+	case d < 24*time.Hour:
+		h := int(d.Hours())
+		text = strconv.Itoa(h) + "h " + twoDigits(int(d.Minutes())-h*60) + "m"
+	default:
+		text = strconv.Itoa(int(d.Hours())/24) + "d " + twoDigits(int(d.Hours())%24) + "h"
+	}
+	if neg {
+		return "expired " + text + " ago"
+	}
+	return "expires in " + text
+}
+
+// linksPathFor returns where saved remote access links live next to the
+// unattended settings file. It is empty when the config path is unknown.
+func linksPathFor(configPath string) string {
+	if configPath == "" {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(configPath), linksFile)
+}
