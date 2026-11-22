@@ -191,6 +191,7 @@ export const DesklineLinkSchema = zod.object({
   "name": zod.string(),
   "createdAt": zod.number(),
   "expiresAt": zod.number(),
+  "ttlHours": zod.union([zod.literal(1), zod.literal(2), zod.literal(4), zod.literal(5), zod.literal(8), zod.literal(12), zod.literal(24), zod.literal(48), zod.literal(72), zod.literal(120)]),
   "sessions": zod.number().int().min(0)
 })
 

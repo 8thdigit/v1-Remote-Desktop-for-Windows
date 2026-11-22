@@ -63,6 +63,7 @@ export type Link = {
   name: string;
   createdAt: number;
   expiresAt: number;
+  ttlHours: number;
   sessions: number;
 };
 
@@ -186,7 +187,8 @@ export function createDesklineStore(clock = Date.now) {
     // --- Remote access links (created from the client app) ---
     // Creates a shareable link that opens sessions on this host's PC without
     // approval. ttlHours defaults to 24. Only hosts with an unattended key
-    // can create links; the key proves ownership of the PC.
+    // can create links; the key proves ownership of the PC. The link also
+    // carries its validity in hours so clients can display it.
     linkCreate(key: string, name: string, ttlHours?: number) {
       sweep();
       if (!/^[\w-]{43}$/.test(key)) return;
@@ -194,7 +196,7 @@ export function createDesklineStore(clock = Date.now) {
       let id: string;
       do { id = randomBytes(9).toString("base64url"); } while (links.has(id));
       const now = clock();
-      const link: Link = {id, key, code: linkCode(id), name: cleanName(name), createdAt: now, expiresAt: now + hours * 3_600_000, sessions: 0};
+      const link: Link = {id, key, code: linkCode(id), name: cleanName(name), createdAt: now, expiresAt: now + hours * 3_600_000, ttlHours: hours, sessions: 0};
       links.set(id, link);
       return publicLink(link);
     },
