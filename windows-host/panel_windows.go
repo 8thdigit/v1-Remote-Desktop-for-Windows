@@ -71,7 +71,7 @@ var (
 // window that runs the commands.
 func newControlPanel(instance, tray uintptr, render func() panelView) (*controlPanel, error) {
 	p := &controlPanel{tray: tray, render: render}
-	panelError := errors.New("could not create the Msfwr window")
+	panelError := errors.New("could not create the WINRSS.net window")
 	dpi := uintptr(96)
 	if proc := user.NewProc("GetDpiForSystem"); proc.Find() == nil {
 		if value, _, _ := proc.Call(); value != 0 {
@@ -108,8 +108,7 @@ func newControlPanel(instance, tray uintptr, render func() panelView) (*controlP
 		return result
 	})
 	cursor, _, _ := user.NewProc("LoadCursorW").Call(0, 32512)
-	icon, _, _ := user.NewProc("LoadIconW").Call(0, 32512) // IDI_APPLICATION
-	class := indicatorClass{procedure: proc, instance: instance, cursor: cursor, icon: icon, brush: 16, name: textPtr(panelClass)}
+	class := indicatorClass{procedure: proc, instance: instance, cursor: cursor, icon: appIcon(instance), brush: 16, name: textPtr(panelClass)}
 	if atom, _, _ := registerClass.Call(uintptr(unsafe.Pointer(&class))); atom == 0 {
 		return nil, panelError
 	}
@@ -117,7 +116,7 @@ func newControlPanel(instance, tray uintptr, render func() panelView) (*controlP
 	// never shows a taskbar button. There is no minimize box because a tool
 	// window would minimize to the desktop corner; Close and Hide hide it, and
 	// the tray icon or the Start shortcut brings it back.
-	window, _, _ := createWindow.Call(0x80, uintptr(unsafe.Pointer(class.name)), uintptr(unsafe.Pointer(textPtr("Msfwr"))),
+	window, _, _ := createWindow.Call(0x80, uintptr(unsafe.Pointer(class.name)), uintptr(unsafe.Pointer(textPtr("WINRSS.net"))),
 		0x00ca0000, 0x80000000, 0x80000000, px(600), px(700), 0, 0, instance, 0)
 	if window == 0 {
 		return nil, panelError
@@ -178,7 +177,7 @@ func newControlPanel(instance, tray uintptr, render func() panelView) (*controlP
 	add("BUTTON", "Connections", group, 12, 432, 560, 170, 0)
 	p.active = add("STATIC", "", 0, 26, 454, 532, 20, 0)
 	p.count = add("STATIC", "", 0, 26, 476, 532, 20, 0)
-	add("STATIC", "Recent sessions (since Msfwr started)", 0, 26, 500, 532, 18, 0)
+	add("STATIC", "Recent sessions (since WINRSS.net started)", 0, 26, 500, 532, 18, 0)
 	p.history = add("LISTBOX", "", listBox, 26, 520, 532, 70, 0)
 
 	add("STATIC", versionText(), 0, 14, 622, 230, 20, 0)
@@ -295,4 +294,15 @@ func fillList(list uintptr, lines []string, empty string) {
 	for _, line := range lines {
 		sendWindow.Call(list, lbAddString, 0, uintptr(unsafe.Pointer(textPtr(line))))
 	}
+}
+
+// appIcon is the WINRSS.net logo embedded in the program (icon resource 1,
+// from winres/app.ico), or the standard application icon if it is missing.
+func appIcon(instance uintptr) uintptr {
+	loadIcon := user.NewProc("LoadIconW")
+	if icon, _, _ := loadIcon.Call(instance, 1); icon != 0 {
+		return icon
+	}
+	icon, _, _ := loadIcon.Call(0, 32512) // IDI_APPLICATION
+	return icon
 }

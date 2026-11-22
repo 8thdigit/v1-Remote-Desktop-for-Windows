@@ -51,7 +51,7 @@ func main() {
 	err := startHost()
 	if err != nil {
 		user.NewProc("MessageBoxW").Call(0, uintptr(unsafe.Pointer(textPtr(err.Error()))),
-			uintptr(unsafe.Pointer(textPtr("Msfwr"))), 0x10)
+			uintptr(unsafe.Pointer(textPtr("WINRSS.net"))), 0x10)
 	}
 }
 
@@ -107,8 +107,8 @@ func runClient(unattendedConfigPath string) (*unattendedConfig, error) {
 		stopMenu = 0x210
 	)
 	const idleText = "Start a session to get a fresh one-time code. Nothing is shared until you approve."
-	const idleTitle = "Msfwr — Windows support"
-	const liveTitle = "Msfwr — LIVE: sharing and remote control"
+	const idleTitle = "WINRSS.net — Windows support"
+	const liveTitle = "WINRSS.net — LIVE: sharing and remote control"
 	configDir, configErr := os.UserConfigDir()
 	var path, saved string
 	initialStatus := idleText
@@ -273,7 +273,7 @@ func runClient(unattendedConfigPath string) (*unattendedConfig, error) {
 				}
 				if !ask(window, "Turn on unattended access for this PC?\n\n"+
 					"IT will be able to view and control this PC at any time with a saved access code, without asking you first. "+
-					"Msfwr will start when you sign in and run only as an icon in the notification area (no window), which turns green while someone is connected. "+
+					"WINRSS.net will start when you sign in and run only as an icon in the notification area (no window), which turns green while someone is connected. "+
 					"Click that icon to see the access code, to Initiate a session, or to turn this off.") {
 					break
 				}

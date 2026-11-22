@@ -1,4 +1,4 @@
-# Msfwr
+# WINRSS.net
 
 An installable Windows host and browser viewer for attended remote support over HTTPS.
 
@@ -13,7 +13,7 @@ An installable Windows host and browser viewer for attended remote support over 
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- The Msfwr preview does not use PostgreSQL; keep one API instance for active sessions.
+- The WINRSS.net preview does not use PostgreSQL; keep one API instance for active sessions.
 
 ## Stack
 
@@ -40,8 +40,8 @@ An installable Windows host and browser viewer for attended remote support over 
 ## Product
 
 - Login accounts on the relay: admins manage company accounts at `/admin` (company name, login ID, password, RA ID). Companies sign in at `/`.
-- RA ID: a PC's Msfwr window has an RA ID box. A PC pointed to an RA ID shows up for that company (Connect without the access code), and its "Initiate: ask IT to connect" requests go to that company.
-- Remote access URL: the Msfwr window creates one URL per PC with a six-digit access code (Create / Copy / Clear, validity 1 h to 5 days, default 24 h). Opening `/r/<code>` and entering the code connects without signing in. The PC re-sends its link on each registration so a relay restart does not break it.
+- RA ID: a PC's WINRSS.net window has an RA ID box. A PC pointed to an RA ID shows up for that company (Connect without the access code), and its "Initiate: ask IT to connect" requests go to that company.
+- Remote access URL: the WINRSS.net window creates one URL per PC with a six-digit access code (Create / Copy / Clear, validity 1 h to 5 days, default 24 h). Opening `/r/<code>` and entering the code connects without signing in. The PC re-sends its link on each registration so a relay restart does not break it.
 - Joining by access code and the saved-PC request list need a signed-in company.
 
 ## User preferences

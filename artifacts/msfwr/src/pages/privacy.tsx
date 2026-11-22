@@ -32,7 +32,7 @@ const sections = [
 export default function Privacy() {
   useEffect(() => {
     const previousTitle = document.title;
-    document.title = 'Privacy — Msfwr';
+    document.title = 'Privacy — WINRSS.net';
     return () => { document.title = previousTitle; };
   }, []);
 
@@ -40,13 +40,13 @@ export default function Privacy() {
     <main className="min-h-[100dvh] bg-background text-foreground">
       <div className="mx-auto max-w-3xl px-5 pb-16 pt-6 sm:px-8 sm:pt-10">
         <Link href="/" className="inline-flex min-h-11 items-center gap-2 rounded-md text-sm font-semibold text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary">
-          <ArrowLeft size={16} aria-hidden="true" /> Back to Msfwr
+          <ArrowLeft size={16} aria-hidden="true" /> Back to WINRSS.net
         </Link>
         <header className="mt-7 border-b pb-7 sm:mt-10">
-          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Msfwr · Attended remote support</p>
+          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">WINRSS.net · Attended remote support</p>
           <h1 className="mt-3 text-4xl font-extrabold tracking-tight sm:text-5xl">Privacy</h1>
           <p className="mt-4 max-w-prose text-lg text-muted-foreground">
-            What Msfwr handles when you visit the site or start a remote support session.
+            What WINRSS.net handles when you visit the site or start a remote support session.
           </p>
         </header>
         {sections.map(({ title, text }) => (

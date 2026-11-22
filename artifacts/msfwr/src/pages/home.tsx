@@ -3,10 +3,8 @@ import {
   acceptMsfwrRequest, connectMsfwrPc, getMsfwrInbox, listMsfwrCalls, useJoinMsfwr, type MsfwrInbox,
 } from '@workspace/api-client-react';
 import { Link } from 'wouter';
-import {
-  ArrowRight, Bell, BellOff, BellRing, Building2, Check, Clock, Copy, Download, Eye, EyeOff, History, Laptop, Monitor,
-  Pencil, Plus, Radio, ShieldCheck, Trash2, UserRound, Volume2, VolumeX, X,
-} from 'lucide-react';
+import { ArrowRight, Bell, BellOff, BellRing, Building2, Check, Clock, Copy, Download, Eye, EyeOff, History, Laptop, Monitor, Pencil, Plus, ShieldCheck, Trash2, UserRound, Volume2, VolumeX, X } from 'lucide-react';
+import { LogoMark, Wordmark } from '@/components/logo';
 import LiveSession from '@/LiveSession';
 import { RaBadge, UserMenu } from '@/components/user-menu';
 import { errorText, raLabel, useAuth } from '@/lib/auth';
@@ -129,10 +127,10 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (session) { document.title = 'Msfwr — Connected session'; return; }
+    if (session) { document.title = 'WINRSS.net — Connected session'; return; }
     document.title = alertCount
-      ? `(${alertCount}) Request${alertCount > 1 ? 's' : ''} to connect — Msfwr`
-      : 'Msfwr — Remote support for Windows';
+      ? `(${alertCount}) Request${alertCount > 1 ? 's' : ''} to connect — WINRSS.net`
+      : 'WINRSS.net — Remote support for Windows';
   }, [session, alertCount]);
 
   // Poll the company's inbox: requests to its RA ID and the PCs pointed to it.
@@ -154,7 +152,7 @@ export default function Home() {
           if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.visibilityState !== 'visible') {
             for (const f of fresh) {
               try {
-                const n = new Notification(`${f.name || 'A PC'} is asking ${next.company} to connect`, { body: 'Open Msfwr and select Accept.', tag: `Msfwr-ra-${f.id}` });
+                const n = new Notification(`${f.name || 'A PC'} is asking ${next.company} to connect`, { body: 'Open WINRSS.net and select Accept.', tag: `WINRSS.net-ra-${f.id}` });
                 n.onclick = () => { window.focus(); n.close(); };
               } catch { /* notifications unavailable */ }
             }
@@ -214,7 +212,7 @@ export default function Home() {
               const pc = pcsRef.current.find((p) => p.code === f.code);
               try {
                 const n = new Notification(`${pcTitle(pc, f.name || 'An unattended PC')} is asking you to connect`, {
-                  body: 'Open Msfwr and select Accept to start the session.', tag: `Msfwr-${f.code}`,
+                  body: 'Open WINRSS.net and select Accept to start the session.', tag: `WINRSS.net-${f.code}`,
                 });
                 n.onclick = () => { window.focus(); n.close(); };
               } catch { /* notifications unavailable */ }
@@ -238,7 +236,7 @@ export default function Home() {
     setError(null);
     setNotice(null);
     if (!relay) {
-      setError('Open Msfwr at its HTTPS address before connecting.');
+      setError('Open WINRSS.net at its HTTPS address before connecting.');
       return false;
     }
     try {
@@ -319,11 +317,9 @@ export default function Home() {
       <header className="sticky top-0 z-30 border-b border-foreground/10 bg-background/75 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-3 md:px-8">
           <div className="flex items-center gap-2.5" data-testid="text-brand">
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-foreground text-background shadow-sm">
-              <Radio className="h-4.5 w-4.5 text-primary" />
-            </span>
+            <LogoMark />
             <div className="leading-tight">
-              <span className="block text-lg font-bold tracking-tight">Msfwr</span>
+              <Wordmark />
               <span className="block font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Remote support · Windows</span>
             </div>
           </div>
@@ -494,7 +490,7 @@ export default function Home() {
 
               {pcs.length === 0 ? (
                 <EmptyState icon={Laptop} title="Save a PC to get its requests"
-                  body="Initiate requests only reach browsers that know the PC's access code, because accepting one gives full control. On the PC, open the Msfwr window and select Copy access code, then save it above. From then on, when someone at that PC selects Initiate, an Accept banner appears here with a chime." />
+                  body="Initiate requests only reach browsers that know the PC's access code, because accepting one gives full control. On the PC, open the WINRSS.net window and select Copy access code, then save it above. From then on, when someone at that PC selects Initiate, an Accept banner appears here with a chime." />
               ) : (
                 <ul className="grid gap-3 sm:grid-cols-2">
                   {pcs.map((pc) => (
@@ -533,7 +529,7 @@ export default function Home() {
       <footer className="border-t border-foreground/10">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-6 px-4 py-3 text-xs text-muted-foreground md:px-8">
           <p>Attended sessions need the person at the PC to approve. Unattended PCs connect with their saved access code. Either side can end a session.</p>
-          <nav aria-label="About Msfwr" className="flex flex-wrap gap-x-5">
+          <nav aria-label="About WINRSS.net" className="flex flex-wrap gap-x-5">
             <Link href="/project" className="inline-flex min-h-11 items-center rounded-md font-semibold text-foreground underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary">Project status</Link>
             <Link href="/privacy" className="inline-flex min-h-11 items-center rounded-md font-semibold text-foreground underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary">Privacy</Link>
           </nav>
@@ -562,7 +558,7 @@ function CompanyPanel({ inbox, raId, company, now, busy, onConnect }: {
       </div>
       {!inbox ? <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p> : inbox.pcs.length === 0 ? (
         <EmptyState icon={Laptop} title="No PCs online for your RA ID"
-          body={`On a PC with Msfwr, open the Msfwr window, type ${raLabel(raId)} in the RA ID box and select Save. The PC appears here while it is on and signed in.`} />
+          body={`On a PC with WINRSS.net, open the WINRSS.net window, type ${raLabel(raId)} in the RA ID box and select Save. The PC appears here while it is on and signed in.`} />
       ) : (
         <ul className="mt-4 grid gap-3 sm:grid-cols-2" data-testid="list-company-pcs">
           {inbox.pcs.map((pc) => (
@@ -841,10 +837,10 @@ function ConnectView({ code, setCode, error, pending, onSubmit }: {
         </p>
         <ol className="mt-8 grid gap-3 sm:grid-cols-2">
           {[
-            { who: 'At the PC', icon: Monitor, title: 'Open Msfwr', body: 'It shows a one-time 12-character code.' },
+            { who: 'At the PC', icon: Monitor, title: 'Open WINRSS.net', body: 'It shows a one-time 12-character code.' },
             { who: 'At the PC', icon: Monitor, title: 'Read the code to you', body: 'Over the phone or in chat. Each code works once.' },
             { who: 'Helper', icon: UserRound, title: 'Enter the code here', body: 'Your browser gets a verification number.' },
-            { who: 'Both', icon: ShieldCheck, title: 'Confirm the number', body: 'They type your six digits into Msfwr to approve.' },
+            { who: 'Both', icon: ShieldCheck, title: 'Confirm the number', body: 'They type your six digits into WINRSS.net to approve.' },
           ].map((s, i) => (
             <li key={i} className="rounded-2xl border border-foreground/10 bg-card/70 p-4" data-testid={`step-${i + 1}`}>
               <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
@@ -905,7 +901,7 @@ function DownloadView({ installer, relay }: { installer: string; relay: string }
     <div className="dl-rise mx-auto max-w-2xl">
       <div className="rounded-3xl border bg-card/90 p-6 shadow-[0_20px_50px_-35px_hsl(200_32%_13%/0.6)] md:p-8">
         <span className="grid h-12 w-12 place-items-center rounded-2xl bg-foreground text-background"><Download className="h-6 w-6" /></span>
-        <h1 className="mt-4 text-2xl font-extrabold tracking-tight md:text-3xl">Msfwr for Windows</h1>
+        <h1 className="mt-4 text-2xl font-extrabold tracking-tight md:text-3xl">WINRSS.net for Windows</h1>
         <p className="mt-1 text-sm text-muted-foreground">Windows 10 or 11 (x64). This preview installer is unsigned, so SmartScreen may warn before it runs.</p>
         <a href={installer} download data-testid="link-download"
           className="mt-6 flex items-center justify-between rounded-xl bg-foreground px-5 py-3.5 font-bold text-background transition-transform active:scale-[0.99]">
@@ -914,7 +910,7 @@ function DownloadView({ installer, relay }: { installer: string; relay: string }
         </a>
         <p className="mt-6 font-mono text-[11px] uppercase tracking-widest text-muted-foreground">Relay URL — paste into the app</p>
         <div className="mt-2 flex items-stretch overflow-hidden rounded-xl border bg-muted">
-          <code data-testid="text-relay" className="min-w-0 flex-1 truncate px-3 py-2.5 font-mono text-sm">{relay || 'Open Msfwr over HTTPS'}</code>
+          <code data-testid="text-relay" className="min-w-0 flex-1 truncate px-3 py-2.5 font-mono text-sm">{relay || 'Open WINRSS.net over HTTPS'}</code>
           <button type="button" disabled={!relay} data-testid="button-copy-relay"
             onClick={() => { void navigator.clipboard.writeText(relay).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800); }).catch(() => {}); }}
             className="flex items-center gap-1.5 border-l bg-card px-3 text-sm font-medium hover:bg-accent">

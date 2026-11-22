@@ -2,12 +2,12 @@ Unicode True
 !ifndef VERSION
 !define VERSION "0.0.0"
 !endif
-Name "Msfwr Windows Host"
+Name "WINRSS.net"
 OutFile "${INSTALLER}"
 InstallDir "$LOCALAPPDATA\Programs\Msfwr"
 RequestExecutionLevel user
 SetCompressor /SOLID lzma
-BrandingText "Msfwr  |  Attended remote support"
+BrandingText "WINRSS.net  |  Remote support for Windows"
 
 !ifdef RELEASE_SIGNER
 !uninstfinalize '"${RELEASE_SIGNER}" "%1"' = 0
@@ -18,6 +18,8 @@ BrandingText "Msfwr  |  Attended remote support"
 !include "x64.nsh"
 !include "LogicLib.nsh"
 !define MUI_ABORTWARNING
+!define MUI_ICON "winres\app.ico"
+!define MUI_UNICON "winres\app.ico"
 !insertmacro MUI_PAGE_WELCOME
 
 ; Auto-uninstallation timeline: the app can remove itself after a chosen
@@ -27,13 +29,13 @@ Var UninstHours ; "" = keep installed; otherwise number of hours
 Page custom UninstTimelinePage UninstTimelineLeave "Auto-uninstall timing"
 
 Function UninstTimelinePage
-  !insertmacro MUI_HEADER_TEXT "Auto-uninstall timing" "Choose when Msfwr should remove itself."
+  !insertmacro MUI_HEADER_TEXT "Auto-uninstall timing" "Choose when WINRSS.net should remove itself."
   nsDialogs::Create 1018
   Pop $0
   ${If} $0 == error
     Abort
   ${EndIf}
-  ${NSD_CreateLabel} 0 0 100% 24u "Msfwr can uninstall itself automatically once this support window closes. Pick how long it should stay installed:"
+  ${NSD_CreateLabel} 0 0 100% 24u "WINRSS.net can uninstall itself automatically once this support window closes. Pick how long it should stay installed:"
   Pop $0
   ${NSD_CreateRadioButton} 0 30u 100% 12u "24 hours (recommended)"
   Pop $R0
@@ -106,21 +108,24 @@ FunctionEnd
 
 Function .onInit
   ${IfNot} ${RunningX64}
-    MessageBox MB_ICONSTOP "Msfwr requires 64-bit Windows."
+    MessageBox MB_ICONSTOP "WINRSS.net requires 64-bit Windows."
     Abort
   ${EndIf}
   SetShellVarContext current
 FunctionEnd
 
-Section "Msfwr"
+Section "WINRSS.net"
   SetOutPath "$INSTDIR"
   File /oname=Msfwr.exe "${HOST_FILE}"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
-  CreateShortcut "$SMPROGRAMS\Msfwr.lnk" "$INSTDIR\Msfwr.exe"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Msfwr" "DisplayName" "Msfwr Windows Host"
+  ; Earlier versions were called Msfwr; replace their Start menu entry.
+  Delete "$SMPROGRAMS\Msfwr.lnk"
+  CreateShortcut "$SMPROGRAMS\WINRSS.net.lnk" "$INSTDIR\Msfwr.exe"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Msfwr" "DisplayName" "WINRSS.net"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Msfwr" "DisplayVersion" "${VERSION}"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Msfwr" "Publisher" "Msfwr"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Msfwr" "Publisher" "WINRSS.net"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Msfwr" "UninstallString" '"$INSTDIR\Uninstall.exe"'
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Msfwr" "DisplayIcon" "$INSTDIR\Msfwr.exe,0"
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Msfwr" "NoModify" 1
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Msfwr" "NoRepair" 1
 
@@ -135,7 +140,7 @@ Section "Msfwr"
     Pop $9            ; exit code
     Pop $8            ; script output (diagnostics only)
     ${If} $9 != 0
-      MessageBox MB_ICONEXCLAMATION "Msfwr is installed, but the automatic uninstall could not be scheduled (code $9). You can uninstall it any time from Windows Settings.$\r$\n$\r$\nDetails: $TEMP\msfwr-schedule-uninstall.log" /SD IDOK
+      MessageBox MB_ICONEXCLAMATION "WINRSS.net is installed, but the automatic uninstall could not be scheduled (code $9). You can uninstall it any time from Windows Settings.$\r$\n$\r$\nDetails: $TEMP\msfwr-schedule-uninstall.log" /SD IDOK
     ${EndIf}
     WriteRegStr HKCU "Software\Msfwr" "AutoUninstallHours" "$UninstHours"
   ${EndIf}
@@ -146,6 +151,7 @@ Section "Uninstall"
   ; Remove any pending auto-uninstall task so this section always wins.
   nsExec::ExecToLog 'schtasks.exe /delete /f /tn msfwr-auto-uninstall'
   DeleteRegValue HKCU "Software\Msfwr" "AutoUninstallHours"
+  Delete "$SMPROGRAMS\WINRSS.net.lnk"
   Delete "$SMPROGRAMS\Msfwr.lnk"
   Delete "$INSTDIR\Msfwr.exe"
   Delete "$INSTDIR\schedule-uninstall.ps1"

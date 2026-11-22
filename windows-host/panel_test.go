@@ -10,10 +10,10 @@ func TestVersionText(t *testing.T) {
 	old := version
 	defer func() { version = old }()
 	for in, want := range map[string]string{
-		"v0.3.2":           "Msfwr v0.3.2 · Windows x64",
-		"v0.3.2-4-gabc123": "Msfwr v0.3.2-4-gabc123 · Windows x64",
-		"":                 "Msfwr dev · Windows x64",
-		"bad version\n":    "Msfwr dev · Windows x64",
+		"v0.3.2":           "WINRSS.net v0.3.2 · Windows x64",
+		"v0.3.2-4-gabc123": "WINRSS.net v0.3.2-4-gabc123 · Windows x64",
+		"":                 "WINRSS.net dev · Windows x64",
+		"bad version\n":    "WINRSS.net dev · Windows x64",
 	} {
 		version = in
 		if got := versionText(); got != want {

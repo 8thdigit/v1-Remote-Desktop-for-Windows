@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { getMsfwrLinkInfo, joinMsfwrLink, type MsfwrLinkInfo } from '@workspace/api-client-react';
-import { ArrowRight, Clock, KeyRound, Laptop, Radio, ShieldCheck } from 'lucide-react';
+import { ArrowRight, Clock, KeyRound, Laptop, ShieldCheck } from 'lucide-react';
+import { LogoMark, Wordmark } from '@/components/logo';
 import LiveSession from '@/LiveSession';
 import { errorText, statusOf } from '@/lib/auth';
 
@@ -49,7 +50,7 @@ export default function LinkPage({ code }: { code: string }) {
   }, [upper, session]);
 
   useEffect(() => {
-    document.title = session ? 'Msfwr — Connected session' : `${info?.name || 'Remote access'} — Msfwr`;
+    document.title = session ? 'WINRSS.net — Connected session' : `${info?.name || 'Remote access'} — WINRSS.net`;
   }, [info?.name, session]);
 
   async function join(value: string) {
@@ -90,11 +91,9 @@ export default function LinkPage({ code }: { code: string }) {
     <div className="dl-shell grid min-h-[100dvh] place-items-center px-4 py-10 text-foreground">
       <div className="w-full max-w-md">
         <div className="mb-6 flex items-center justify-center gap-2.5">
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-foreground text-background shadow-sm">
-            <Radio className="h-5 w-5 text-primary" />
-          </span>
+          <LogoMark className="h-10 w-10" />
           <div className="leading-tight">
-            <span className="block text-xl font-bold tracking-tight">Msfwr</span>
+            <Wordmark className="text-xl" />
             <span className="block font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Remote access URL</span>
           </div>
         </div>

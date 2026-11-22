@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { Link } from 'wouter';
 import { changePassword } from '@workspace/api-client-react';
-import { Check, ChevronDown, Copy, KeyRound, LogOut, Radio, ShieldCheck, UserRound } from 'lucide-react';
+import { Check, ChevronDown, Copy, KeyRound, LogOut, ShieldCheck, UserRound } from 'lucide-react';
+import { LogoMark, Wordmark } from '@/components/logo';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -11,11 +12,9 @@ import { errorText, raLabel, useAuth } from '@/lib/auth';
 export function Brand({ subtitle = 'Remote support · Windows' }: { subtitle?: string }) {
   return (
     <Link href="/" className="flex items-center gap-2.5" data-testid="text-brand">
-      <span className="grid h-9 w-9 place-items-center rounded-xl bg-foreground text-background shadow-sm">
-        <Radio className="h-4.5 w-4.5 text-primary" />
-      </span>
+      <LogoMark />
       <span className="leading-tight">
-        <span className="block text-lg font-bold tracking-tight">Msfwr</span>
+        <Wordmark />
         <span className="block font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">{subtitle}</span>
       </span>
     </Link>
@@ -27,7 +26,7 @@ export function RaBadge({ compact = false }: { compact?: boolean }) {
   const { user } = useAuth();
   const [copied, setCopied] = useState(false);
   return (
-    <button type="button" data-testid="button-copy-ra" title="Copy your RA ID. Enter it in the Msfwr window on a PC so the PC and its requests come to you."
+    <button type="button" data-testid="button-copy-ra" title="Copy your RA ID. Enter it in the WINRSS.net window on a PC so the PC and its requests come to you."
       onClick={() => { void navigator.clipboard.writeText(raLabel(user.raId)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }).catch(() => {}); }}
       className="flex items-center gap-2 rounded-xl border border-primary/25 bg-primary/8 px-3 py-1.5 font-mono text-xs font-bold text-primary hover:bg-primary/12">
       {!compact && <span className="font-sans text-[10px] font-semibold uppercase tracking-widest text-primary/75">Your RA ID</span>}
