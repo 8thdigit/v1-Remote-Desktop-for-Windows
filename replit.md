@@ -41,6 +41,13 @@ _Describe the high-level user-facing capabilities of this app once they exist._
 
 _Populate as you build — explicit user instructions worth remembering across sessions._
 
+## Hosting (Vercel + Render)
+
+- Viewer: Vercel builds `artifacts/msfwr` from `vercel.json` and serves it statically. `/api/*` is rewritten to the relay, so the viewer keeps a same-origin API.
+- Relay: Render runs `artifacts/api-server` from `render.yaml` as a single always-on instance at https://msfwr-relay.onrender.com. Sessions live in memory, so never run more than one instance and never move the relay to serverless functions.
+- If the Render URL changes, update the `/api/:path*` destination in `vercel.json`.
+- Windows hosts can point their relay URL at either the Vercel domain or the Render domain; set `MSFWR_VIEWER_ORIGIN` to the Vercel domain so shared links open the Vercel viewer.
+
 ## Gotchas
 
 - Merging to GitHub does not update https://rdp-system.replit.app. Pull main into the Replit workspace and Republish, or the live relay lacks newer endpoints (for example `/api/msfwr/call` and `/calls` for Initiate requests). The viewer shows a red "older build" banner when `/calls` returns 404.

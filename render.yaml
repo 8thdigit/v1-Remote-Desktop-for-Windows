@@ -1,0 +1,19 @@
+# Render Blueprint for the Msfwr relay (artifacts/api-server).
+# The relay keeps sessions in process memory, so it must run as ONE
+# always-on instance. Do not scale it above 1 instance.
+services:
+  - type: web
+    name: msfwr-relay
+    runtime: node
+    plan: starter # free also works, but it sleeps after 15 idle minutes
+    region: oregon
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @workspace/api-server run build
+    startCommand: node --enable-source-maps artifacts/api-server/dist/index.mjs
+    healthCheckPath: /api/healthz
+    numInstances: 1
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "24"

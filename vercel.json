@@ -5,7 +5,7 @@
   "outputDirectory": "artifacts/msfwr/dist/public",
   "framework": null,
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://rdp-system.replit.app/api/:path*" },
+    { "source": "/api/:path*", "destination": "https://msfwr-relay.onrender.com/api/:path*" },
     { "source": "/((?!api/|assets/|downloads/).*)", "destination": "/index.html" }
   ],
   "headers": [
