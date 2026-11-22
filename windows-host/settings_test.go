@@ -7,7 +7,7 @@ import (
 )
 
 func TestRememberAndForgetRelayAddress(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "winss132r", "relay.txt")
+	path := filepath.Join(t.TempDir(), "Msfwr", "relay.txt")
 	if got, err := loadRelayAddress(path); got != "" || err != nil {
 		t.Fatalf("missing setting: %q, %v", got, err)
 	}

@@ -16,13 +16,13 @@ func TestStandingCodeMatchesRelay(t *testing.T) {
 	if standingCode(key) != standingCode(key) || standingCode(key) == standingCode("B"+key[1:]) {
 		t.Fatal("code is not a stable function of the key")
 	}
-	if got, want := standingCode(key), "FAB848AE7CEB"; got != want {
+	if got, want := standingCode(key), "51E95F6A445C"; got != want {
 		t.Fatalf("standingCode = %s, want %s", got, want)
 	}
 }
 
 func TestUnattendedConfigPersists(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "winss132r", unattendedFile)
+	path := filepath.Join(t.TempDir(), "Msfwr", unattendedFile)
 	if _, ok, err := loadUnattended(path); ok || err != nil {
 		t.Fatalf("missing config: %v %v", ok, err)
 	}

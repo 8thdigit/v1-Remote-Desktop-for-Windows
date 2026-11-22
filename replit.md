@@ -1,4 +1,4 @@
-# winss132r
+# Msfwr
 
 An installable Windows host and browser viewer for attended remote support over HTTPS.
 
@@ -6,12 +6,12 @@ An installable Windows host and browser viewer for attended remote support over 
 
 - `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
 - `bash windows-host/build.sh` — rebuild the x64 installer with Go and NSIS
-- `node --test artifacts/api-server/tests/deskline.test.mjs` — run relay session tests
+- `npx tsx artifacts/api-server/tests/msfwr.test.mjs` — run relay session tests
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- The winss132r preview does not use PostgreSQL; keep one API instance for active sessions.
+- The Msfwr preview does not use PostgreSQL; keep one API instance for active sessions.
 
 ## Stack
 
@@ -25,8 +25,8 @@ An installable Windows host and browser viewer for attended remote support over 
 ## Where things live
 
 - `windows-host/` — Windows application, installer recipe, and Windows verification instructions
-- `artifacts/deskline/` — browser viewer and installer download
-- `artifacts/api-server/src/routes/deskline.ts` — session and frame transport
+- `artifacts/msfwr/` — browser viewer and installer download
+- `artifacts/api-server/src/routes/msfwr.ts` — session and frame transport
 
 ## Architecture decisions
 
@@ -43,7 +43,7 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 ## Gotchas
 
-- Merging to GitHub does not update https://rdp-system.replit.app. Pull main into the Replit workspace and Republish, or the live relay lacks newer endpoints (for example `/api/deskline/call` and `/calls` for Initiate requests). The viewer shows a red "older build" banner when `/calls` returns 404.
+- Merging to GitHub does not update https://rdp-system.replit.app. Pull main into the Replit workspace and Republish, or the live relay lacks newer endpoints (for example `/api/msfwr/call` and `/calls` for Initiate requests). The viewer shows a red "older build" banner when `/calls` returns 404.
 
 ## Pointers
 

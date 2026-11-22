@@ -24,9 +24,9 @@ type unattendedConfig struct {
 
 const unattendedFile = "unattended.json"
 
-// standingCode must match standingCode in artifacts/api-server/src/lib/deskline.ts.
+// standingCode must match standingCode in artifacts/api-server/src/lib/msfwr.ts.
 func standingCode(key string) string {
-	sum := sha256.Sum256([]byte("winss132r-standing:" + key))
+	sum := sha256.Sum256([]byte("msfwr-standing:" + key))
 	return strings.ToUpper(hex.EncodeToString(sum[:6]))
 }
 

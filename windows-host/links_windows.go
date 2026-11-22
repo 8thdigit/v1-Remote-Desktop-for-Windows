@@ -28,7 +28,7 @@ func pickValidity(window uintptr) (int, bool) {
 	hours, err := strconv.Atoi(trimmed)
 	if err != nil || !validLinkHours(hours) {
 		warn, _ := syscall.UTF16PtrFromString("Choose one of: 1, 2, 4, 5, 8, 12, 24, 48, 72, 120 hours.")
-		title, _ := syscall.UTF16PtrFromString("winss132r")
+		title, _ := syscall.UTF16PtrFromString("Msfwr")
 		messageBox.Call(window, uintptr(unsafe.Pointer(warn)),
 			uintptr(unsafe.Pointer(title)), 0x30) // MB_ICONWARNING
 		return 0, false

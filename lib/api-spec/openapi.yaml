@@ -24,18 +24,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
-  /deskline/invite:
+  /msfwr/invite:
     post:
-      operationId: createDesklineInvite
+      operationId: createMsfwrInvite
       responses:
         "201":
           description: One-time host invite
           content:
             application/json:
-              schema: {$ref: "#/components/schemas/DesklineInvite"}
-  /deskline/standing:
+              schema: {$ref: "#/components/schemas/MsfwrInvite"}
+  /msfwr/standing:
     post:
-      operationId: registerDesklineStanding
+      operationId: registerMsfwrStanding
       description: >-
         Unattended host registration. The access code is derived from the
         host's saved key; a viewer that joins it is live without approval.
@@ -43,16 +43,16 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: "#/components/schemas/DesklineStandingKey"}
+            schema: {$ref: "#/components/schemas/MsfwrStandingKey"}
       responses:
         "201":
           description: Pre-approved host invite for the derived code
           content:
             application/json:
-              schema: {$ref: "#/components/schemas/DesklineInvite"}
-  /deskline/call:
+              schema: {$ref: "#/components/schemas/MsfwrInvite"}
+  /msfwr/call:
     post:
-      operationId: callDeskline
+      operationId: callMsfwr
       security: [{sessionToken: []}]
       description: >-
         An unattended host presses Initiate. Viewers that already know its
@@ -60,12 +60,12 @@ paths:
       requestBody:
         content:
           application/json:
-            schema: {$ref: "#/components/schemas/DesklineCall"}
+            schema: {$ref: "#/components/schemas/MsfwrCall"}
       responses:
         "204": {description: Request is visible to viewers that know the code}
-  /deskline/calls:
+  /msfwr/calls:
     post:
-      operationId: listDesklineCalls
+      operationId: listMsfwrCalls
       description: >-
         Which of the viewer's saved access codes have a pending Initiate
         request, and which of them are online (waiting) or in a session.
@@ -74,16 +74,16 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: "#/components/schemas/DesklineCallQuery"}
+            schema: {$ref: "#/components/schemas/MsfwrCallQuery"}
       responses:
         "200":
           description: Pending requests among the given codes
           content:
             application/json:
-              schema: {$ref: "#/components/schemas/DesklineCallList"}
-  /deskline/link/create:
+              schema: {$ref: "#/components/schemas/MsfwrCallList"}
+  /msfwr/link/create:
     post:
-      operationId: createDesklineLink
+      operationId: createMsfwrLink
       description: >-
         Create a shareable remote access URL from the client app. The host PC
         registers a waiting session under the link's code; every viewer that
@@ -94,16 +94,16 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: "#/components/schemas/DesklineLinkCreate"}
+            schema: {$ref: "#/components/schemas/MsfwrLinkCreate"}
       responses:
         "201":
           description: The created link
           content:
             application/json:
-              schema: {$ref: "#/components/schemas/DesklineLink"}
-  /deskline/link/register:
+              schema: {$ref: "#/components/schemas/MsfwrLink"}
+  /msfwr/link/register:
     post:
-      operationId: registerDesklineLink
+      operationId: registerMsfwrLink
       description: >-
         The host re-registers its waiting session under an existing link id
         after each session ends, so the shared URL keeps accepting viewers
@@ -112,17 +112,17 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: "#/components/schemas/DesklineLinkRegister"}
+            schema: {$ref: "#/components/schemas/MsfwrLinkRegister"}
       responses:
         "201":
           description: Pre-approved host invite for the link's code
           content:
             application/json:
-              schema: {$ref: "#/components/schemas/DesklineInvite"}
+              schema: {$ref: "#/components/schemas/MsfwrInvite"}
         "410": {description: The link expired or was revoked}
-  /deskline/link/status:
+  /msfwr/link/status:
     get:
-      operationId: getDesklineLinkStatus
+      operationId: getMsfwrLinkStatus
       description: >-
         Current state of a link for the client app: validity, whether the
         host is registered and online, and how many sessions were opened.
@@ -134,58 +134,58 @@ paths:
           description: Link status
           content:
             application/json:
-              schema: {$ref: "#/components/schemas/DesklineLinkStatus"}
-  /deskline/link/revoke:
+              schema: {$ref: "#/components/schemas/MsfwrLinkStatus"}
+  /msfwr/link/revoke:
     post:
-      operationId: revokeDesklineLink
+      operationId: revokeMsfwrLink
       description: Revoke a link at once; any live session under it is ended.
       requestBody:
         required: true
         content:
           application/json:
-            schema: {$ref: "#/components/schemas/DesklineLinkRegister"}
+            schema: {$ref: "#/components/schemas/MsfwrLinkRegister"}
       responses:
         "204": {description: Link revoked}
-  /deskline/join:
+  /msfwr/join:
     post:
-      operationId: joinDeskline
+      operationId: joinMsfwr
       requestBody:
         required: true
         content:
           application/json:
-            schema: {$ref: "#/components/schemas/DesklineCode"}
+            schema: {$ref: "#/components/schemas/MsfwrCode"}
       responses:
         "200":
           description: Viewer capability and verification number
           content:
             application/json:
-              schema: {$ref: "#/components/schemas/DesklineViewer"}
-  /deskline/end:
+              schema: {$ref: "#/components/schemas/MsfwrViewer"}
+  /msfwr/end:
     post:
-      operationId: endDeskline
+      operationId: endMsfwr
       security: [{sessionToken: []}]
       responses:
         "204": {description: Session ended}
-  /deskline/input:
+  /msfwr/input:
     post:
-      operationId: sendDesklineInput
+      operationId: sendMsfwrInput
       security: [{sessionToken: []}]
       requestBody:
         required: true
         content:
           application/json:
-            schema: {$ref: "#/components/schemas/DesklineInput"}
+            schema: {$ref: "#/components/schemas/MsfwrInput"}
       responses:
         "204": {description: Accepted}
-  /deskline/approve:
+  /msfwr/approve:
     post:
-      operationId: approveDeskline
+      operationId: approveMsfwr
       security: [{sessionToken: []}]
       responses:
         "204": {description: Host approved the session}
-  /deskline/tick:
+  /msfwr/tick:
     post:
-      operationId: tickDeskline
+      operationId: tickMsfwr
       security: [{sessionToken: []}]
       description: Host heartbeat; optional raw JPEG body when the approved screen changes.
       requestBody:
@@ -197,26 +197,26 @@ paths:
           description: Host status and pending input
           content:
             application/json:
-              schema: {$ref: "#/components/schemas/DesklineTick"}
-  /deskline/frame:
+              schema: {$ref: "#/components/schemas/MsfwrTick"}
+  /msfwr/frame:
     get:
-      operationId: getDesklineFrame
+      operationId: getMsfwrFrame
       security: [{sessionToken: []}]
       parameters:
         - {in: query, name: after, schema: {type: integer, minimum: 0}}
       responses:
         "200":
-          description: New JPEG frame; X-Deskline-Frame is its sequence number.
+          description: New JPEG frame; X-Msfwr-Frame is its sequence number.
           content:
             image/jpeg:
               schema: {type: string, format: binary}
         "204":
-          description: No new frame. X-Deskline-State is pending or live.
+          description: No new frame. X-Msfwr-State is pending or live.
 components:
   securitySchemes:
     sessionToken: { type: http, scheme: bearer }
   schemas:
-    DesklineTick:
+    MsfwrTick:
       type: object
       required: [state, input]
       properties:
@@ -224,23 +224,23 @@ components:
         verification: {type: string}
         input:
           type: array
-          items: {$ref: "#/components/schemas/DesklineInput"}
-    DesklineCode:
+          items: {$ref: "#/components/schemas/MsfwrInput"}
+    MsfwrCode:
       type: object
       required: [code]
       properties:
         code: {type: string, pattern: '^[A-F0-9]{12}$'}
-    DesklineStandingKey:
+    MsfwrStandingKey:
       type: object
       required: [key]
       properties:
         key: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
         name: {type: string, maxLength: 64}
-    DesklineCall:
+    MsfwrCall:
       type: object
       properties:
         name: {type: string, maxLength: 64}
-    DesklineCallQuery:
+    MsfwrCallQuery:
       type: object
       required: [codes]
       properties:
@@ -248,7 +248,7 @@ components:
           type: array
           maxItems: 50
           items: {type: string, pattern: '^[A-F0-9]{12}$'}
-    DesklineCallList:
+    MsfwrCallList:
       type: object
       required: [calls]
       properties:
@@ -269,26 +269,26 @@ components:
               code: {type: string}
               name: {type: string}
               state: {type: string, enum: [online, busy]}
-    DesklineInvite:
+    MsfwrInvite:
       type: object
       required: [code, token]
       properties:
         code: {type: string}
         token: {type: string}
-    DesklineLinkCreate:
+    MsfwrLinkCreate:
       type: object
       required: [key]
       properties:
         key: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
         name: {type: string, maxLength: 64}
         ttlHours: {type: integer, enum: [1, 2, 4, 5, 8, 12, 24, 48, 72, 120], default: 24}
-    DesklineLinkRegister:
+    MsfwrLinkRegister:
       type: object
       required: [id, key]
       properties:
         id: {type: string, maxLength: 64}
         key: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
-    DesklineLink:
+    MsfwrLink:
       type: object
       required: [id, code, name, createdAt, expiresAt, sessions]
       properties:
@@ -298,21 +298,21 @@ components:
         createdAt: {type: number}
         expiresAt: {type: number}
         sessions: {type: integer, minimum: 0}
-    DesklineLinkStatus:
+    MsfwrLinkStatus:
       type: object
       required: [link, online, busy]
       properties:
-        link: {$ref: "#/components/schemas/DesklineLink"}
+        link: {$ref: "#/components/schemas/MsfwrLink"}
         online: {type: boolean}
         busy: {type: boolean}
-    DesklineViewer:
+    MsfwrViewer:
       type: object
       required: [token, verification, preapproved]
       properties:
         token: {type: string}
         verification: {type: string}
         preapproved: {type: boolean}
-    DesklineInput:
+    MsfwrInput:
       type: object
       required: [kind]
       properties:

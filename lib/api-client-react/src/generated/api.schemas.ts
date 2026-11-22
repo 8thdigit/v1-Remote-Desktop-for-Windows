@@ -5,19 +5,19 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-export type DesklineTickState = typeof DesklineTickState[keyof typeof DesklineTickState];
+export type MsfwrTickState = typeof MsfwrTickState[keyof typeof MsfwrTickState];
 
 
-export const DesklineTickState = {
+export const MsfwrTickState = {
   waiting: 'waiting',
   pending: 'pending',
   live: 'live',
 } as const;
 
-export type DesklineInputKind = typeof DesklineInputKind[keyof typeof DesklineInputKind];
+export type MsfwrInputKind = typeof MsfwrInputKind[keyof typeof MsfwrInputKind];
 
 
-export const DesklineInputKind = {
+export const MsfwrInputKind = {
   key: 'key',
   wheel: 'wheel',
   down: 'down',
@@ -26,16 +26,16 @@ export const DesklineInputKind = {
   release: 'release',
 } as const;
 
-export type DesklineInputDelta = typeof DesklineInputDelta[keyof typeof DesklineInputDelta];
+export type MsfwrInputDelta = typeof MsfwrInputDelta[keyof typeof MsfwrInputDelta];
 
 
-export const DesklineInputDelta = {
+export const MsfwrInputDelta = {
   NUMBER_MINUS_1: -1,
   NUMBER_1: 1,
 } as const;
 
-export interface DesklineInput {
-  kind: DesklineInputKind;
+export interface MsfwrInput {
+  kind: MsfwrInputKind;
   /**
      * @minimum 0
      * @maximum 1
@@ -51,7 +51,7 @@ export interface DesklineInput {
      * @maximum 2
      */
   button?: number;
-  delta?: DesklineInputDelta;
+  delta?: MsfwrInputDelta;
   /** @maxLength 24 */
   key?: string;
   ctrl?: boolean;
@@ -59,30 +59,30 @@ export interface DesklineInput {
   alt?: boolean;
 }
 
-export interface DesklineTick {
-  state: DesklineTickState;
+export interface MsfwrTick {
+  state: MsfwrTickState;
   verification?: string;
-  input: DesklineInput[];
+  input: MsfwrInput[];
 }
 
-export interface DesklineCode {
+export interface MsfwrCode {
   /** @pattern ^[A-F0-9]{12}$ */
   code: string;
 }
 
-export interface DesklineStandingKey {
+export interface MsfwrStandingKey {
   /** @pattern ^[A-Za-z0-9_-]{43}$ */
   key: string;
   /** @maxLength 64 */
   name?: string;
 }
 
-export interface DesklineCall {
+export interface MsfwrCall {
   /** @maxLength 64 */
   name?: string;
 }
 
-export interface DesklineCallQuery {
+export interface MsfwrCallQuery {
   /**
      * @maxItems 50
      * @items.pattern ^[A-F0-9]{12}$
@@ -90,39 +90,39 @@ export interface DesklineCallQuery {
   codes: string[];
 }
 
-export type DesklineCallListCallsItem = {
+export type MsfwrCallListCallsItem = {
   code: string;
   name: string;
 };
 
-export type DesklineCallListPresenceItemState = typeof DesklineCallListPresenceItemState[keyof typeof DesklineCallListPresenceItemState];
+export type MsfwrCallListPresenceItemState = typeof MsfwrCallListPresenceItemState[keyof typeof MsfwrCallListPresenceItemState];
 
 
-export const DesklineCallListPresenceItemState = {
+export const MsfwrCallListPresenceItemState = {
   online: 'online',
   busy: 'busy',
 } as const;
 
-export type DesklineCallListPresenceItem = {
+export type MsfwrCallListPresenceItem = {
   code: string;
   name: string;
-  state: DesklineCallListPresenceItemState;
+  state: MsfwrCallListPresenceItemState;
 };
 
-export interface DesklineCallList {
-  calls: DesklineCallListCallsItem[];
-  presence?: DesklineCallListPresenceItem[];
+export interface MsfwrCallList {
+  calls: MsfwrCallListCallsItem[];
+  presence?: MsfwrCallListPresenceItem[];
 }
 
-export interface DesklineInvite {
+export interface MsfwrInvite {
   code: string;
   token: string;
 }
 
-export type DesklineLinkCreateTtlHours = typeof DesklineLinkCreateTtlHours[keyof typeof DesklineLinkCreateTtlHours];
+export type MsfwrLinkCreateTtlHours = typeof MsfwrLinkCreateTtlHours[keyof typeof MsfwrLinkCreateTtlHours];
 
 
-export const DesklineLinkCreateTtlHours = {
+export const MsfwrLinkCreateTtlHours = {
   NUMBER_1: 1,
   NUMBER_2: 2,
   NUMBER_4: 4,
@@ -135,22 +135,22 @@ export const DesklineLinkCreateTtlHours = {
   NUMBER_120: 120,
 } as const;
 
-export interface DesklineLinkCreate {
+export interface MsfwrLinkCreate {
   /** @pattern ^[A-Za-z0-9_-]{43}$ */
   key: string;
   /** @maxLength 64 */
   name?: string;
-  ttlHours?: DesklineLinkCreateTtlHours;
+  ttlHours?: MsfwrLinkCreateTtlHours;
 }
 
-export interface DesklineLinkRegister {
+export interface MsfwrLinkRegister {
   /** @maxLength 64 */
   id: string;
   /** @pattern ^[A-Za-z0-9_-]{43}$ */
   key: string;
 }
 
-export interface DesklineLink {
+export interface MsfwrLink {
   id: string;
   /** @pattern ^L[0-9A-F]{11}$ */
   code: string;
@@ -161,13 +161,13 @@ export interface DesklineLink {
   sessions: number;
 }
 
-export interface DesklineLinkStatus {
-  link: DesklineLink;
+export interface MsfwrLinkStatus {
+  link: MsfwrLink;
   online: boolean;
   busy: boolean;
 }
 
-export interface DesklineViewer {
+export interface MsfwrViewer {
   token: string;
   verification: string;
   preapproved: boolean;
@@ -177,7 +177,7 @@ export interface HealthStatus {
   status: string;
 }
 
-export type GetDesklineLinkStatusParams = {
+export type GetMsfwrLinkStatusParams = {
 id: string;
 /**
  * @pattern ^[A-Za-z0-9_-]{43}$
@@ -185,7 +185,7 @@ id: string;
 key: string;
 };
 
-export type GetDesklineFrameParams = {
+export type GetMsfwrFrameParams = {
 /**
  * @minimum 0
  */
