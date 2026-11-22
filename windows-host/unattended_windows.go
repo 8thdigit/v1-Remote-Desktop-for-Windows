@@ -199,6 +199,7 @@ func runUnattended(configPath string, config unattendedConfig, announce, openWin
 	worker := make(chan struct{})
 
 	instance, _, _ := getModule.Call(0)
+	registerWindowMessage := user.NewProc("RegisterWindowMessageW")
 	trayCreated, _, _ := registerWindowMessage.Call(uintptr(unsafe.Pointer(textPtr("TaskbarCreated"))))
 
 	state := "ready"

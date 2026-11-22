@@ -21,13 +21,14 @@ If you installed the older Msfwr preview, uninstall it separately from Windows S
    to end the request. In this attended mode there is no automatic approval.
 4. The helper can enable remote input from the viewer. The Windows user can
    stop the session with **Ctrl+2**, **F12**, or **Stop sharing** on the
-   always-on-top indicator. The setup window minimizes to the taskbar on
-   approval. Its taskbar icon shows a live badge when Windows supports
-   overlays; click the taskbar button to restore the client and see session
-   status and the **Stop sharing** button. Shift-right-click its taskbar button to open the Windows system
-   menu with **Stop sharing** and **Close** (or open the window and press
-   Alt+Space). Closing the app or the indicator ends the session. The helper
-   can use **End session**. Locking Windows stops the host session.
+   always-on-top indicator. Msfwr never shows a taskbar button: the setup
+   window is a tool window (WS_EX_TOOLWINDOW), so it only minimizes to the
+   desktop, not the taskbar. Restore it from Alt+Tab, Task View (Win+Tab), or
+   by launching the app again. While sharing is live the window title changes
+   to mark it, and the topmost indicator stays visible. Press Alt+Space on the
+   window to open the system menu with **Stop sharing** and **Close**. Closing
+   the app or the indicator ends the session. The helper can use **End
+   session**. Locking Windows stops the host session.
 
 ## Unattended access (designated company PCs)
 
