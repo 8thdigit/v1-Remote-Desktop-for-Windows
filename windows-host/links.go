@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -283,4 +286,94 @@ func savedLinkRelay(linksPath, id string, now time.Time) string {
 		}
 	}
 	return ""
+}
+
+// linkEntry is a saved link paired with its position in the links file, for
+// menu ids that map back to one specific link.
+type linkEntry struct {
+	url string
+	id  string
+}
+
+// listLinkEntries summarizes live (unexpired) links for the tray menu.
+func listLinkEntries(linksPath string, now time.Time) []linkEntry {
+	if linksPath == "" {
+		return nil
+	}
+	all, err := loadLinks(linksPath, now)
+	if err != nil {
+		return []linkEntry{{url: "Saved links could not be read: " + err.Error()}}
+	}
+	fresh := make([]savedLink, 0, len(all))
+	for _, l := range all {
+		if !l.expired(now) {
+			fresh = append(fresh, l)
+		}
+	}
+	if len(fresh) != len(all) {
+		_ = saveLinks(linksPath, fresh)
+	}
+	out := make([]linkEntry, 0, len(fresh))
+	for _, l := range fresh {
+		line := l.shareURL() + "  (" + timeLeft(l.ExpiresAt, now) + ")"
+		if l.Name != "" {
+			line = l.Name + ": " + line
+		}
+		out = append(out, linkEntry{url: line, id: l.ID})
+	}
+	return out
+}
+
+// defaultLinkHours is the validity preselected when creating a remote access
+// URL: 24 hours, per product requirements.
+const defaultLinkHours = 24
+
+// pickValidity asks how long a new remote access link stays valid. The
+// default is 24 hours; the user can choose other values such as 4 or 5 by
+// typing the number. It returns false if the user cancels.
+func pickValidity(window uintptr) (int, bool) {
+	text, ok := inputDialog(window, "Remote access URL validity",
+		"How long should this link stay valid?\n\n"+
+			"Pick hours: 1, 2, 4, 5, 8, 12, 24, 48, 72 or 120.\n"+
+			"(Default: 24 hours)")
+	if !ok {
+		return 0, false
+	}
+	trimmed := strings.TrimSpace(strings.ToLower(text))
+	if trimmed == "" {
+		return defaultLinkHours, true
+	}
+	hours, err := strconv.Atoi(trimmed)
+	if err != nil || !validLinkHours(hours) {
+		messageBox.Call(window, uintptr(unsafe.Pointer(textPtr("Choose one of: 1, 2, 4, 5, 8, 12, 24, 48, 72, 120 hours."))),
+			uintptr(unsafe.Pointer(textPtr("winss132r"))), 0x30) // MB_ICONWARNING
+		return 0, false
+	}
+	return hours, true
+}
+
+// inputDialog asks for one line of text with a prefilled default. It uses a
+// Windows Forms InputBox through PowerShell so no custom dialog code is
+// needed; when PowerShell is unavailable the default is accepted silently.
+func inputDialog(window uintptr, title, prompt string) (string, bool) {
+	_ = window
+	script := "Add-Type -AssemblyName Microsoft.VisualBasic | Out-Null; " +
+		"$v = [Microsoft.VisualBasic.Interaction]::InputBox(" +
+		quotePS(prompt) + ", " + quotePS(title) + ", '" + defaultLinkHoursLabel() + "'); " +
+		"[Console]::Out.Write($v)"
+	cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-STA", "-Command", script)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	out, err := cmd.Output()
+	if err != nil && len(out) == 0 {
+		return "", true // fall back to the default when there is no dialog host
+	}
+	return strings.TrimSpace(string(out)), true
+}
+
+func quotePS(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
+}
+
+func defaultLinkHoursLabel() string {
+	return strconv.Itoa(defaultLinkHours)
 }

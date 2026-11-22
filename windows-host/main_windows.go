@@ -186,7 +186,11 @@ func serveUnattended(ctx context.Context, origin, key, name, linksPath string, s
 		}
 	}
 	var callUntil time.Time
-	pendingLink := make(chan linkRequest, 1)
+	// pending holds a link the user asked the UI to create whose relay
+	// creation has not been confirmed yet; it survives a round restart so the
+	// request is retried instead of being lost. The UI reads len(pending) > 0
+	// to know a create is still in flight (dedupe).
+	pending := make(chan linkRequest, 1)
 	for ctx.Err() == nil {
 		if !onDefaultDesktop() {
 			callUntil = time.Time{}
@@ -196,7 +200,34 @@ func serveUnattended(ctx context.Context, origin, key, name, linksPath string, s
 			}
 			continue
 		}
-		served, err := unattendedRound(ctx, origin, key, name, stopSession, initiate, linksPath, newLink, pendingLink, &callUntil, updates)
+		// Retry a link whose creation did not finish before the last round
+		// ended (relay offline, error, or session raced ahead of it).
+		for {
+			select {
+			case req := <-pending:
+				rc, err := newRelay(origin)
+				var created *remoteLink
+				if err == nil {
+					ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+					created, err = rc.createLink(ctx, key, req.name, req.hours)
+					cancel()
+				}
+				if err != nil {
+					updates <- unattendedUpdate{state: "ready", text: "Could not create the remote access URL: " + err.Error()}
+					continue
+				}
+				stored := savedLink{ID: created.ID, Code: created.Code, Key: key, Name: req.name, Relay: origin, CreatedAt: created.CreatedAt, ExpiresAt: created.ExpiresAt}
+				if linksPath != "" {
+					current, _ := loadLinks(linksPath, time.Now())
+					_ = saveLinks(linksPath, addLink(current, stored, time.Now()))
+				}
+				updates <- unattendedUpdate{state: "ready", text: "Remote access link is live: share " + stored.shareURL() + " (" + timeLeft(stored.ExpiresAt, time.Now()) + ")"}
+				continue
+			default:
+			}
+			break
+		}
+		served, err := unattendedRound(ctx, origin, key, name, stopSession, initiate, linksPath, newLink, pending, &callUntil, updates)
 		if ctx.Err() != nil {
 			return
 		}
@@ -234,7 +265,7 @@ func serveUnattended(ctx context.Context, origin, key, name, linksPath string, s
 // newLink carries links the user asked the UI to create; pendingLink holds
 // one whose relay creation has not been confirmed yet, so it is retried
 // instead of being lost across rounds.
-func unattendedRound(parent context.Context, origin, key, name string, stopSession, initiate <-chan struct{}, linksPath string, newLink <-chan linkRequest, pendingLink chan<- linkRequest, callUntil *time.Time, updates chan<- unattendedUpdate) (served bool, err error) {
+func unattendedRound(parent context.Context, origin, key, name string, stopSession, initiate <-chan struct{}, linksPath string, newLink <-chan linkRequest, pendingLink chan linkRequest, callUntil *time.Time, updates chan<- unattendedUpdate) (served bool, err error) {
 	r, err := newRelay(origin)
 	if err != nil {
 		return false, err
@@ -371,21 +402,24 @@ func unattendedRound(parent context.Context, origin, key, name string, stopSessi
 				return false, err
 			}
 		case req := <-newLink:
-			select {
-			case pendingLink <- req: // remember it if creation fails below
-			default:
-			}
+			pendingLink <- req // remembered if creation below fails or errors
 			createLink(req)
-			select {
-			case got := <-pendingLink: // cleared once the link exists
-				if got.ID() == req.ID() {
-					break
-				}
-				pendingLink <- got
-			default:
-			}
+			drainRequest(pendingLink, req)
 		case <-wait.C:
 		}
 	}
 	return false, nil
+}
+
+// drainRequest removes req from a full pending channel, if it is still the
+// request at the head (createLink finished handling it). A different request
+// that raced in is put back for the next round.
+func drainRequest(pending chan linkRequest, req linkRequest) {
+	select {
+	case got := <-pending:
+		if got != req {
+			pending <- got
+		}
+	default:
+	}
 }
