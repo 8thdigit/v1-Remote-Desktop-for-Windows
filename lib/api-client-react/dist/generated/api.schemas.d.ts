@@ -63,10 +63,17 @@ export interface MsfwrStandingKey {
     key: string;
     /** @maxLength 64 */
     name?: string;
+    /**
+       * RA ID this PC's remote access points to (RA-123456 or 123456); empty for none
+       * @maxLength 16
+       */
+    ra?: string;
 }
 export interface MsfwrCall {
     /** @maxLength 64 */
     name?: string;
+    /** @maxLength 16 */
+    ra?: string;
 }
 export interface MsfwrCallQuery {
     /**
@@ -93,9 +100,22 @@ export interface MsfwrCallList {
     calls: MsfwrCallListCallsItem[];
     presence?: MsfwrCallListPresenceItem[];
 }
+/**
+ * Unattended hosts: whether the RA ID they named belongs to an active company
+ */
+export type MsfwrInviteRaStatus = typeof MsfwrInviteRaStatus[keyof typeof MsfwrInviteRaStatus];
+export declare const MsfwrInviteRaStatus: {
+    readonly none: "none";
+    readonly ok: "ok";
+    readonly unknown: "unknown";
+};
 export interface MsfwrInvite {
     code: string;
     token: string;
+    /** Unattended hosts: whether the RA ID they named belongs to an active company */
+    raStatus?: MsfwrInviteRaStatus;
+    /** The company name behind the RA ID */
+    raName?: string;
 }
 export type MsfwrLinkCreateTtlHours = typeof MsfwrLinkCreateTtlHours[keyof typeof MsfwrLinkCreateTtlHours];
 export declare const MsfwrLinkCreateTtlHours: {
@@ -122,16 +142,197 @@ export interface MsfwrLinkRegister {
     id: string;
     /** @pattern ^[A-Za-z0-9_-]{43}$ */
     key: string;
+    /**
+       * Restores a link the relay lost on restart
+       * @pattern ^[0-9]{6}$
+       */
+    pin?: string;
+    /** @maxLength 64 */
+    name?: string;
+    createdAt?: number;
+    expiresAt?: number;
 }
 export interface MsfwrLink {
     id: string;
     /** @pattern ^L[0-9A-F]{11}$ */
     code: string;
+    /**
+       * The access code viewers enter on the link page
+       * @pattern ^[0-9]{6}$
+       */
+    pin?: string;
     name: string;
     createdAt: number;
     expiresAt: number;
+    ttlHours?: number;
     /** @minimum 0 */
     sessions: number;
+}
+export interface MsfwrLinkInfo {
+    code: string;
+    name: string;
+    online: boolean;
+    busy: boolean;
+    expiresAt: number;
+}
+export interface MsfwrLinkJoin {
+    /** @pattern ^L[0-9A-F]{11}$ */
+    code: string;
+    /** @maxLength 12 */
+    pin: string;
+}
+export type MsfwrRequestStatus = typeof MsfwrRequestStatus[keyof typeof MsfwrRequestStatus];
+export declare const MsfwrRequestStatus: {
+    readonly waiting: "waiting";
+    readonly accepted: "accepted";
+    readonly missed: "missed";
+};
+export interface MsfwrRequest {
+    id: string;
+    ra?: string;
+    name: string;
+    at: number;
+    until: number;
+    status: MsfwrRequestStatus;
+    closedAt?: number;
+    acceptedBy?: string;
+}
+export type MsfwrRaPcState = typeof MsfwrRaPcState[keyof typeof MsfwrRaPcState];
+export declare const MsfwrRaPcState: {
+    readonly online: "online";
+    readonly busy: "busy";
+};
+export interface MsfwrRaPc {
+    id: string;
+    name: string;
+    state: MsfwrRaPcState;
+}
+export interface MsfwrInbox {
+    raId: string;
+    company: string;
+    requests: MsfwrRequest[];
+    pcs: MsfwrRaPc[];
+}
+export interface MsfwrAccept {
+    /** @maxLength 64 */
+    id: string;
+}
+export interface MsfwrConnectPc {
+    /** @maxLength 64 */
+    pc: string;
+}
+export type AccountRole = typeof AccountRole[keyof typeof AccountRole];
+export declare const AccountRole: {
+    readonly admin: "admin";
+    readonly company: "company";
+};
+export interface Account {
+    id: string;
+    username: string;
+    displayName: string;
+    role: AccountRole;
+    raId: string;
+    disabled: boolean;
+    createdAt: number;
+    lastLoginAt?: number;
+}
+export interface AccountList {
+    users: Account[];
+}
+export type AccountCreateRole = typeof AccountCreateRole[keyof typeof AccountCreateRole];
+export declare const AccountCreateRole: {
+    readonly admin: "admin";
+    readonly company: "company";
+};
+export interface AccountCreate {
+    /** @maxLength 64 */
+    username: string;
+    /** @maxLength 80 */
+    displayName?: string;
+    /** @maxLength 200 */
+    password: string;
+    role: AccountCreateRole;
+    /**
+       * Optional; six digits. A unique one is generated when empty.
+       * @maxLength 16
+       */
+    raId?: string;
+}
+export type AccountUpdateRole = typeof AccountUpdateRole[keyof typeof AccountUpdateRole];
+export declare const AccountUpdateRole: {
+    readonly admin: "admin";
+    readonly company: "company";
+};
+export interface AccountUpdate {
+    /** @maxLength 80 */
+    displayName?: string;
+    /** @maxLength 200 */
+    password?: string;
+    role?: AccountUpdateRole;
+    disabled?: boolean;
+    /** @maxLength 16 */
+    raId?: string;
+}
+export interface AuthStatus {
+    setupRequired: boolean;
+    user?: Account;
+}
+export interface AuthSetup {
+    /** @maxLength 32 */
+    setupCode: string;
+    /** @maxLength 64 */
+    username: string;
+    /** @maxLength 80 */
+    displayName?: string;
+    /** @maxLength 200 */
+    password: string;
+}
+export interface AuthLogin {
+    /** @maxLength 64 */
+    username: string;
+    /** @maxLength 200 */
+    password: string;
+}
+export interface PasswordChange {
+    /** @maxLength 200 */
+    current: string;
+    /** @maxLength 200 */
+    next: string;
+}
+export type AdminSessionMode = typeof AdminSessionMode[keyof typeof AdminSessionMode];
+export declare const AdminSessionMode: {
+    readonly unattended: "unattended";
+    readonly attended: "attended";
+    readonly link: "link";
+};
+export type AdminSessionState = typeof AdminSessionState[keyof typeof AdminSessionState];
+export declare const AdminSessionState: {
+    readonly waiting: "waiting";
+    readonly pending: "pending";
+    readonly live: "live";
+};
+export interface AdminSession {
+    id: string;
+    name: string;
+    mode: AdminSessionMode;
+    state: AdminSessionState;
+    ra?: string;
+    operator?: string;
+    createdAt: number;
+    liveAt?: number;
+}
+export type AdminOverviewActivityItem = {
+    at: number;
+    kind: string;
+    actor?: string;
+    text: string;
+};
+export interface AdminOverview {
+    live: AdminSession[];
+    pcs: AdminSession[];
+    requests: MsfwrRequest[];
+    activity: AdminOverviewActivityItem[];
+    storage: string;
 }
 export interface MsfwrLinkStatus {
     link: MsfwrLink;
@@ -152,6 +353,12 @@ export type GetMsfwrLinkStatusParams = {
      * @pattern ^[A-Za-z0-9_-]{43}$
      */
     key: string;
+};
+export type GetMsfwrLinkInfoParams = {
+    /**
+     * @pattern ^L[0-9A-F]{11}$
+     */
+    code: string;
 };
 export type GetMsfwrFrameParams = {
     /**

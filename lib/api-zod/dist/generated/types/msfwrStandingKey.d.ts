@@ -10,5 +10,10 @@ export interface MsfwrStandingKey {
     key: string;
     /** @maxLength 64 */
     name?: string;
+    /**
+       * RA ID this PC's remote access points to (RA-123456 or 123456); empty for none
+       * @maxLength 16
+       */
+    ra?: string;
 }
 //# sourceMappingURL=msfwrStandingKey.d.ts.map

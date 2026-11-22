@@ -5,8 +5,13 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { MsfwrInviteRaStatus } from './msfwrInviteRaStatus';
 export interface MsfwrInvite {
     code: string;
     token: string;
+    /** Unattended hosts: whether the RA ID they named belongs to an active company */
+    raStatus?: MsfwrInviteRaStatus;
+    /** The company name behind the RA ID */
+    raName?: string;
 }
 //# sourceMappingURL=msfwrInvite.d.ts.map

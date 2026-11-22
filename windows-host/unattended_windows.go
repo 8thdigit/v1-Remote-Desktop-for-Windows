@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
-	"strings"
+	"sync"
 	"syscall"
 	"time"
 	"unsafe"
@@ -111,6 +111,10 @@ func ask(window uintptr, text string) bool {
 	return r == 6
 }
 
+func warn(window uintptr, text string) {
+	messageBox.Call(window, uintptr(unsafe.Pointer(textPtr(text))), uintptr(unsafe.Pointer(textPtr("Msfwr"))), 0x30) // MB_ICONWARNING
+}
+
 type iconInfo struct {
 	icon             int32
 	hotX, hotY       uint32
@@ -194,10 +198,29 @@ func runUnattended(configPath string, config unattendedConfig, announce, openWin
 	updates := make(chan unattendedUpdate, 16)
 	stopSession := make(chan struct{}, 1)
 	initiate := make(chan struct{}, 1)
-	newLink := make(chan linkRequest, 1)
-	inflight := &linkInflight{}
+	reregister := make(chan struct{}, 1)
 	linksPath := linksPathFor(configPath)
 	worker := make(chan struct{})
+	// The RA ID can change while the worker runs (Save in the window).
+	var raMu sync.Mutex
+	ra := config.RA
+	raOf := func() string {
+		raMu.Lock()
+		defer raMu.Unlock()
+		return ra
+	}
+	raStatus, raName := "", ""
+	// Remote access URL: linkBusy is set while a create or clear runs in the
+	// background (network calls never run on this window thread), and
+	// linkNote is the latest message about the URL.
+	linkBusy := false
+	linkNote := ""
+	linkUpdate := func(text string) {
+		select {
+		case updates <- unattendedUpdate{link: true, text: text}:
+		case <-ctx.Done():
+		}
+	}
 
 	instance, _, _ := getModule.Call(0)
 	registerWindowMessage := user.NewProc("RegisterWindowMessageW")
@@ -309,26 +332,14 @@ func runUnattended(configPath string, config unattendedConfig, announce, openWin
 			item(mfGrayed, stopItem, "Stop current session")
 		}
 		item(mfSeparator, 0, "")
-		if state != "connected" {
-			item(mfString, createLink, "Create Remote Access URL… (default 24 h)")
+		if l, _ := loadLink(linksPath, time.Now()); l != nil {
+			item(mfGrayed, 0, l.shareURL()+"  (access code "+l.Pin+")")
+			item(mfString, copyLinkButton, "Copy remote access URL and code")
+			item(mfString, clearLinkButton, "Clear remote access URL")
+		} else if state != "connected" && !linkBusy {
+			item(mfString, createLink, "Create remote access URL (valid 24 hours)")
 		} else {
-			item(mfGrayed, createLink, "Create Remote Access URL… (default 24 h)")
-		}
-		activeLinks := listLinkEntries(linksPath, time.Now())
-		for i, entry := range activeLinks {
-			if i >= maxMenuLinks {
-				break
-			}
-			if entry.id == "" {
-				item(mfGrayed, 0, entry.url)
-				continue
-			}
-			item(mfGrayed, 0, entry.url)
-			item(mfString, uintptr(linkBase+2*i), "Copy URL "+twoDigits(i+1))
-			item(mfString, uintptr(linkBase+2*i+1), "Revoke URL "+twoDigits(i+1))
-		}
-		if len(activeLinks) > 0 {
-			item(mfString, stopAllItem, "Stop all sessions now")
+			item(mfGrayed, createLink, "Create remote access URL (valid 24 hours)")
 		}
 		item(mfSeparator, 0, "")
 		item(mfString, disableItem, "Turn off unattended access…")
@@ -400,18 +411,72 @@ func runUnattended(configPath string, config unattendedConfig, announce, openWin
 				default:
 				}
 			case createLink:
-				if hours, ok := pickValidity(owner(window)); ok {
-					req := newLinkRequest(hostName, hours)
-					if inflight.begin(req) {
-						select {
-						case newLink <- req:
-						default:
-						}
-					}
+				// lParam carries the validity the window's list shows.
+				hours := int(lParam)
+				if !validLinkHours(hours) {
+					hours = defaultLinkHours
 				}
-			case stopAllItem:
+				if linkBusy {
+					break
+				}
+				if l, _ := loadLink(linksPath, time.Now()); l != nil &&
+					!ask(owner(window), "Replace the current remote access URL?\n\nThe current URL and access code stop working, and a new URL is created.") {
+					break
+				}
+				linkBusy = true
+				linkNote = "Creating the remote access URL…"
+				go func() {
+					cctx, stop := context.WithTimeout(ctx, 15*time.Second)
+					defer stop()
+					l, err := createRemoteLink(cctx, linksPath, config.Relay, config.Key, hostName, hours)
+					if err != nil {
+						linkUpdate("Could not create the remote access URL: " + err.Error())
+						return
+					}
+					linkUpdate("Remote access URL created. Copy it and share it with its access code (valid " + formatValidity(l.Hours) + ").")
+				}()
+			case copyLinkButton:
+				if l, _ := loadLink(linksPath, time.Now()); l != nil && copyText(window, l.shareText()) {
+					linkNote = "Copied the URL and access code to the clipboard."
+				}
+			case clearLinkButton:
+				if linkBusy {
+					break
+				}
+				if l, _ := loadLink(linksPath, time.Now()); l == nil ||
+					!ask(owner(window), "Clear the remote access URL?\n\nThe URL and its access code stop working at once. A session that is already open is not ended.") {
+					break
+				}
+				linkBusy = true
+				linkNote = "Clearing the remote access URL…"
+				go func() {
+					cctx, stop := context.WithTimeout(ctx, 10*time.Second)
+					defer stop()
+					if err := clearRemoteLink(cctx, linksPath); err != nil {
+						linkUpdate("Remote access URL " + err.Error())
+						return
+					}
+					linkUpdate("Remote access URL cleared. Create a new one when you need it.")
+				}()
+			case saveRAButton:
+				value := ""
+				if panel != nil {
+					value = editText(panel.ra)
+				}
+				saved, err := setUnattendedRA(configPath, value)
+				if err != nil {
+					warn(owner(window), "Could not save the RA ID: "+err.Error()+".")
+					break
+				}
+				raMu.Lock()
+				ra = saved.RA
+				raMu.Unlock()
+				raStatus, raName = "", ""
+				if panel != nil {
+					setText(panel.ra, formatRA(saved.RA))
+				}
 				select {
-				case stopSession <- struct{}{}:
+				case reregister <- struct{}{}:
 				default:
 				}
 			case disableItem:
@@ -423,22 +488,6 @@ func runUnattended(configPath string, config unattendedConfig, announce, openWin
 				if ask(owner(window), "Exit Msfwr?\n\nAny remote session ends. Unattended access stays on and starts again the next time you sign in.") {
 					destroyWindow.Call(window)
 				}
-			default:
-				if id := int(wParam & 0xffff); id >= linkBase && id < linkBase+2*maxMenuLinks {
-					entries := listLinkEntries(linksPath, time.Now())
-					i := (id - linkBase) / 2
-					if i < len(entries) && entries[i].id != "" {
-						if (id-linkBase)%2 == 0 {
-							if copyText(window, entries[i].url) {
-								notify("Remote access URL copied", "Share it with anyone who needs to connect. Multiple sessions can use it until it expires.")
-							}
-						} else if err := revokeLink(linksPath, entries[i].id, time.Now()); err != nil {
-							notify("Could not revoke the URL", err.Error())
-						} else {
-							notify("Remote access URL revoked", "The shared link no longer opens sessions on this PC.")
-						}
-					}
-				}
 			}
 			panel.update()
 			return 0
@@ -448,6 +497,17 @@ func runUnattended(configPath string, config unattendedConfig, announce, openWin
 			for {
 				select {
 				case next := <-updates:
+					if next.link {
+						linkBusy = false
+						linkNote = next.text
+						changed = true
+						continue
+					}
+					if next.ra {
+						raStatus, raName = next.raStatus, next.raName
+						changed = true
+						continue
+					}
 					switch {
 					case next.state == "connected" && state != "connected":
 						connections++
@@ -461,9 +521,6 @@ func runUnattended(configPath string, config unattendedConfig, announce, openWin
 					}
 					state = next.state
 					detail = next.text
-					if strings.Contains(next.text, "link is live") || strings.Contains(next.text, "Could not create") {
-						inflight.done()
-					}
 					if state == "connected" {
 						detail = connectStatus(connections) + ": IT can view and control this PC. Ctrl+2 or F12 stops."
 					}
@@ -510,6 +567,11 @@ func runUnattended(configPath string, config unattendedConfig, announce, openWin
 	// still offers every control.
 	panel, _ = newControlPanel(instance, window, func() panelView {
 		now := time.Now()
+		l, err := loadLink(linksPath, now)
+		note := linkNote
+		if err != nil {
+			note = "The saved remote access URL could not be read: " + err.Error()
+		}
 		return panelView{
 			state:    state,
 			headline: stateLabel(state, connections),
@@ -520,7 +582,12 @@ func runUnattended(configPath string, config unattendedConfig, announce, openWin
 			active:   sessions.activeText(now),
 			count:    "Connections since Msfwr started: " + twoDigits(connections),
 			history:  sessions.lines(now),
-			links:    listLinkEntries(linksPath, now),
+			ra:       formatRA(raOf()),
+			raText:   raStatusText(raOf(), raStatus, raName),
+			link:     l,
+			linkText: linkSummary(l, now),
+			linkNote: note,
+			linkBusy: linkBusy,
 		}
 	})
 	if openWindow && panel != nil {
@@ -529,7 +596,7 @@ func runUnattended(configPath string, config unattendedConfig, announce, openWin
 
 	go func() {
 		defer close(worker)
-		serveUnattended(ctx, config.Relay, config.Key, hostName, linksPath, stopSession, initiate, newLink, updates)
+		serveUnattended(ctx, config.Relay, config.Key, hostName, linksPath, raOf, reregister, stopSession, initiate, updates)
 	}()
 
 	var msg indicatorMessage

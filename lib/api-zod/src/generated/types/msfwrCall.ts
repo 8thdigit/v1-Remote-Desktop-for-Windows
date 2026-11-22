@@ -9,4 +9,6 @@
 export interface MsfwrCall {
   /** @maxLength 64 */
   name?: string;
+  /** @maxLength 16 */
+  ra?: string;
 }

@@ -12,8 +12,24 @@ services:
     healthCheckPath: /api/healthz
     numInstances: 1
     autoDeploy: true
+    # Login accounts (companies, admins) are saved to this disk. Without a
+    # disk or DATABASE_URL they are lost on every deploy.
+    disk:
+      name: msfwr-data
+      mountPath: /var/data
+      sizeGB: 1
     envVars:
       - key: NODE_ENV
         value: production
       - key: NODE_VERSION
         value: "24"
+      - key: MSFWR_DATA_DIR
+        value: /var/data
+      # Signs login cookies; keep it stable so sign-ins survive restarts.
+      - key: SESSION_SECRET
+        generateValue: true
+      # The first admin account (login ID "admin" unless ADMIN_USERNAME is
+      # set) is created from this when no account exists yet. Without it the
+      # relay logs a one-time setup code to use at /admin instead.
+      - key: ADMIN_PASSWORD
+        sync: false

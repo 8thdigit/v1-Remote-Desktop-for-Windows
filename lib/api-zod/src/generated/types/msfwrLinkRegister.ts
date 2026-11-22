@@ -11,4 +11,13 @@ export interface MsfwrLinkRegister {
   id: string;
   /** @pattern ^[A-Za-z0-9_-]{43}$ */
   key: string;
+  /**
+     * Restores a link the relay lost on restart
+     * @pattern ^[0-9]{6}$
+     */
+  pin?: string;
+  /** @maxLength 64 */
+  name?: string;
+  createdAt?: number;
+  expiresAt?: number;
 }

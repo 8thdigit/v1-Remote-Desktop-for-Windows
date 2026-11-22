@@ -16,26 +16,42 @@ export declare const HealthCheckResponse: zod.ZodObject<{
 export declare const CreateMsfwrInviteResponse: zod.ZodObject<{
     code: zod.ZodString;
     token: zod.ZodString;
+    raStatus: zod.ZodOptional<zod.ZodEnum<{
+        none: "none";
+        ok: "ok";
+        unknown: "unknown";
+    }>>;
+    raName: zod.ZodOptional<zod.ZodString>;
 }, zod.z.core.$strip>;
 /**
  * Unattended host registration. The access code is derived from the host's saved key; a viewer that joins it is live without approval.
  */
 export declare const registerMsfwrStandingBodyKeyRegExp: RegExp;
 export declare const registerMsfwrStandingBodyNameMax = 64;
+export declare const registerMsfwrStandingBodyRaMax = 16;
 export declare const RegisterMsfwrStandingBody: zod.ZodObject<{
     key: zod.ZodString;
     name: zod.ZodOptional<zod.ZodString>;
+    ra: zod.ZodOptional<zod.ZodString>;
 }, zod.z.core.$strip>;
 export declare const RegisterMsfwrStandingResponse: zod.ZodObject<{
     code: zod.ZodString;
     token: zod.ZodString;
+    raStatus: zod.ZodOptional<zod.ZodEnum<{
+        none: "none";
+        ok: "ok";
+        unknown: "unknown";
+    }>>;
+    raName: zod.ZodOptional<zod.ZodString>;
 }, zod.z.core.$strip>;
 /**
  * An unattended host presses Initiate. Viewers that already know its access code see the request for two minutes and accept it by joining.
  */
 export declare const callMsfwrBodyNameMax = 64;
+export declare const callMsfwrBodyRaMax = 16;
 export declare const CallMsfwrBody: zod.ZodObject<{
     name: zod.ZodOptional<zod.ZodString>;
+    ra: zod.ZodOptional<zod.ZodString>;
 }, zod.z.core.$strip>;
 export declare const CallMsfwrResponse: zod.ZodVoid;
 /**
@@ -59,6 +75,377 @@ export declare const ListMsfwrCallsResponse: zod.ZodObject<{
             busy: "busy";
         }>;
     }, zod.z.core.$strip>>>;
+}, zod.z.core.$strip>;
+/**
+ * Create a shareable remote access URL from the client app, with a six-digit access code. Whoever opens the URL and enters the code connects to the PC without a prompt, until the link expires (24 hours by default) or is cleared on the PC. Requires the PC's unattended access key.
+ */
+export declare const createMsfwrLinkBodyKeyRegExp: RegExp;
+export declare const createMsfwrLinkBodyNameMax = 64;
+export declare const createMsfwrLinkBodyTtlHoursDefault = 24;
+export declare const CreateMsfwrLinkBody: zod.ZodObject<{
+    key: zod.ZodString;
+    name: zod.ZodOptional<zod.ZodString>;
+    ttlHours: zod.ZodDefault<zod.ZodUnion<readonly [zod.ZodLiteral<1>, zod.ZodLiteral<2>, zod.ZodLiteral<4>, zod.ZodLiteral<5>, zod.ZodLiteral<8>, zod.ZodLiteral<12>, zod.ZodLiteral<24>, zod.ZodLiteral<48>, zod.ZodLiteral<72>, zod.ZodLiteral<120>]>>;
+}, zod.z.core.$strip>;
+export declare const createMsfwrLinkResponseCodeRegExp: RegExp;
+export declare const createMsfwrLinkResponsePinRegExp: RegExp;
+export declare const createMsfwrLinkResponseSessionsMin = 0;
+export declare const CreateMsfwrLinkResponse: zod.ZodObject<{
+    id: zod.ZodString;
+    code: zod.ZodString;
+    pin: zod.ZodOptional<zod.ZodString>;
+    name: zod.ZodString;
+    createdAt: zod.ZodNumber;
+    expiresAt: zod.ZodNumber;
+    ttlHours: zod.ZodOptional<zod.ZodInt>;
+    sessions: zod.ZodInt;
+}, zod.z.core.$strip>;
+/**
+ * The PC sends its saved link again each time it registers, so the link is restored if the relay restarted. Only the PC that owns the link can restore it, because the link's code is derived from its key.
+ */
+export declare const registerMsfwrLinkBodyIdMax = 64;
+export declare const registerMsfwrLinkBodyKeyRegExp: RegExp;
+export declare const registerMsfwrLinkBodyPinRegExp: RegExp;
+export declare const registerMsfwrLinkBodyNameMax = 64;
+export declare const RegisterMsfwrLinkBody: zod.ZodObject<{
+    id: zod.ZodString;
+    key: zod.ZodString;
+    pin: zod.ZodOptional<zod.ZodString>;
+    name: zod.ZodOptional<zod.ZodString>;
+    createdAt: zod.ZodOptional<zod.ZodNumber>;
+    expiresAt: zod.ZodOptional<zod.ZodNumber>;
+}, zod.z.core.$strip>;
+export declare const registerMsfwrLinkResponseCodeRegExp: RegExp;
+export declare const registerMsfwrLinkResponsePinRegExp: RegExp;
+export declare const registerMsfwrLinkResponseSessionsMin = 0;
+export declare const RegisterMsfwrLinkResponse: zod.ZodObject<{
+    id: zod.ZodString;
+    code: zod.ZodString;
+    pin: zod.ZodOptional<zod.ZodString>;
+    name: zod.ZodString;
+    createdAt: zod.ZodNumber;
+    expiresAt: zod.ZodNumber;
+    ttlHours: zod.ZodOptional<zod.ZodInt>;
+    sessions: zod.ZodInt;
+}, zod.z.core.$strip>;
+/**
+ * Current state of a link for the client app: validity, whether the host is registered and online, and how many sessions were opened.
+ */
+export declare const getMsfwrLinkStatusQueryKeyRegExp: RegExp;
+export declare const GetMsfwrLinkStatusQueryParams: zod.ZodObject<{
+    id: zod.z.ZodCoercedString<unknown>;
+    key: zod.z.ZodCoercedString<unknown>;
+}, zod.z.core.$strip>;
+export declare const getMsfwrLinkStatusResponseLinkCodeRegExp: RegExp;
+export declare const getMsfwrLinkStatusResponseLinkPinRegExp: RegExp;
+export declare const getMsfwrLinkStatusResponseLinkSessionsMin = 0;
+export declare const GetMsfwrLinkStatusResponse: zod.ZodObject<{
+    link: zod.ZodObject<{
+        id: zod.ZodString;
+        code: zod.ZodString;
+        pin: zod.ZodOptional<zod.ZodString>;
+        name: zod.ZodString;
+        createdAt: zod.ZodNumber;
+        expiresAt: zod.ZodNumber;
+        ttlHours: zod.ZodOptional<zod.ZodInt>;
+        sessions: zod.ZodInt;
+    }, zod.z.core.$strip>;
+    online: zod.ZodBoolean;
+    busy: zod.ZodBoolean;
+}, zod.z.core.$strip>;
+/**
+ * Revoke a link at once; any live session under it is ended.
+ */
+export declare const revokeMsfwrLinkBodyIdMax = 64;
+export declare const revokeMsfwrLinkBodyKeyRegExp: RegExp;
+export declare const revokeMsfwrLinkBodyPinRegExp: RegExp;
+export declare const revokeMsfwrLinkBodyNameMax = 64;
+export declare const RevokeMsfwrLinkBody: zod.ZodObject<{
+    id: zod.ZodString;
+    key: zod.ZodString;
+    pin: zod.ZodOptional<zod.ZodString>;
+    name: zod.ZodOptional<zod.ZodString>;
+    createdAt: zod.ZodOptional<zod.ZodNumber>;
+    expiresAt: zod.ZodOptional<zod.ZodNumber>;
+}, zod.z.core.$strip>;
+export declare const RevokeMsfwrLinkResponse: zod.ZodVoid;
+/**
+ * Public facts about a shared remote access URL, for the page it opens: the PC name, whether the PC is online, and when the link expires.
+ */
+export declare const getMsfwrLinkInfoQueryCodeRegExp: RegExp;
+export declare const GetMsfwrLinkInfoQueryParams: zod.ZodObject<{
+    code: zod.z.ZodCoercedString<unknown>;
+}, zod.z.core.$strip>;
+export declare const GetMsfwrLinkInfoResponse: zod.ZodObject<{
+    code: zod.ZodString;
+    name: zod.ZodString;
+    online: zod.ZodBoolean;
+    busy: zod.ZodBoolean;
+    expiresAt: zod.ZodNumber;
+}, zod.z.core.$strip>;
+/**
+ * Open a session through a shared remote access URL. The viewer gives the link's access code; the PC connects without a prompt.
+ */
+export declare const joinMsfwrLinkBodyCodeRegExp: RegExp;
+export declare const joinMsfwrLinkBodyPinMax = 12;
+export declare const JoinMsfwrLinkBody: zod.ZodObject<{
+    code: zod.ZodString;
+    pin: zod.ZodString;
+}, zod.z.core.$strip>;
+export declare const JoinMsfwrLinkResponse: zod.ZodObject<{
+    token: zod.ZodString;
+    verification: zod.ZodString;
+    preapproved: zod.ZodBoolean;
+}, zod.z.core.$strip>;
+/**
+ * For the signed-in company: Initiate requests sent to its RA ID and the PCs whose remote access points to its RA ID.
+ */
+export declare const GetMsfwrInboxResponse: zod.ZodObject<{
+    raId: zod.ZodString;
+    company: zod.ZodString;
+    requests: zod.ZodArray<zod.ZodObject<{
+        id: zod.ZodString;
+        ra: zod.ZodOptional<zod.ZodString>;
+        name: zod.ZodString;
+        at: zod.ZodNumber;
+        until: zod.ZodNumber;
+        status: zod.ZodEnum<{
+            waiting: "waiting";
+            accepted: "accepted";
+            missed: "missed";
+        }>;
+        closedAt: zod.ZodOptional<zod.ZodNumber>;
+        acceptedBy: zod.ZodOptional<zod.ZodString>;
+    }, zod.z.core.$strip>>;
+    pcs: zod.ZodArray<zod.ZodObject<{
+        id: zod.ZodString;
+        name: zod.ZodString;
+        state: zod.ZodEnum<{
+            online: "online";
+            busy: "busy";
+        }>;
+    }, zod.z.core.$strip>>;
+}, zod.z.core.$strip>;
+export declare const acceptMsfwrRequestBodyIdMax = 64;
+export declare const AcceptMsfwrRequestBody: zod.ZodObject<{
+    id: zod.ZodString;
+}, zod.z.core.$strip>;
+export declare const AcceptMsfwrRequestResponse: zod.ZodObject<{
+    token: zod.ZodString;
+    verification: zod.ZodString;
+    preapproved: zod.ZodBoolean;
+}, zod.z.core.$strip>;
+/**
+ * Connect to an online PC whose remote access points to the company's RA ID.
+ */
+export declare const connectMsfwrPcBodyPcMax = 64;
+export declare const ConnectMsfwrPcBody: zod.ZodObject<{
+    pc: zod.ZodString;
+}, zod.z.core.$strip>;
+export declare const ConnectMsfwrPcResponse: zod.ZodObject<{
+    token: zod.ZodString;
+    verification: zod.ZodString;
+    preapproved: zod.ZodBoolean;
+}, zod.z.core.$strip>;
+export declare const GetAuthStatusResponse: zod.ZodObject<{
+    setupRequired: zod.ZodBoolean;
+    user: zod.ZodOptional<zod.ZodObject<{
+        id: zod.ZodString;
+        username: zod.ZodString;
+        displayName: zod.ZodString;
+        role: zod.ZodEnum<{
+            company: "company";
+            admin: "admin";
+        }>;
+        raId: zod.ZodString;
+        disabled: zod.ZodBoolean;
+        createdAt: zod.ZodNumber;
+        lastLoginAt: zod.ZodOptional<zod.ZodNumber>;
+    }, zod.z.core.$strip>>;
+}, zod.z.core.$strip>;
+export declare const setupAdminBodySetupCodeMax = 32;
+export declare const setupAdminBodyUsernameMax = 64;
+export declare const setupAdminBodyDisplayNameMax = 80;
+export declare const setupAdminBodyPasswordMax = 200;
+export declare const SetupAdminBody: zod.ZodObject<{
+    setupCode: zod.ZodString;
+    username: zod.ZodString;
+    displayName: zod.ZodOptional<zod.ZodString>;
+    password: zod.ZodString;
+}, zod.z.core.$strip>;
+export declare const SetupAdminResponse: zod.ZodObject<{
+    id: zod.ZodString;
+    username: zod.ZodString;
+    displayName: zod.ZodString;
+    role: zod.ZodEnum<{
+        company: "company";
+        admin: "admin";
+    }>;
+    raId: zod.ZodString;
+    disabled: zod.ZodBoolean;
+    createdAt: zod.ZodNumber;
+    lastLoginAt: zod.ZodOptional<zod.ZodNumber>;
+}, zod.z.core.$strip>;
+export declare const loginBodyUsernameMax = 64;
+export declare const loginBodyPasswordMax = 200;
+export declare const LoginBody: zod.ZodObject<{
+    username: zod.ZodString;
+    password: zod.ZodString;
+}, zod.z.core.$strip>;
+export declare const LoginResponse: zod.ZodObject<{
+    id: zod.ZodString;
+    username: zod.ZodString;
+    displayName: zod.ZodString;
+    role: zod.ZodEnum<{
+        company: "company";
+        admin: "admin";
+    }>;
+    raId: zod.ZodString;
+    disabled: zod.ZodBoolean;
+    createdAt: zod.ZodNumber;
+    lastLoginAt: zod.ZodOptional<zod.ZodNumber>;
+}, zod.z.core.$strip>;
+export declare const LogoutResponse: zod.ZodVoid;
+export declare const changePasswordBodyCurrentMax = 200;
+export declare const changePasswordBodyNextMax = 200;
+export declare const ChangePasswordBody: zod.ZodObject<{
+    current: zod.ZodString;
+    next: zod.ZodString;
+}, zod.z.core.$strip>;
+export declare const ChangePasswordResponse: zod.ZodVoid;
+export declare const ListUsersResponse: zod.ZodObject<{
+    users: zod.ZodArray<zod.ZodObject<{
+        id: zod.ZodString;
+        username: zod.ZodString;
+        displayName: zod.ZodString;
+        role: zod.ZodEnum<{
+            company: "company";
+            admin: "admin";
+        }>;
+        raId: zod.ZodString;
+        disabled: zod.ZodBoolean;
+        createdAt: zod.ZodNumber;
+        lastLoginAt: zod.ZodOptional<zod.ZodNumber>;
+    }, zod.z.core.$strip>>;
+}, zod.z.core.$strip>;
+export declare const createUserBodyUsernameMax = 64;
+export declare const createUserBodyDisplayNameMax = 80;
+export declare const createUserBodyPasswordMax = 200;
+export declare const createUserBodyRaIdMax = 16;
+export declare const CreateUserBody: zod.ZodObject<{
+    username: zod.ZodString;
+    displayName: zod.ZodOptional<zod.ZodString>;
+    password: zod.ZodString;
+    role: zod.ZodEnum<{
+        company: "company";
+        admin: "admin";
+    }>;
+    raId: zod.ZodOptional<zod.ZodString>;
+}, zod.z.core.$strip>;
+export declare const CreateUserResponse: zod.ZodObject<{
+    id: zod.ZodString;
+    username: zod.ZodString;
+    displayName: zod.ZodString;
+    role: zod.ZodEnum<{
+        company: "company";
+        admin: "admin";
+    }>;
+    raId: zod.ZodString;
+    disabled: zod.ZodBoolean;
+    createdAt: zod.ZodNumber;
+    lastLoginAt: zod.ZodOptional<zod.ZodNumber>;
+}, zod.z.core.$strip>;
+export declare const UpdateUserParams: zod.ZodObject<{
+    id: zod.z.ZodCoercedString<unknown>;
+}, zod.z.core.$strip>;
+export declare const updateUserBodyDisplayNameMax = 80;
+export declare const updateUserBodyPasswordMax = 200;
+export declare const updateUserBodyRaIdMax = 16;
+export declare const UpdateUserBody: zod.ZodObject<{
+    displayName: zod.ZodOptional<zod.ZodString>;
+    password: zod.ZodOptional<zod.ZodString>;
+    role: zod.ZodOptional<zod.ZodEnum<{
+        company: "company";
+        admin: "admin";
+    }>>;
+    disabled: zod.ZodOptional<zod.ZodBoolean>;
+    raId: zod.ZodOptional<zod.ZodString>;
+}, zod.z.core.$strip>;
+export declare const UpdateUserResponse: zod.ZodObject<{
+    id: zod.ZodString;
+    username: zod.ZodString;
+    displayName: zod.ZodString;
+    role: zod.ZodEnum<{
+        company: "company";
+        admin: "admin";
+    }>;
+    raId: zod.ZodString;
+    disabled: zod.ZodBoolean;
+    createdAt: zod.ZodNumber;
+    lastLoginAt: zod.ZodOptional<zod.ZodNumber>;
+}, zod.z.core.$strip>;
+export declare const DeleteUserParams: zod.ZodObject<{
+    id: zod.z.ZodCoercedString<unknown>;
+}, zod.z.core.$strip>;
+export declare const DeleteUserResponse: zod.ZodVoid;
+export declare const GetAdminOverviewResponse: zod.ZodObject<{
+    live: zod.ZodArray<zod.ZodObject<{
+        id: zod.ZodString;
+        name: zod.ZodString;
+        mode: zod.ZodEnum<{
+            link: "link";
+            unattended: "unattended";
+            attended: "attended";
+        }>;
+        state: zod.ZodEnum<{
+            waiting: "waiting";
+            live: "live";
+            pending: "pending";
+        }>;
+        ra: zod.ZodOptional<zod.ZodString>;
+        operator: zod.ZodOptional<zod.ZodString>;
+        createdAt: zod.ZodNumber;
+        liveAt: zod.ZodOptional<zod.ZodNumber>;
+    }, zod.z.core.$strip>>;
+    pcs: zod.ZodArray<zod.ZodObject<{
+        id: zod.ZodString;
+        name: zod.ZodString;
+        mode: zod.ZodEnum<{
+            link: "link";
+            unattended: "unattended";
+            attended: "attended";
+        }>;
+        state: zod.ZodEnum<{
+            waiting: "waiting";
+            live: "live";
+            pending: "pending";
+        }>;
+        ra: zod.ZodOptional<zod.ZodString>;
+        operator: zod.ZodOptional<zod.ZodString>;
+        createdAt: zod.ZodNumber;
+        liveAt: zod.ZodOptional<zod.ZodNumber>;
+    }, zod.z.core.$strip>>;
+    requests: zod.ZodArray<zod.ZodObject<{
+        id: zod.ZodString;
+        ra: zod.ZodOptional<zod.ZodString>;
+        name: zod.ZodString;
+        at: zod.ZodNumber;
+        until: zod.ZodNumber;
+        status: zod.ZodEnum<{
+            waiting: "waiting";
+            accepted: "accepted";
+            missed: "missed";
+        }>;
+        closedAt: zod.ZodOptional<zod.ZodNumber>;
+        acceptedBy: zod.ZodOptional<zod.ZodString>;
+    }, zod.z.core.$strip>>;
+    activity: zod.ZodArray<zod.ZodObject<{
+        at: zod.ZodNumber;
+        kind: zod.ZodString;
+        actor: zod.ZodOptional<zod.ZodString>;
+        text: zod.ZodString;
+    }, zod.z.core.$strip>>;
+    storage: zod.ZodString;
 }, zod.z.core.$strip>;
 export declare const joinMsfwrBodyCodeRegExp: RegExp;
 export declare const JoinMsfwrBody: zod.ZodObject<{
@@ -110,8 +497,8 @@ export declare const tickMsfwrResponseInputItemKeyMax = 24;
 export declare const TickMsfwrResponse: zod.ZodObject<{
     state: zod.ZodEnum<{
         waiting: "waiting";
-        pending: "pending";
         live: "live";
+        pending: "pending";
     }>;
     verification: zod.ZodOptional<zod.ZodString>;
     input: zod.ZodArray<zod.ZodObject<{
@@ -137,61 +524,5 @@ export declare const getMsfwrFrameQueryAfterMin = 0;
 export declare const GetMsfwrFrameQueryParams: zod.ZodObject<{
     after: zod.ZodOptional<zod.z.ZodCoercedNumber<unknown>>;
 }, zod.z.core.$strip>;
-/**
- * Create a shareable remote access URL from the client app. The host PC registers a waiting session under the link's code; every viewer that opens the shared URL starts a new session without approval, until the link expires (24 hours by default) or is revoked. Requires the unattended access key of the PC.
- */
-export declare const createMsfwrLinkBodyKeyRegExp: RegExp;
-export declare const createMsfwrLinkBodyNameMax = 64;
-export declare const CreateMsfwrLinkBody: zod.ZodObject<{
-    key: zod.ZodString;
-    name: zod.ZodOptional<zod.ZodString>;
-    ttlHours: zod.ZodOptional<zod.ZodUnion<readonly [zod.ZodLiteral<1>, zod.ZodLiteral<2>, zod.ZodLiteral<4>, zod.ZodLiteral<5>, zod.ZodLiteral<8>, zod.ZodLiteral<12>, zod.ZodLiteral<24>, zod.ZodLiteral<48>, zod.ZodLiteral<72>, zod.ZodLiteral<120>]>>;
-}, zod.z.core.$strip>;
-export declare const MsfwrLinkSchema: zod.ZodObject<{
-    id: zod.ZodString;
-    code: zod.ZodString;
-    name: zod.ZodString;
-    createdAt: zod.ZodNumber;
-    expiresAt: zod.ZodNumber;
-    ttlHours: zod.ZodUnion<readonly [zod.ZodLiteral<1>, zod.ZodLiteral<2>, zod.ZodLiteral<4>, zod.ZodLiteral<5>, zod.ZodLiteral<8>, zod.ZodLiteral<12>, zod.ZodLiteral<24>, zod.ZodLiteral<48>, zod.ZodLiteral<72>, zod.ZodLiteral<120>]>;
-    sessions: zod.ZodNumber;
-}, zod.z.core.$strip>;
-/**
- * The host re-registers its waiting session under an existing link id after each session ends, so the shared URL keeps accepting viewers until it expires or is revoked.
- */
-export declare const registerMsfwrLinkBodyIdMax = 64;
-export declare const registerMsfwrLinkBodyKeyRegExp: RegExp;
-export declare const RegisterMsfwrLinkBody: zod.ZodObject<{
-    id: zod.ZodString;
-    key: zod.ZodString;
-}, zod.z.core.$strip>;
-export declare const RegisterMsfwrLinkResponse: zod.ZodObject<{
-    code: zod.ZodString;
-    token: zod.ZodString;
-}, zod.z.core.$strip>;
-export declare const getMsfwrLinkStatusQueryIdRegExp: RegExp;
-export declare const getMsfwrLinkStatusQueryKeyRegExp: RegExp;
-export declare const GetMsfwrLinkStatusQueryParams: zod.ZodObject<{
-    id: zod.ZodString;
-    key: zod.ZodString;
-}, zod.z.core.$strip>;
-export declare const MsfwrLinkStatusSchema: zod.ZodObject<{
-    link: zod.ZodObject<{
-        id: zod.ZodString;
-        code: zod.ZodString;
-        name: zod.ZodString;
-        createdAt: zod.ZodNumber;
-        expiresAt: zod.ZodNumber;
-        ttlHours: zod.ZodUnion<readonly [zod.ZodLiteral<1>, zod.ZodLiteral<2>, zod.ZodLiteral<4>, zod.ZodLiteral<5>, zod.ZodLiteral<8>, zod.ZodLiteral<12>, zod.ZodLiteral<24>, zod.ZodLiteral<48>, zod.ZodLiteral<72>, zod.ZodLiteral<120>]>;
-        sessions: zod.ZodNumber;
-    }, zod.z.core.$strip>;
-    online: zod.ZodBoolean;
-    busy: zod.ZodBoolean;
-}, zod.z.core.$strip>;
-export declare const RevokeMsfwrLinkBody: zod.ZodObject<{
-    id: zod.ZodString;
-    key: zod.ZodString;
-}, zod.z.core.$strip>;
-export declare const RevokeMsfwrLinkResponse: zod.ZodVoid;
 export declare const GetMsfwrFrameResponse: zod.ZodUnknown;
 //# sourceMappingURL=api.d.ts.map

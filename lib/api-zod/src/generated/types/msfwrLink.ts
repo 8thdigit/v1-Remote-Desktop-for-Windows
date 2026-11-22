@@ -10,8 +10,15 @@ export interface MsfwrLink {
   id: string;
   /** @pattern ^L[0-9A-F]{11}$ */
   code: string;
+  /**
+     * The access code viewers enter on the link page
+     * @pattern ^[0-9]{6}$
+     */
+  pin?: string;
   name: string;
   createdAt: number;
   expiresAt: number;
+  ttlHours?: number;
+  /** @minimum 0 */
   sessions: number;
 }

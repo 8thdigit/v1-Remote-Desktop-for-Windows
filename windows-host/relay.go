@@ -27,7 +27,12 @@ type relay struct {
 	client      *http.Client
 }
 
-type invite struct{ Code, Token string }
+type invite struct {
+	Code, Token string
+	// Unattended registrations: what the relay knows about the RA ID.
+	RaStatus string `json:"raStatus"`
+	RaName   string `json:"raName"`
+}
 
 type tick struct {
 	State, Verification string
@@ -114,6 +119,7 @@ func (r *relay) get(ctx context.Context, path string, response any) error {
 type remoteLink struct {
 	ID        string `json:"id"`
 	Code      string `json:"code"`
+	Pin       string `json:"pin"`
 	Key       string `json:"key"`
 	Name      string `json:"name"`
 	CreatedAt int64  `json:"createdAt"`
@@ -122,7 +128,7 @@ type remoteLink struct {
 }
 
 func (l *remoteLink) URL(origin string) string {
-	return origin + "/?access=" + l.Code
+	return origin + "/r/" + l.Code
 }
 
 // linkOrigin is where viewers open a shared remote access URL. The relay
@@ -156,14 +162,12 @@ func (r *relay) createLink(ctx context.Context, key, name string, hours int) (*r
 	return &out, nil
 }
 
-// registerLink re-arms a link host so another session can be opened through
-// the shared URL after the previous one ended.
-func (r *relay) registerLink(ctx context.Context, id, key string) (string, error) {
-	var out invite
-	if err := r.postJSON(ctx, "link/register", map[string]string{"id": id, "key": key}, &out); err != nil {
-		return "", err
-	}
-	return out.Token, nil
+// restoreLink sends this PC's saved link to the relay again, so a relay that
+// restarted (and lost its memory) honours the URL again. The relay answers
+// 410 when the link expired.
+func (r *relay) restoreLink(ctx context.Context, l savedLink) error {
+	body := map[string]any{"id": l.ID, "key": l.Key, "pin": l.Pin, "name": l.Name, "createdAt": l.CreatedAt, "expiresAt": l.ExpiresAt}
+	return r.postJSON(ctx, "link/register", body, nil)
 }
 
 type linkStatusResult struct {

@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -20,6 +19,9 @@ import (
 type unattendedConfig struct {
 	Relay string `json:"relay"`
 	Key   string `json:"key"`
+	// RA is the RA ID (six digits) this PC's remote access points to: the
+	// company that sees this PC and its Initiate requests. Empty for none.
+	RA string `json:"ra,omitempty"`
 }
 
 const unattendedFile = "unattended.json"
@@ -66,6 +68,11 @@ func loadUnattended(path string) (unattendedConfig, bool, error) {
 		return c, false, errors.New("the saved unattended access key is invalid")
 	}
 	c.Relay = r.origin
+	if ra, ok := normalizeRA(c.RA); ok {
+		c.RA = ra
+	} else {
+		c.RA = ""
+	}
 	return c, true, nil
 }
 
@@ -83,19 +90,7 @@ func enableUnattended(path, relayAddress string) (unattendedConfig, error) {
 		}
 	}
 	c.Relay = r.origin
-	data, err := json.Marshal(c)
-	if err != nil {
-		return unattendedConfig{}, err
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-		return unattendedConfig{}, err
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, append(data, '\n'), 0600); err != nil {
-		return unattendedConfig{}, err
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		os.Remove(tmp)
+	if err := saveUnattended(path, c); err != nil {
 		return unattendedConfig{}, err
 	}
 	return c, nil
@@ -137,6 +132,8 @@ func initiateRejected(err error) (string, bool) {
 		return "Initiate failed: this relay does not support requests yet. Ask IT to update it, or give them the access code.", true
 	case 409:
 		return "Initiate failed: the relay was not ready for a request. Select Initiate again in a moment.", true
+	case 422:
+		return "Initiate failed: no company has this PC's RA ID. Check the RA ID, then select Initiate again.", true
 	case 429:
 		return "Initiate failed: the relay is busy. Select Initiate again in a minute.", true
 	}

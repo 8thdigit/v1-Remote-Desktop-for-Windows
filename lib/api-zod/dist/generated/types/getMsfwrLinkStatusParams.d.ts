@@ -7,7 +7,9 @@
  */
 export type GetMsfwrLinkStatusParams = {
     id: string;
-    /** @pattern ^[A-Za-z0-9_-]{43}$ */
+    /**
+     * @pattern ^[A-Za-z0-9_-]{43}$
+     */
     key: string;
 };
 //# sourceMappingURL=getMsfwrLinkStatusParams.d.ts.map
