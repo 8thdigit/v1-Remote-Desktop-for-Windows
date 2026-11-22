@@ -124,3 +124,21 @@ func twoDigits(n int) string {
 func connectStatus(connections int) string {
 	return "Connect: +" + twoDigits(connections)
 }
+
+// initiateRejected reports the tray text for an Initiate request the relay
+// refused, and ok=false for errors the caller should treat as a lost relay.
+func initiateRejected(err error) (string, bool) {
+	var s *statusError
+	if !errors.As(err, &s) {
+		return "", false
+	}
+	switch s.status {
+	case 404, 405:
+		return "Initiate failed: this relay does not support requests yet. Ask IT to update it, or give them the access code.", true
+	case 409:
+		return "Initiate failed: the relay was not ready for a request. Select Initiate again in a moment.", true
+	case 429:
+		return "Initiate failed: the relay is busy. Select Initiate again in a minute.", true
+	}
+	return "", false
+}

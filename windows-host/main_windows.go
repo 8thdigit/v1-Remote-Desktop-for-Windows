@@ -247,6 +247,14 @@ func unattendedRound(parent context.Context, origin, key, name string, stopSessi
 	}()
 	call := func(until time.Time) error {
 		if err := r.postJSON(parent, "call", map[string]string{"name": name}, nil); err != nil {
+			// A relay that answers but rejects the request (an older build
+			// without Initiate, or the session is no longer waiting) is not
+			// a network failure: say so and keep the registration.
+			if text, ok := initiateRejected(err); ok {
+				*callUntil = time.Time{}
+				updates <- unattendedUpdate{state: "ready", text: text}
+				return nil
+			}
 			return err
 		}
 		*callUntil = until

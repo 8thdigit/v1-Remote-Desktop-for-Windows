@@ -1,6 +1,8 @@
 package main
 
 import (
+	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 )
@@ -57,5 +59,20 @@ func TestConnectStatus(t *testing.T) {
 		if got := connectStatus(n); got != want {
 			t.Errorf("connectStatus(%d) = %q, want %q", n, got, want)
 		}
+	}
+}
+
+func TestInitiateRejected(t *testing.T) {
+	if _, ok := initiateRejected(&statusError{status: 404, text: "x"}); !ok {
+		t.Fatal("404 should be reported as an unsupported relay")
+	}
+	if _, ok := initiateRejected(fmt.Errorf("wrapped: %w", &statusError{status: 409})); !ok {
+		t.Fatal("wrapped 409 should be reported")
+	}
+	if _, ok := initiateRejected(&statusError{status: 410}); ok {
+		t.Fatal("410 means the registration ended and should restart the round")
+	}
+	if _, ok := initiateRejected(errors.New("dial tcp: timeout")); ok {
+		t.Fatal("network errors should restart the round")
 	}
 }

@@ -16,7 +16,7 @@ type Presence = 'online' | 'busy' | 'offline' | 'unknown';
 type Tab = 'connect' | 'pcs' | 'download';
 
 const CALL_TTL = 2 * 60_000;
-const TAB_KEY = 'winss132r.tab';
+const TAB_KEY = 'winss132r.tab.v2';
 const SOUND_KEY = 'winss132r.sound';
 
 function formatCode(raw: string) {
@@ -68,10 +68,13 @@ export default function Home() {
   const [presence, setPresence] = useState<Record<string, Presence>>({});
   const [presenceSupported, setPresenceSupported] = useState(true);
   const [relayReachable, setRelayReachable] = useState<boolean | null>(null);
+  // The relay answered but has no Initiate endpoints: it runs an older build.
+  const [relayOutdated, setRelayOutdated] = useState(false);
   const [tab, setTabState] = useState<Tab>(() => {
     const saved = readPref(TAB_KEY, '');
     if (saved === 'connect' || saved === 'pcs' || saved === 'download') return saved;
-    return loadPCs().length ? 'pcs' : 'connect';
+    // IT staff mostly come here to answer Initiate requests, so open on them.
+    return 'pcs';
   });
   const [sound, setSound] = useState(() => readPref(SOUND_KEY, 'on') === 'on');
   const [alerts, setAlerts] = useState<NotificationPermission | 'unsupported'>(
@@ -140,6 +143,7 @@ export default function Home() {
         const result = await listDesklineCalls({ codes });
         if (stopped) return;
         setRelayReachable(true);
+        setRelayOutdated(false);
         const calls = result.calls.filter((c) => codes.includes(c.code));
         if (result.presence) {
           const map: Record<string, Presence> = {};
@@ -174,8 +178,12 @@ export default function Home() {
             }
           }
         }
-      } catch {
-        if (!stopped) setRelayReachable(false);
+      } catch (reason) {
+        if (!stopped) {
+          const status = typeof reason === 'object' && reason !== null && 'status' in reason ? reason.status : undefined;
+          if (status === 404) { setRelayReachable(true); setRelayOutdated(true); }
+          else setRelayReachable(false);
+        }
       }
       if (!stopped) timer = window.setTimeout(check, document.visibilityState === 'visible' ? 3000 : 8000);
     }
@@ -262,20 +270,26 @@ export default function Home() {
             </div>
           </div>
           <nav aria-label="Sections" className="order-3 flex w-full gap-1 rounded-xl bg-muted/80 p-1 sm:order-none sm:ml-auto sm:w-auto">
-            <TabButton active={tab === 'connect'} onClick={() => setTab('connect')} testId="tab-connect">Connect</TabButton>
             <TabButton active={tab === 'pcs'} onClick={() => setTab('pcs')} testId="tab-pcs">
-              Unattended PCs
+              <BellRing className="mr-1.5 h-3.5 w-3.5" /> Requests &amp; PCs
               {waiting.length > 0
                 ? <span className="ml-1.5 rounded-full bg-primary px-1.5 text-[11px] font-bold text-primary-foreground">{waiting.length}</span>
                 : pcs.length > 0 && <span className="ml-1.5 rounded-full bg-foreground/10 px-1.5 text-[11px] font-semibold">{pcs.length}</span>}
             </TabButton>
+            <TabButton active={tab === 'connect'} onClick={() => setTab('connect')} testId="tab-connect">Connect with a code</TabButton>
             <TabButton active={tab === 'download'} onClick={() => setTab('download')} testId="tab-download">Get the app</TabButton>
           </nav>
-          <RelayDot reachable={relay ? relayReachable : false} watching={pcs.length > 0} />
+          <RelayDot reachable={relay ? relayReachable : false} watching={pcs.length > 0 && !relayOutdated} />
         </div>
       </header>
 
       <main className="mx-auto max-w-6xl px-4 pb-16 pt-6 md:px-8 md:pt-8">
+        {relayOutdated && (
+          <p role="alert" data-testid="text-relay-outdated" className="mb-6 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            This relay is running an older build without Initiate requests, so requests from PCs cannot reach this page and
+            the tray's Initiate fails. Redeploy the relay from the latest code, then reload this page.
+          </p>
+        )}
         {waiting.length > 0 && (
           <section aria-label="Incoming requests" className="mb-6 space-y-3">
             {waiting.map((r) => {
@@ -331,6 +345,22 @@ export default function Home() {
           </div>
         )}
 
+        {tab !== 'pcs' && waiting.length === 0 && (
+          <button type="button" onClick={() => setTab('pcs')} data-testid="button-open-requests"
+            className="mb-6 flex w-full items-center gap-3 rounded-2xl border border-foreground/10 bg-card/80 px-4 py-3 text-left text-sm shadow-sm hover:bg-card">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary/12 text-primary"><BellRing className="h-4.5 w-4.5" /></span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-semibold">Requests from unattended PCs</span>
+              <span className="block text-muted-foreground">
+                {pcs.length === 0
+                  ? 'Save a PC\'s access code to get an Accept prompt here when someone at it selects Initiate.'
+                  : `Watching ${pcs.length} saved PC${pcs.length > 1 ? 's' : ''}${presenceSupported && !relayOutdated ? ` · ${onlineCount} online` : ''} · no requests waiting`}
+              </span>
+            </span>
+            <span className="flex items-center gap-1 font-semibold text-primary">Open <ArrowRight className="h-4 w-4" /></span>
+          </button>
+        )}
+
         {tab === 'connect' && (
           <ConnectView code={code} setCode={(v) => { setCode(v); setError(null); }} error={error} pending={join.isPending}
             onSubmit={async (e) => {
@@ -367,7 +397,7 @@ export default function Home() {
 
               {pcs.length === 0 ? (
                 <EmptyState icon={Laptop} title="Save a PC to get its requests"
-                  body="Enter a PC's unattended access code above, or connect once with it on the Connect tab: unattended PCs are saved automatically. When someone at that PC selects Initiate in the winss132r tray menu, an Accept banner appears here." />
+                  body="Initiate requests only reach browsers that know the PC's access code, because accepting one gives full control. On the PC, click the winss132r tray icon and select Copy access code, then save it above. From then on, when someone at that PC selects Initiate, an Accept banner appears here with a chime." />
               ) : (
                 <ul className="grid gap-3 sm:grid-cols-2">
                   {pcs.map((pc) => (
@@ -653,7 +683,7 @@ function ConnectView({ code, setCode, error, pending, onSubmit }: {
           Help someone at their PC, <span className="bg-gradient-to-r from-primary to-[hsl(32_90%_52%)] bg-clip-text text-transparent">with them watching.</span>
         </h1>
         <p className="mt-5 max-w-lg text-base text-muted-foreground md:text-lg">
-          For attended support, the person at the keyboard reads you a one-time code and confirms a number. For your own unattended PCs, use the <strong className="text-foreground">Unattended PCs</strong> tab.
+          For attended support, the person at the keyboard reads you a one-time code and confirms a number. For your own unattended PCs, use <strong className="text-foreground">Requests &amp; PCs</strong>.
         </p>
         <ol className="mt-8 grid gap-3 sm:grid-cols-2">
           {[
@@ -708,7 +738,7 @@ function ConnectView({ code, setCode, error, pending, onSubmit }: {
           {pending ? <span className="dl-pulse">Requesting</span> : <>Request to connect <ArrowRight className="h-4 w-4" /></>}
         </button>
         <p className="relative mt-4 text-xs text-background/55">
-          A one-time code shows a verification number to read out; control starts after they approve. An unattended access code connects at once and is saved to Unattended PCs.
+          A one-time code shows a verification number to read out; control starts after they approve. An unattended access code connects at once and is saved to Requests &amp; PCs.
         </p>
       </form>
     </div>

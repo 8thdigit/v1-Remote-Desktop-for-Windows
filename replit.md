@@ -43,7 +43,7 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Merging to GitHub does not update https://rdp-system.replit.app. Pull main into the Replit workspace and Republish, or the live relay lacks newer endpoints (for example `/api/deskline/call` and `/calls` for Initiate requests). The viewer shows a red "older build" banner when `/calls` returns 404.
 
 ## Pointers
 
