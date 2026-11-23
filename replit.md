@@ -31,6 +31,8 @@ An installable Windows host and browser viewer for attended remote support over 
 - `artifacts/api-server/src/routes/msfwr.ts` — session and frame transport, RA ID inbox, remote access URLs
 - `artifacts/api-server/src/lib/accounts.ts`, `routes/auth.ts`, `routes/admin.ts` — login accounts (admin and company), /admin API
 - `artifacts/msfwr/src/pages/admin.tsx` — /admin console; `pages/link.tsx` — the page a remote access URL (`/r/<code>`) opens
+- `artifacts/api-server/src/lib/site.ts`, `routes/site.ts` — site settings (visible portal tabs, logo, favicon, OG tags, disclaimer and privacy pages) and "Request access" registrations; `msfwr/src/pages/admin-dashboard.tsx` — the admin Dashboard, Access requests and Site settings tabs
+- `middleware.js` (repo root) — Vercel Routing Middleware that writes the admin's OG tags and favicon into the HTML for link-preview crawlers only
 
 ## Architecture decisions
 

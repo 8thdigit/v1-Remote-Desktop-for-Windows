@@ -7,7 +7,8 @@ import NotFound from '@/pages/not-found';
 import Home from '@/pages/home';
 import Admin from '@/pages/admin';
 import LinkPage from '@/pages/link';
-import Privacy from '@/pages/privacy';
+import Privacy, { Disclaimer } from '@/pages/privacy';
+import { SiteHead } from '@/lib/site';
 import Project from '@/pages/project';
 import { FirstPassword, SignIn } from '@/pages/sign-in';
 import { AuthProvider, useAuthStatus } from '@/lib/auth';
@@ -65,6 +66,7 @@ function Router() {
         <Route path="/admin"><Signed admin><Admin /></Signed></Route>
         <Route path="/"><Signed><Home /></Signed></Route>
         <Route path="/privacy" component={Privacy} />
+        <Route path="/disclaimer" component={Disclaimer} />
         <Route path="/project" component={Project} />
         <Route component={NotFound} />
       </Switch>
@@ -81,6 +83,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
+        <SiteHead />
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
           <Router />
         </WouterRouter>

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { Link } from 'wouter';
+import { PageText, useSite } from '@/lib/site';
 
 const sections = [
   {
@@ -29,13 +30,12 @@ const sections = [
   },
 ];
 
-export default function Privacy() {
+function PageShell({ title, lead, children }: { title: string; lead?: string; children: React.ReactNode }) {
   useEffect(() => {
     const previousTitle = document.title;
-    document.title = 'Privacy — WINRSS.net';
+    document.title = `${title} — WINRSS.net`;
     return () => { document.title = previousTitle; };
-  }, []);
-
+  }, [title]);
   return (
     <main className="min-h-[100dvh] bg-background text-foreground">
       <div className="mx-auto max-w-3xl px-5 pb-16 pt-6 sm:px-8 sm:pt-10">
@@ -44,18 +44,59 @@ export default function Privacy() {
         </Link>
         <header className="mt-7 border-b pb-7 sm:mt-10">
           <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">WINRSS.net · Attended remote support</p>
-          <h1 className="mt-3 text-4xl font-extrabold tracking-tight sm:text-5xl">Privacy</h1>
-          <p className="mt-4 max-w-prose text-lg text-muted-foreground">
-            What WINRSS.net handles when you visit the site or start a remote support session.
-          </p>
+          <h1 className="mt-3 text-4xl font-extrabold tracking-tight sm:text-5xl" data-testid="text-page-title">{title}</h1>
+          {lead && <p className="mt-4 max-w-prose text-lg text-muted-foreground">{lead}</p>}
         </header>
-        {sections.map(({ title, text }) => (
-          <section key={title} className="border-b py-6 last:border-b-0">
-            <h2 className="text-xl font-bold">{title}</h2>
-            <p className="mt-2 max-w-prose leading-relaxed text-muted-foreground">{text}</p>
-          </section>
-        ))}
+        {children}
       </div>
     </main>
+  );
+}
+
+// The privacy page: the admin's own text when they wrote one in Site
+// settings, otherwise the built-in notice below.
+export default function Privacy() {
+  const { site, loaded } = useSite();
+  const page = site.pages.privacy;
+  if (!loaded) return <PageShell title="Privacy"><p className="py-6 text-sm text-muted-foreground">Loading…</p></PageShell>;
+  if (page.body.trim()) {
+    return <PageShell title={page.title || 'Privacy'}><div className="py-6" data-testid="text-page-body"><PageText body={page.body} /></div></PageShell>;
+  }
+  return (
+    <PageShell title="Privacy" lead="What WINRSS.net handles when you visit the site or start a remote support session.">
+      {sections.map(({ title, text }) => (
+        <section key={title} className="border-b py-6 last:border-b-0">
+          <h2 className="text-xl font-bold">{title}</h2>
+          <p className="mt-2 max-w-prose leading-relaxed text-muted-foreground">{text}</p>
+        </section>
+      ))}
+    </PageShell>
+  );
+}
+
+export function Disclaimer() {
+  const { site, loaded } = useSite();
+  const page = site.pages.disclaimer;
+  if (!loaded) return <PageShell title="Disclaimer"><p className="py-6 text-sm text-muted-foreground">Loading…</p></PageShell>;
+  return (
+    <PageShell title={page.title || 'Disclaimer'}>
+      <div className="py-6" data-testid="text-page-body">
+        {page.enabled && page.body.trim() ? <PageText body={page.body} /> : <p className="text-muted-foreground">There is no disclaimer for this site yet.</p>}
+      </div>
+    </PageShell>
+  );
+}
+
+// Footer links to the pages the admin has turned on.
+export function SiteLinks({ className = '' }: { className?: string }) {
+  const { site } = useSite();
+  const cls = 'inline-flex min-h-11 items-center rounded-md font-semibold text-foreground underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary';
+  return (
+    <>
+      {site.pages.privacy.enabled && <Link href="/privacy" className={`${cls} ${className}`}>{site.pages.privacy.title || 'Privacy'}</Link>}
+      {site.pages.disclaimer.enabled && site.pages.disclaimer.body.trim() && (
+        <Link href="/disclaimer" className={`${cls} ${className}`} data-testid="link-disclaimer">{site.pages.disclaimer.title || 'Disclaimer'}</Link>
+      )}
+    </>
   );
 }

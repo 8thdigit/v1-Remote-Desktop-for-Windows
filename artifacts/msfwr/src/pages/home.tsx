@@ -7,6 +7,8 @@ import { ArrowRight, Bell, BellOff, BellRing, Building2, Check, Clock, Copy, Dow
 import { AcceptedUrlTable, CompanyPinCard } from '@/components/access-pins';
 import { LogoMark, Wordmark } from '@/components/logo';
 import LiveSession from '@/LiveSession';
+import { useSite } from '@/lib/site';
+import { SiteLinks } from '@/pages/privacy';
 import { RaBadge, UserMenu } from '@/components/user-menu';
 import { errorText, raLabel, useAuth } from '@/lib/auth';
 import {
@@ -80,7 +82,8 @@ export default function Home() {
   const [relayReachable, setRelayReachable] = useState<boolean | null>(null);
   // The relay answered but has no Initiate endpoints: it runs an older build.
   const [relayOutdated, setRelayOutdated] = useState(false);
-  const [tab, setTabState] = useState<Tab>(() => {
+  const { site } = useSite();
+  const [chosenTab, setTabState] = useState<Tab>(() => {
     const saved = readPref(TAB_KEY, '');
     if (saved === 'connect' || saved === 'pcs' || saved === 'download') return saved;
     // IT staff mostly come here to answer Initiate requests, so open on them.
@@ -99,6 +102,10 @@ export default function Home() {
   const requestsRef = useRef(requests);
   const soundRef = useRef(sound);
   soundRef.current = sound;
+
+  // An admin can hide sections in Site settings; fall back to the first visible one.
+  const visibleTabs = (['pcs', 'connect', 'download'] as const).filter((t) => site.tabs[t]);
+  const tab: Tab = visibleTabs.includes(chosenTab as never) ? chosenTab : visibleTabs[0] ?? 'pcs';
 
   function setTab(next: Tab) {
     setTabState(next);
@@ -357,16 +364,18 @@ export default function Home() {
               <span className="block font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Remote support · Windows</span>
             </div>
           </div>
+          {visibleTabs.length > 1 && (
           <nav aria-label="Sections" className="order-3 flex w-full gap-1 rounded-xl bg-muted/80 p-1 sm:order-none sm:ml-auto sm:w-auto">
-            <TabButton active={tab === 'pcs'} onClick={() => setTab('pcs')} testId="tab-pcs">
+            {site.tabs.pcs && <TabButton active={tab === 'pcs'} onClick={() => setTab('pcs')} testId="tab-pcs">
               <BellRing className="mr-1.5 h-3.5 w-3.5" /> Requests &amp; PCs
               {alertCount > 0
                 ? <span className="ml-1.5 rounded-full bg-primary px-1.5 text-[11px] font-bold text-primary-foreground">{alertCount}</span>
                 : pcs.length > 0 && <span className="ml-1.5 rounded-full bg-foreground/10 px-1.5 text-[11px] font-semibold">{pcs.length}</span>}
-            </TabButton>
-            <TabButton active={tab === 'connect'} onClick={() => setTab('connect')} testId="tab-connect">Connect with a code</TabButton>
-            <TabButton active={tab === 'download'} onClick={() => setTab('download')} testId="tab-download">Get the app</TabButton>
+            </TabButton>}
+            {site.tabs.connect && <TabButton active={tab === 'connect'} onClick={() => setTab('connect')} testId="tab-connect">Connect with a code</TabButton>}
+            {site.tabs.download && <TabButton active={tab === 'download'} onClick={() => setTab('download')} testId="tab-download">Get the app</TabButton>}
           </nav>
+          )}
           <RelayDot reachable={relay ? relayReachable : false} watching={pcs.length > 0 && !relayOutdated} />
           <div className="ml-auto flex items-center gap-2 sm:ml-0">
             <RaBadge compact />
@@ -467,7 +476,7 @@ export default function Home() {
           </div>
         )}
 
-        {tab !== 'pcs' && waiting.length === 0 && (
+        {tab !== 'pcs' && site.tabs.pcs && waiting.length === 0 && (
           <button type="button" onClick={() => setTab('pcs')} data-testid="button-open-requests"
             className="mb-6 flex w-full items-center gap-3 rounded-2xl border border-foreground/10 bg-card/80 px-4 py-3 text-left text-sm shadow-sm hover:bg-card">
             <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary/12 text-primary"><BellRing className="h-4.5 w-4.5" /></span>
@@ -567,7 +576,7 @@ export default function Home() {
           <p>Attended sessions need the person at the PC to approve. Unattended PCs connect with their saved access code. Either side can end a session.</p>
           <nav aria-label="About WINRSS.net" className="flex flex-wrap gap-x-5">
             <Link href="/project" className="inline-flex min-h-11 items-center rounded-md font-semibold text-foreground underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary">Project status</Link>
-            <Link href="/privacy" className="inline-flex min-h-11 items-center rounded-md font-semibold text-foreground underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary">Privacy</Link>
+            <SiteLinks />
           </nav>
         </div>
       </footer>

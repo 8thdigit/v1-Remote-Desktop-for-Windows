@@ -18,8 +18,10 @@ import { Brand, RaBadge, UserMenu } from '@/components/user-menu';
 import { errorText, raLabel, useAuth } from '@/lib/auth';
 import { relativeTime } from '@/lib/unattended';
 import { SubscriptionsPanel, PaymentsPanel, SessionHistoryPanel } from './billing-admin';
+import { DashboardPanel, RegistrationsPanel, SiteSettingsPanel, useDashboard, type Registration } from './admin-dashboard';
 
-type Tab = 'users' | 'subscriptions' | 'payments' | 'pcs' | 'sessions' | 'requests' | 'activity';
+type Tab = 'dashboard' | 'users' | 'subscriptions' | 'payments' | 'pcs' | 'sessions' | 'requests' | 'registrations' | 'activity' | 'site';
+const TABS: Tab[] = ['dashboard', 'users', 'subscriptions', 'payments', 'pcs', 'sessions', 'requests', 'registrations', 'activity', 'site'];
 
 // Ends a session from the console (not part of the generated client).
 async function endSessionAsAdmin(id: string) {
@@ -47,7 +49,19 @@ function duration(from: number | undefined, now: number) {
 export default function Admin() {
   const { user: me } = useAuth();
   const client = useQueryClient();
-  const [tab, setTab] = useState<Tab>('users');
+  // The open section follows the URL hash (/admin#site), so it survives a reload.
+  const [tab, setTabState] = useState<Tab>(() => {
+    const h = typeof window !== 'undefined' ? window.location.hash.slice(1) : '';
+    return (TABS as string[]).includes(h) ? (h as Tab) : 'dashboard';
+  });
+  const setTab = (t: string) => {
+    if (!(TABS as string[]).includes(t)) return;
+    setTabState(t as Tab);
+    window.history.replaceState(null, '', t === 'dashboard' ? window.location.pathname : `#${t}`);
+  };
+  const [prefill, setPrefill] = useState<Registration | null>(null);
+  const dashboard = useDashboard();
+  const pendingRegistrations = dashboard.data?.registrations.pending ?? 0;
   const [now, setNow] = useState(Date.now);
   const [creating, setCreating] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -102,13 +116,6 @@ export default function Admin() {
           </button>
         </div>
 
-        <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Stat icon={Building2} label="Companies" value={list.filter((u) => u.role === 'company').length} detail={`${list.filter((u) => u.role === 'admin').length} admin · ${list.filter((u) => u.disabled).length} disabled`} />
-          <Stat icon={MonitorPlay} label="Live sessions" value={live.length} detail={live.length ? 'Right now' : 'None right now'} accent={live.length > 0} />
-          <Stat icon={Laptop} label="PCs online" value={pcs.length} detail={`${pcs.filter((p) => p.ra).length} pointed to an RA ID`} />
-          <Stat icon={Activity} label="Waiting requests" value={waiting.length} detail="Initiate requests" accent={waiting.length > 0} />
-        </div>
-
         {problem && (
           <div role="alert" className="mt-5 flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             <span className="flex-1">{problem}</span>
@@ -117,7 +124,7 @@ export default function Admin() {
         )}
 
         <nav aria-label="Admin sections" className="mt-6 flex w-full gap-1 overflow-x-auto rounded-xl bg-muted/80 p-1 sm:w-fit">
-          {([['users', 'Companies'], ['subscriptions', 'Subscriptions'], ['payments', 'Payments'], ['pcs', `PCs${pcs.length ? ` (${pcs.length})` : ''}`], ['sessions', `Sessions${live.length ? ` (${live.length})` : ''}`], ['requests', 'Requests'], ['activity', 'Activity']] as const).map(([id, text]) => (
+          {([['dashboard', 'Dashboard'], ['users', 'Companies'], ['subscriptions', 'Subscriptions'], ['payments', 'Payments'], ['pcs', `PCs${pcs.length ? ` (${pcs.length})` : ''}`], ['sessions', `Sessions${live.length ? ` (${live.length})` : ''}`], ['requests', `Initiate${waiting.length ? ` (${waiting.length})` : ''}`], ['registrations', `Access requests${pendingRegistrations ? ` (${pendingRegistrations})` : ''}`], ['activity', 'Activity'], ['site', 'Site settings']] as const).map(([id, text]) => (
             <button key={id} type="button" onClick={() => setTab(id)} aria-current={tab === id ? 'page' : undefined} data-testid={`admin-tab-${id}`}
               className={`flex-1 whitespace-nowrap rounded-lg px-4 py-1.5 text-sm font-semibold transition-colors sm:flex-none ${tab === id ? 'bg-card shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
               {text}
@@ -126,6 +133,9 @@ export default function Admin() {
         </nav>
 
         <section className="dl-rise mt-4">
+          {tab === 'dashboard' && <DashboardPanel onOpen={setTab} onError={setProblem} />}
+          {tab === 'registrations' && <RegistrationsPanel onError={setProblem} onCreateCompany={(r) => { setPrefill(r); setCreating(true); }} />}
+          {tab === 'site' && <SiteSettingsPanel onError={setProblem} />}
           {tab === 'users' && (
             <UsersPanel users={list} me={me} now={now} loading={users.isPending}
               onRole={(u, role) => void run(() => updateUser(u.id, { role }), 'Could not change the role.')}
@@ -236,17 +246,7 @@ export default function Admin() {
         )}
       </main>
 
-      <CreateUser open={creating} onClose={() => setCreating(false)} onCreated={reload} />
-    </div>
-  );
-}
-
-function Stat({ icon: Icon, label, value, detail, accent }: { icon: typeof Users; label: string; value: number; detail: string; accent?: boolean }) {
-  return (
-    <div className={`rounded-2xl border bg-card/90 p-4 shadow-[0_10px_30px_-24px_hsl(200_32%_13%/0.5)] ${accent ? 'border-primary/40' : ''}`}>
-      <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground"><Icon className={`h-4 w-4 ${accent ? 'text-primary' : ''}`} /> {label}</div>
-      <p className="mt-1 text-3xl font-extrabold tracking-tight">{value}</p>
-      <p className="truncate text-xs text-muted-foreground">{detail}</p>
+      <CreateUser open={creating} prefill={prefill} onClose={() => { setCreating(false); setPrefill(null); }} onCreated={reload} />
     </div>
   );
 }
@@ -417,7 +417,7 @@ function PasswordField({ value, onChange }: { value: string; onChange: (v: strin
   );
 }
 
-function CreateUser({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
+function CreateUser({ open, prefill, onClose, onCreated }: { open: boolean; prefill?: Registration | null; onClose: () => void; onCreated: () => void }) {
   const [displayName, setDisplayName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState(generatePassword);
@@ -426,6 +426,13 @@ function CreateUser({ open, onClose, onCreated }: { open: boolean; onClose: () =
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState<{ user: Account; password: string } | null>(null);
+  // Opened from an approved access request: start from its company name.
+  useEffect(() => {
+    if (!open || !prefill) return;
+    const name = prefill.company || prefill.name;
+    setDisplayName(name);
+    setUsername(name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32));
+  }, [open, prefill]);
   const close = () => { setDisplayName(''); setUsername(''); setPassword(generatePassword()); setRole('company'); setRaId(''); setError(null); setCreated(null); onClose(); };
   async function submit(e: FormEvent) {
     e.preventDefault();
