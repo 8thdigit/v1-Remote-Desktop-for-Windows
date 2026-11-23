@@ -429,3 +429,32 @@ test("wrong PINs lock, then block, a URL; claims can be restored after a restart
   restarted.linkRestore({id: link.id, key: key("p"), pin: link.pin, name: "FRONT-DESK", createdAt: link.createdAt, expiresAt: link.expiresAt});
   assert.ok(restarted.linkJoin(link.code, link.pin, "4321").viewer, "the restored claim's PIN opens it");
 });
+
+test("a URL the relay did not record (made before a restart) still gets its claim recorded", async () => {
+  const { createLinkLog, memoryLinkLogBackend } = await import("../src/lib/linklog.ts");
+  const log = await createLinkLog(memoryLinkLogBackend());
+  let now = 13_000_000;
+  const first = createMsfwrStore(() => now);
+  first.standing(key("w"), "OLD-PC");
+  const link = first.linkCreate(key("w"), "OLD-PC", 1);
+  // The relay restarts; the new one only learns the URL when the PC re-sends it.
+  const events = [];
+  const store = createMsfwrStore(() => now, {
+    onLinkCreated: (info) => { events.push("created"); void log.created(info); },
+    onLinkClaimed: (code, claim, info) => { events.push("claimed"); void log.claimed(code, claim, info); },
+  });
+  store.standing(key("w"), "OLD-PC");
+  store.linkRestore({id: link.id, key: key("w"), pin: link.pin, name: "OLD-PC", createdAt: link.createdAt, expiresAt: link.expiresAt});
+  assert.deepEqual(events, ["created"], "a restored URL is recorded");
+  const acme = {id: "a1", name: "Acme", raId: "135790"};
+  assert.ok(store.linkJoin(link.code, link.pin, store.companyPin(acme).pin).viewer);
+  await log.flush();
+  const [record] = log.list({accountId: "a1"});
+  assert.equal(record.code, link.code);
+  assert.equal(record.claim.company, "Acme");
+
+  // Even with no creation record at all, the claim creates one.
+  const bare = await createLinkLog(memoryLinkLogBackend());
+  await bare.claimed("LABCDEF12345", {accountId: "a1", company: "Acme", raId: "135790", pin: "1234", at: now}, {name: "PC", createdAt: now, expiresAt: now + 3_600_000, ttlHours: 1});
+  assert.equal(bare.list({accountId: "a1"}).length, 1);
+});

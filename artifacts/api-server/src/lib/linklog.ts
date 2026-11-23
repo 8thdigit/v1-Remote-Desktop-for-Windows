@@ -100,9 +100,18 @@ export async function createLinkLog(backend: LinkLogBackend) {
       if (records.length > MAX_RECORDS) records.length = MAX_RECORDS;
       return persist();
     },
-    claimed(code: string, claim: LinkClaim) {
-      const r = find(code);
-      if (!r) return persist();
+    // Records which company authorized a URL. The URL's own record is created
+    // here when it is missing (a URL made before the register existed, or
+    // before a relay restart that lost an unsaved write), so a claim is never
+    // dropped.
+    claimed(code: string, claim: LinkClaim, link?: { name: string; ra?: string; createdAt: number; expiresAt: number; ttlHours: number }) {
+      let r = find(code);
+      if (!r) {
+        if (!link) return persist();
+        r = { code, pcName: link.name, pcRa: link.ra, createdAt: link.createdAt, expiresAt: link.expiresAt, ttlHours: link.ttlHours, sessions: [] };
+        records.unshift(r);
+        if (records.length > MAX_RECORDS) records.length = MAX_RECORDS;
+      }
       r.claim = { ...claim };
       return persist();
     },

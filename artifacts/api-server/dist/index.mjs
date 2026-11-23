@@ -40805,6 +40805,14 @@ function normalizeRaId(value) {
   return /^\d{6}$/.test(digits) ? digits : void 0;
 }
 var formatRaId = (raId) => `RA-${raId}`;
+var linkInfo = (link) => ({
+  code: link.code,
+  name: link.name,
+  ra: link.ra,
+  createdAt: link.createdAt,
+  expiresAt: link.expiresAt,
+  ttlHours: link.ttlHours
+});
 function cleanName(name) {
   return name.replace(/[^\w .-]/g, "").trim().slice(0, 40);
 }
@@ -41183,7 +41191,7 @@ function createMsfwrStore(clock = Date.now, hooks = {}) {
       };
       links.set(link.code, link);
       try {
-        hooks.onLinkCreated?.({ code: link.code, name: link.name, ra: link.ra, createdAt: link.createdAt, expiresAt: link.expiresAt, ttlHours: link.ttlHours });
+        hooks.onLinkCreated?.(linkInfo(link));
       } catch {
       }
       return publicLink(link);
@@ -41217,6 +41225,10 @@ function createMsfwrStore(clock = Date.now, hooks = {}) {
         pinFailuresTotal: 0
       };
       links.set(link.code, link);
+      try {
+        hooks.onLinkCreated?.(linkInfo(link));
+      } catch {
+      }
       return publicLink(link);
     },
     linkStatus(id, key) {
@@ -41326,7 +41338,7 @@ function createMsfwrStore(clock = Date.now, hooks = {}) {
         companyPins.delete(owner.id);
         claimed = true;
         try {
-          hooks.onLinkClaimed?.(link.code, claim2);
+          hooks.onLinkClaimed?.(link.code, claim2, linkInfo(link));
         } catch {
         }
       }
@@ -42278,9 +42290,18 @@ async function createLinkLog(backend) {
       if (records.length > MAX_RECORDS) records.length = MAX_RECORDS;
       return persist();
     },
-    claimed(code, claim2) {
-      const r = find(code);
-      if (!r) return persist();
+    // Records which company authorized a URL. The URL's own record is created
+    // here when it is missing (a URL made before the register existed, or
+    // before a relay restart that lost an unsaved write), so a claim is never
+    // dropped.
+    claimed(code, claim2, link) {
+      let r = find(code);
+      if (!r) {
+        if (!link) return persist();
+        r = { code, pcName: link.name, pcRa: link.ra, createdAt: link.createdAt, expiresAt: link.expiresAt, ttlHours: link.ttlHours, sessions: [] };
+        records.unshift(r);
+        if (records.length > MAX_RECORDS) records.length = MAX_RECORDS;
+      }
       r.claim = { ...claim2 };
       return persist();
     },
@@ -42375,8 +42396,8 @@ var store = createMsfwrStore(Date.now, {
   onLinkCreated(link) {
     void linkLogReady().then((log) => log.created(link)).catch((err) => logger.warn({ err }, "Could not record a new remote access URL"));
   },
-  onLinkClaimed(code, claim2) {
-    void linkLogReady().then((log) => log.claimed(code, claim2)).catch((err) => logger.warn({ err }, "Could not record a URL claim"));
+  onLinkClaimed(code, claim2, link) {
+    void linkLogReady().then((log) => log.claimed(code, claim2, link)).catch((err) => logger.warn({ err }, "Could not record a URL claim"));
   },
   onLinkRevoked(code, at) {
     void linkLogReady().then((log) => log.revoked(code, at)).catch((err) => logger.warn({ err }, "Could not record a cleared URL"));
