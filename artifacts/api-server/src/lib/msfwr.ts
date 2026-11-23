@@ -83,14 +83,17 @@ export type StoreHooks = {
   onLive?: (session: Session) => void;
   onEnd?: (ended: EndedSession) => void;
   // Remote access URL lifecycle, for the persistent URL register.
-  onLinkCreated?: (link: {code: string; name: string; ra?: string; createdAt: number; expiresAt: number; ttlHours: number}) => void;
-  onLinkClaimed?: (code: string, claim: LinkClaim) => void;
+  // Fired when a PC creates a URL, and again when it re-sends one the relay
+  // did not know (after a restart), so the register always has the URL.
+  onLinkCreated?: (link: LinkInfo) => void;
+  onLinkClaimed?: (code: string, claim: LinkClaim, link: LinkInfo) => void;
   onLinkRevoked?: (code: string, at: number) => void;
 };
 
 // The company that authored (claimed) a remote access URL with its PIN.
 // clientIp and clientAgent describe the browser that entered the PIN.
 export type LinkClaim = {accountId: string; company: string; raId: string; pin: string; at: number; clientIp?: string; clientAgent?: string};
+export type LinkInfo = {code: string; name: string; ra?: string; createdAt: number; expiresAt: number; ttlHours: number};
 // A signed-in company, as far as PIN issuing is concerned.
 export type CompanyRef = {id: string; name: string; raId: string};
 
@@ -169,6 +172,10 @@ export type Link = {
   pinFailures: number;
   pinFailuresTotal: number;
 };
+
+const linkInfo = (link: Link): LinkInfo => ({
+  code: link.code, name: link.name, ra: link.ra, createdAt: link.createdAt, expiresAt: link.expiresAt, ttlHours: link.ttlHours,
+});
 
 // PC names are display text only: keep letters, digits, space, dot, dash, underscore.
 function cleanName(name: string) {
@@ -525,7 +532,7 @@ export function createMsfwrStore(clock = Date.now, hooks: StoreHooks = {}) {
         ra: standings.get(standingCode(key))?.ra, pinFailures: 0, pinFailuresTotal: 0,
       };
       links.set(link.code, link);
-      try { hooks.onLinkCreated?.({code: link.code, name: link.name, ra: link.ra, createdAt: link.createdAt, expiresAt: link.expiresAt, ttlHours: link.ttlHours}); } catch { /* best-effort */ }
+      try { hooks.onLinkCreated?.(linkInfo(link)); } catch { /* best-effort */ }
       return publicLink(link);
     },
     // The PC re-sends its saved link each time it registers, so a link
@@ -546,6 +553,7 @@ export function createMsfwrStore(clock = Date.now, hooks: StoreHooks = {}) {
         ra: standings.get(standingCode(input.key))?.ra, pinFailures: 0, pinFailuresTotal: 0,
       };
       links.set(link.code, link);
+      try { hooks.onLinkCreated?.(linkInfo(link)); } catch { /* best-effort */ }
       return publicLink(link);
     },
     linkStatus(id: string, key: string) {
@@ -639,7 +647,7 @@ export function createMsfwrStore(clock = Date.now, hooks: StoreHooks = {}) {
         claims.set(link.code, claim);
         companyPins.delete(owner.id);
         claimed = true;
-        try { hooks.onLinkClaimed?.(link.code, claim); } catch { /* best-effort */ }
+        try { hooks.onLinkClaimed?.(link.code, claim, linkInfo(link)); } catch { /* best-effort */ }
       }
       const operator = {id: claim!.accountId, name: claim!.company, raId: claim!.raId};
       // Others already connected through the URL: join them in the same session.

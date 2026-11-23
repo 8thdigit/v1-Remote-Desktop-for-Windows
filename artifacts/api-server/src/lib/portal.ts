@@ -61,8 +61,8 @@ export const store = createMsfwrStore(Date.now, {
   onLinkCreated(link) {
     void linkLogReady().then((log) => log.created(link)).catch((err) => logger.warn({ err }, "Could not record a new remote access URL"));
   },
-  onLinkClaimed(code, claim) {
-    void linkLogReady().then((log) => log.claimed(code, claim)).catch((err) => logger.warn({ err }, "Could not record a URL claim"));
+  onLinkClaimed(code, claim, link) {
+    void linkLogReady().then((log) => log.claimed(code, claim, link)).catch((err) => logger.warn({ err }, "Could not record a URL claim"));
   },
   onLinkRevoked(code, at) {
     void linkLogReady().then((log) => log.revoked(code, at)).catch((err) => logger.warn({ err }, "Could not record a cleared URL"));
