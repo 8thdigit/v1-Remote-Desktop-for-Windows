@@ -34,3 +34,8 @@ services:
       # sign-in.
       - key: ADMIN_PASSWORD
         sync: false
+      # The six-digit PIN the admin console asks for before it creates a WINRSS
+      # admin account or makes an account an admin. Set it in the Render
+      # dashboard; admin creation stays off until it is set.
+      - key: ADMIN_CREATION_PIN
+        sync: false

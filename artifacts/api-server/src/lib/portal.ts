@@ -26,10 +26,16 @@ export const store = createMsfwrStore(Date.now, {
     // company, or the company whose PIN authored the remote access URL.
     const ra = session.operator?.raId ?? session.ra;
     if (!ra) return;
+    // Only a session that starts while another of the company's sessions is
+    // already live counts; remote access URLs count when they are authorized.
+    // Checked now, before any await, so two sessions starting together are
+    // not both counted as the extra one.
+    const others = store.liveFor(ra).filter((x) => x.id !== session.id).length;
+    if (others === 0) return;
     void (async () => {
       try {
         const account = (await accountsReady()).findRa(ra);
-        if (account) await (await billingReady()).countSession(account.id);
+        if (account) await (await billingReady()).countUsage(account.id, "session");
       } catch (err) { logger.warn({ err }, "Could not count session for billing"); }
     })();
   },
@@ -64,6 +70,8 @@ export const store = createMsfwrStore(Date.now, {
   },
   onLinkClaimed(code, claim, link) {
     void linkLogReady().then((log) => log.claimed(code, claim, link)).catch((err) => logger.warn({ err }, "Could not record a URL claim"));
+    // Each remote access URL a company authorizes counts once against its quota.
+    void billingReady().then((billing) => billing.countUsage(claim.accountId, "url")).catch((err) => logger.warn({ err }, "Could not count a URL for billing"));
   },
   onLinkRevoked(code, at) {
     void linkLogReady().then((log) => log.revoked(code, at)).catch((err) => logger.warn({ err }, "Could not record a cleared URL"));
@@ -212,7 +220,7 @@ export function subBlockMessage(reason: Entitlement["reason"]): string {
   switch (reason) {
     case "expired": return "This company's WINRSS.net subscription has expired. Contact your provider to renew it.";
     case "suspended": return "This company's WINRSS.net subscription is suspended. Contact your provider.";
-    case "quota": return "This company has reached its session limit for the current billing period.";
+    case "quota": return "This company has reached its usage limit (remote access URLs and extra sessions) for the current billing period. Ask your provider to renew or extend it.";
     case "license": return "This client's license is missing, invalid or revoked. Reconfigure it from the admin console.";
     default: return "This company's WINRSS.net subscription is not active.";
   }

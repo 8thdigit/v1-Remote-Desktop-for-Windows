@@ -10,6 +10,11 @@ import { SiteLinks } from '@/pages/privacy';
 // The password just used to sign in, kept in memory only so the first-password
 // screen does not ask for it again. It is dropped once that screen opens.
 let signInPassword = '';
+// Who just signed in, so the next page opens on the right dashboard: admins
+// land on the admin console's dashboard, companies on theirs.
+let landing: 'admin' | 'company' | null = null;
+export function takeLanding() { const l = landing; landing = null; return l; }
+export function peekLanding() { return landing; }
 
 function Shell({ children }: { children: ReactNode }) {
   const { site } = useSite();
@@ -72,6 +77,7 @@ function SignInForm({ onRequest }: { onRequest?: () => void }) {
     try {
       const user = await login({ username: username.trim(), password });
       if (user.mustChangePassword) signInPassword = password;
+      landing = user.role;
       setPassword('');
       await client.invalidateQueries({ queryKey: getGetAuthStatusQueryKey() });
     } catch (reason) {

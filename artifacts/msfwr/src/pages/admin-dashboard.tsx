@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  AlertTriangle, BadgeCheck, Building2, CalendarClock, Check, ImageIcon, IndianRupee, Inbox, Laptop, Mail, MonitorPlay, Phone, RefreshCw,
-  Save, Settings2, Trash2, Upload, X,
+  AlertTriangle, BadgeCheck, Building2, CalendarClock, Check, ClipboardList, ImageIcon, IndianRupee, Inbox, Laptop, Mail, MessageSquare, MonitorPlay,
+  Phone, RefreshCw, Save, Send, Settings2, Trash2, Upload, X,
 } from 'lucide-react';
 import { errorText, raLabel } from '@/lib/auth';
 import { relativeTime } from '@/lib/unattended';
@@ -28,10 +28,23 @@ const inr = (n: number) => new Intl.NumberFormat('en-IN', { style: 'currency', c
 const dateFmt = (ms: number) => new Date(ms).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 const dayFmt = (ms: number) => new Date(ms).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 
+export type RegistrationComment = { id: string; text: string; by: string; at: number };
 export type Registration = {
   id: string; name: string; company: string; email: string; mobile: string; message: string;
-  status: 'pending' | 'approved' | 'dismissed'; note: string; createdAt: number; updatedAt: number;
+  status: 'pending' | 'accepted' | 'rejected'; outcome: '' | 'converted' | 'closed'; actionPlan: string;
+  comments: RegistrationComment[]; note: string; createdAt: number; updatedAt: number;
 };
+
+// A wa.me link that opens WhatsApp (web or app) on a chat with this number.
+// Numbers without a country code are taken as Indian, as the request form asks.
+export function whatsappLink(mobile: string, text?: string) {
+  let digits = mobile.replace(/\D/g, '');
+  if (!mobile.trim().startsWith('+')) {
+    if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1);
+    if (digits.length === 10) digits = `91${digits}`;
+  }
+  return `https://wa.me/${digits}${text ? `?text=${encodeURIComponent(text)}` : ''}`;
+}
 type DuePayment = { id: string; accountId: string; company: string; amountInr: number; dueDate: number; status: string };
 type LiveSession = { id: string; name?: string; mode: string; operator?: string; ra?: string; liveAt?: number };
 export type Dashboard = {
@@ -40,7 +53,7 @@ export type Dashboard = {
   sessions: { live: LiveSession[]; pending: number; pcsOnline: number; waitingRequests: number; last30Days: number; days: { day: number; sessions: number; minutes: number }[] };
   subscriptions: { active: number; trial: number; expired: number; suspended: number; none: number; mrrInr: number; expiringSoon: { accountId: string; company: string; status: string; currentPeriodEnd: number }[] };
   payments: { overdueCount: number; overdueAmountInr: number; upcomingCount: number; upcomingAmountInr: number; overdue: DuePayment[]; upcoming: DuePayment[] };
-  registrations: { pending: number; approved: number; dismissed: number; total: number; latest: Registration[] };
+  registrations: { pending: number; accepted: number; rejected: number; converted: number; closed: number; total: number; latest: Registration[] };
   activity: { at: number; kind: string; text: string }[];
 };
 
@@ -197,7 +210,7 @@ export function DashboardPanel({ onOpen, onError }: { onOpen: (tab: string) => v
           )}
         </Card>
         <Card title="New access requests" icon={Inbox} action={<button type="button" onClick={() => onOpen('registrations')} className="text-xs font-semibold text-primary">All requests</button>}>
-          <p className="text-xs text-muted-foreground">{d.registrations.pending} pending · {d.registrations.approved} approved · {d.registrations.dismissed} dismissed</p>
+          <p className="text-xs text-muted-foreground">{d.registrations.pending} pending · {d.registrations.accepted} accepted · {d.registrations.rejected} rejected · {d.registrations.converted} converted</p>
           {d.registrations.latest.length === 0 ? <Empty text="No pending requests." /> : (
             <ul className="mt-2 divide-y divide-foreground/8">
               {d.registrations.latest.map((r) => (
@@ -229,20 +242,29 @@ export function DashboardPanel({ onOpen, onError }: { onOpen: (tab: string) => v
 
 // --- Access requests from the sign-in page ---
 
-const REG_STATUS: Record<Registration['status'], string> = {
-  pending: 'bg-primary/12 text-primary',
-  approved: 'bg-emerald-500/12 text-emerald-700',
-  dismissed: 'bg-muted text-muted-foreground',
+const REG_STATUS: Record<Registration['status'], [string, string]> = {
+  pending: ['Pending', 'bg-primary/12 text-primary'],
+  accepted: ['Accepted', 'bg-emerald-500/12 text-emerald-700'],
+  rejected: ['Rejected', 'bg-muted text-muted-foreground'],
 };
+const OUTCOME: Record<Exclude<Registration['outcome'], ''>, [string, string]> = {
+  converted: ['Converted to customer', 'bg-emerald-600 text-white'],
+  closed: ['Query closed', 'bg-foreground/80 text-background'],
+};
+type RegFilter = 'pending' | 'accepted' | 'rejected' | 'converted' | 'closed' | 'all';
+const FILTERS: [RegFilter, string][] = [['pending', 'Pending'], ['accepted', 'Accepted'], ['rejected', 'Rejected'], ['converted', 'Converted'], ['closed', 'Closed'], ['all', 'All']];
+
+const regPath = (id: string, rest = '') => `/registrations/${encodeURIComponent(id)}${rest}`;
 
 export function RegistrationsPanel({ onError, onCreateCompany }: { onError: (m: string | null) => void; onCreateCompany: (r: Registration) => void }) {
   const client = useQueryClient();
   const q = useQuery({ queryKey: REGISTRATIONS_KEY, queryFn: () => api<{ registrations: Registration[] }>('/registrations'), refetchInterval: 20_000 });
-  const [filter, setFilter] = useState<'pending' | 'approved' | 'dismissed' | 'all'>('pending');
+  const [filter, setFilter] = useState<RegFilter>('pending');
+  const [open, setOpen] = useState<string | null>(null);
   const [now] = useState(Date.now);
   const list = q.data?.registrations ?? [];
-  const shown = list.filter((r) => filter === 'all' || r.status === filter);
-  const count = (s: Registration['status']) => list.filter((r) => r.status === s).length;
+  const matches = (r: Registration, f: RegFilter) => f === 'all' || (f === 'converted' || f === 'closed' ? r.outcome === f : r.status === f);
+  const shown = list.filter((r) => matches(r, filter));
 
   async function act(fn: () => Promise<unknown>, fallback: string) {
     onError(null);
@@ -250,64 +272,159 @@ export function RegistrationsPanel({ onError, onCreateCompany }: { onError: (m: 
       await fn();
       await client.invalidateQueries({ queryKey: REGISTRATIONS_KEY });
       void client.invalidateQueries({ queryKey: DASHBOARD_KEY });
-    } catch (e) { onError(errorText(e, fallback)); }
+      return true;
+    } catch (e) { onError(errorText(e, fallback)); return false; }
   }
-  const setStatus = (r: Registration, status: Registration['status']) =>
-    act(() => api(`/registrations/${encodeURIComponent(r.id)}`, { method: 'PATCH', body: JSON.stringify({ status }) }), 'Could not update the request.');
+  const patch = (r: Registration, body: Record<string, unknown>) =>
+    act(() => api(regPath(r.id), { method: 'PATCH', body: JSON.stringify(body) }), 'Could not update the request.');
 
   return (
     <Card title="Access requests" icon={Inbox} action={
-      <div className="flex gap-1 rounded-lg bg-muted/80 p-0.5 text-xs">
-        {(['pending', 'approved', 'dismissed', 'all'] as const).map((f) => (
+      <div className="flex flex-wrap gap-1 rounded-lg bg-muted/80 p-0.5 text-xs">
+        {FILTERS.map(([f, label]) => (
           <button key={f} type="button" onClick={() => setFilter(f)} data-testid={`reg-filter-${f}`}
-            className={`rounded-md px-2.5 py-1 font-semibold capitalize ${filter === f ? 'bg-card shadow-sm' : 'text-muted-foreground'}`}>
-            {f}{f !== 'all' ? ` (${count(f)})` : ''}
+            className={`rounded-md px-2.5 py-1 font-semibold ${filter === f ? 'bg-card shadow-sm' : 'text-muted-foreground'}`}>
+            {label}{f !== 'all' ? ` (${list.filter((r) => matches(r, f)).length})` : ''}
           </button>
         ))}
       </div>
     }>
-      <p className="-mt-1 mb-2 text-xs text-muted-foreground">People who asked to buy WINRSS.net from the "Request access" form on the sign-in page.</p>
+      <p className="-mt-1 mb-2 text-xs text-muted-foreground">People who asked to buy WINRSS.net from the "Request access" form on the sign-in page. Accept or reject each one, keep an action plan and comments, and close it as converted to customer or query closed.</p>
       {q.isPending ? <Empty text="Loading…" /> : shown.length === 0 ? <Empty text={filter === 'pending' ? 'No pending requests.' : 'No requests here.'} /> : (
         <ul className="divide-y divide-foreground/8">
           {shown.map((r) => (
-            <li key={r.id} className="py-3" data-testid={`registration-${r.id}`}>
-              <div className="flex flex-wrap items-start gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold">{r.name}{r.company && <span className="font-normal text-muted-foreground"> · {r.company}</span>}
-                    <span className={`ml-2 rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${REG_STATUS[r.status]}`}>{r.status}</span></p>
-                  <p className="mt-0.5 flex flex-wrap gap-x-4 text-sm">
-                    <a href={`mailto:${r.email}`} className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline"><Mail className="h-3.5 w-3.5" />{r.email}</a>
-                    <a href={`tel:${r.mobile.replace(/[^+\d]/g, '')}`} className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline"><Phone className="h-3.5 w-3.5" />{r.mobile}</a>
-                    <span className="text-xs leading-5 text-muted-foreground">{relativeTime(r.createdAt, now)}</span>
-                  </p>
-                  {r.message && <p className="mt-1.5 whitespace-pre-line rounded-lg bg-muted/60 px-3 py-2 text-sm">{r.message}</p>}
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {r.status !== 'approved' && (
-                    <button type="button" onClick={() => void setStatus(r, 'approved')} data-testid={`button-approve-${r.id}`}
-                      className="inline-flex items-center gap-1 rounded-lg border border-emerald-600/30 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-500/10"><Check className="h-3.5 w-3.5" /> Approve</button>
-                  )}
-                  {r.status === 'approved' && (
-                    <button type="button" onClick={() => onCreateCompany(r)} data-testid={`button-create-company-${r.id}`}
-                      className="inline-flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground"><Building2 className="h-3.5 w-3.5" /> Create company</button>
-                  )}
-                  {r.status !== 'dismissed' && (
-                    <button type="button" onClick={() => void setStatus(r, 'dismissed')} data-testid={`button-dismiss-${r.id}`}
-                      className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-semibold hover:bg-muted"><X className="h-3.5 w-3.5" /> Dismiss</button>
-                  )}
-                  {r.status !== 'pending' && (
-                    <button type="button" onClick={() => void setStatus(r, 'pending')} className="rounded-lg border px-2.5 py-1 text-xs font-semibold hover:bg-muted">Reopen</button>
-                  )}
-                  <button type="button" aria-label="Delete request" title="Delete"
-                    onClick={() => { if (window.confirm(`Delete the request from ${r.name}?`)) void act(() => api(`/registrations/${encodeURIComponent(r.id)}`, { method: 'DELETE' }), 'Could not delete the request.'); }}
-                    className="rounded-lg border px-2 py-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></button>
-                </div>
-              </div>
-            </li>
+            <RegistrationRow key={r.id} r={r} now={now} expanded={open === r.id} onToggle={() => setOpen(open === r.id ? null : r.id)}
+              onPatch={(body) => patch(r, body)} onCreateCompany={() => onCreateCompany(r)}
+              onComment={(text) => act(() => api(regPath(r.id, '/comments'), { method: 'POST', body: JSON.stringify({ text }) }), 'Could not add the comment.')}
+              onRemoveComment={(id) => act(() => api(regPath(r.id, `/comments/${encodeURIComponent(id)}`), { method: 'DELETE' }), 'Could not remove the comment.')}
+              onDelete={() => { if (window.confirm(`Delete the request from ${r.name}?`)) void act(() => api(regPath(r.id), { method: 'DELETE' }), 'Could not delete the request.'); }} />
           ))}
         </ul>
       )}
     </Card>
+  );
+}
+
+function WhatsAppIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="currentColor">
+      <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91A9.85 9.85 0 0 0 12.04 2Zm0 18.15a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.2 8.2 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.25-8.24a8.24 8.24 0 0 1 8.24 8.25c0 4.54-3.7 8.23-8.25 8.23Zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.79.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.01-.38.11-.51.11-.11.25-.29.37-.43.13-.15.17-.25.25-.42.08-.17.04-.31-.02-.43-.06-.13-.56-1.34-.76-1.84-.2-.48-.41-.42-.56-.43h-.48a.92.92 0 0 0-.66.31c-.23.25-.87.85-.87 2.07 0 1.22.89 2.4 1.01 2.56.13.17 1.75 2.67 4.23 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.06-.1-.23-.17-.48-.29Z" />
+    </svg>
+  );
+}
+
+function RegistrationRow({ r, now, expanded, onToggle, onPatch, onComment, onRemoveComment, onCreateCompany, onDelete }: {
+  r: Registration; now: number; expanded: boolean; onToggle: () => void;
+  onPatch: (body: Record<string, unknown>) => Promise<boolean>; onComment: (text: string) => Promise<boolean>;
+  onRemoveComment: (id: string) => Promise<boolean>; onCreateCompany: () => void; onDelete: () => void;
+}) {
+  const [plan, setPlan] = useState(r.actionPlan);
+  const [comment, setComment] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setPlan(r.actionPlan); }, [r.actionPlan]);
+  const [statusLabel, statusCls] = REG_STATUS[r.status];
+  const wa = whatsappLink(r.mobile, `Hi ${r.name}, this is WINRSS.net. Thank you for your interest in remote support for Windows.`);
+  const run = async (fn: () => Promise<boolean>) => { setBusy(true); try { return await fn(); } finally { setBusy(false); } };
+  const btn = 'inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-semibold disabled:opacity-50';
+  return (
+    <li className="py-3" data-testid={`registration-${r.id}`}>
+      <div className="flex flex-wrap items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold">{r.name}{r.company && <span className="font-normal text-muted-foreground"> · {r.company}</span>}
+            <span className={`ml-2 rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusCls}`}>{statusLabel}</span>
+            {r.outcome && <span className={`ml-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold ${OUTCOME[r.outcome][1]}`}>{OUTCOME[r.outcome][0]}</span>}</p>
+          <p className="mt-0.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+            <a href={`mailto:${r.email}`} className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline"><Mail className="h-3.5 w-3.5" />{r.email}</a>
+            <a href={`tel:${r.mobile.replace(/[^+\d]/g, '')}`} className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline"><Phone className="h-3.5 w-3.5" />{r.mobile}</a>
+            <a href={wa} target="_blank" rel="noreferrer" data-testid={`link-whatsapp-${r.id}`}
+              className="inline-flex items-center gap-1 rounded-full bg-[#25D366]/12 px-2 py-0.5 text-xs font-semibold text-[#128C4A] hover:bg-[#25D366]/20 dark:text-[#4ADE80]">
+              <WhatsAppIcon className="h-3.5 w-3.5" /> WhatsApp
+            </a>
+            <span className="text-xs leading-5 text-muted-foreground">{relativeTime(r.createdAt, now)}</span>
+          </p>
+          {r.message && <p className="mt-1.5 whitespace-pre-line rounded-lg bg-muted/60 px-3 py-2 text-sm">{r.message}</p>}
+          {!expanded && (r.actionPlan || r.comments.length > 0) && (
+            <p className="mt-1.5 truncate text-xs text-muted-foreground">
+              {r.actionPlan && <><b className="text-foreground">Plan:</b> {r.actionPlan.split('\n')[0]} </>}
+              {r.comments.length > 0 && <>· {r.comments.length} comment{r.comments.length === 1 ? '' : 's'}</>}
+            </p>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {r.status !== 'accepted' && (
+            <button type="button" disabled={busy} onClick={() => void run(() => onPatch({ status: 'accepted' }))} data-testid={`button-accept-${r.id}`}
+              className={`${btn} border-emerald-600/30 text-emerald-700 hover:bg-emerald-500/10`}><Check className="h-3.5 w-3.5" /> Accept</button>
+          )}
+          {r.status !== 'rejected' && (
+            <button type="button" disabled={busy} onClick={() => void run(() => onPatch({ status: 'rejected' }))} data-testid={`button-reject-${r.id}`}
+              className={`${btn} border-destructive/30 text-destructive hover:bg-destructive/10`}><X className="h-3.5 w-3.5" /> Reject</button>
+          )}
+          {r.status === 'accepted' && r.outcome !== 'closed' && (
+            <button type="button" onClick={onCreateCompany} data-testid={`button-create-company-${r.id}`}
+              className="inline-flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground"><Building2 className="h-3.5 w-3.5" /> Create company</button>
+          )}
+          {r.status !== 'pending' && (
+            <button type="button" disabled={busy} onClick={() => void run(() => onPatch({ status: 'pending', outcome: '' }))} className={`${btn} hover:bg-muted`}>Reopen</button>
+          )}
+          <button type="button" onClick={onToggle} aria-expanded={expanded} data-testid={`button-followup-${r.id}`}
+            className={`${btn} ${expanded ? 'border-primary/40 bg-primary/8 text-primary' : 'hover:bg-muted'}`}>
+            <MessageSquare className="h-3.5 w-3.5" /> Follow-up{r.comments.length ? ` (${r.comments.length})` : ''}
+          </button>
+          <button type="button" aria-label="Delete request" title="Delete" onClick={onDelete}
+            className="rounded-lg border px-2 py-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></button>
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="dl-rise mt-3 grid gap-4 rounded-xl border bg-background/60 p-3 md:grid-cols-2" data-testid={`followup-${r.id}`}>
+          <div className="space-y-3">
+            <div>
+              <p className="mb-1 text-xs font-semibold text-muted-foreground">Outcome</p>
+              <div className="flex flex-wrap gap-1 rounded-lg bg-muted/80 p-0.5 text-xs">
+                {([['', 'In progress'], ['converted', 'Converted to customer'], ['closed', 'Query closed']] as const).map(([value, label]) => (
+                  <button key={value || 'open'} type="button" disabled={busy} aria-pressed={r.outcome === value} data-testid={`outcome-${value || 'open'}-${r.id}`}
+                    onClick={() => { if (r.outcome !== value) void run(() => onPatch({ outcome: value })); }}
+                    className={`flex-1 rounded-md px-2.5 py-1.5 font-semibold ${r.outcome === value ? 'bg-card shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <label className="block">
+              <span className="mb-1 flex items-center gap-1 text-xs font-semibold text-muted-foreground"><ClipboardList className="h-3.5 w-3.5" /> Action plan</span>
+              <textarea className={inputCls} rows={4} value={plan} maxLength={4000} onChange={(e) => setPlan(e.target.value)} data-testid={`input-plan-${r.id}`}
+                placeholder={'e.g. Call on Monday 11 AM\nShare pricing for 10 PCs\nSet up a trial account'} />
+            </label>
+            <div className="flex justify-end">
+              <button type="button" disabled={busy || plan === r.actionPlan} onClick={() => void run(() => onPatch({ actionPlan: plan }))} data-testid={`button-save-plan-${r.id}`}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-foreground px-3 py-1.5 text-xs font-bold text-background disabled:opacity-40"><Save className="h-3.5 w-3.5" /> Save plan</button>
+            </div>
+          </div>
+          <div>
+            <p className="mb-1 flex items-center gap-1 text-xs font-semibold text-muted-foreground"><MessageSquare className="h-3.5 w-3.5" /> Comments</p>
+            {r.comments.length === 0 ? <p className="rounded-lg bg-muted/50 px-3 py-3 text-center text-xs text-muted-foreground">No comments yet. Log calls, WhatsApp chats and decisions here.</p> : (
+              <ul className="max-h-56 space-y-2 overflow-y-auto pr-1">
+                {r.comments.map((c) => (
+                  <li key={c.id} className="group rounded-lg bg-muted/60 px-3 py-2 text-sm">
+                    <p className="whitespace-pre-line">{c.text}</p>
+                    <p className="mt-0.5 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                      <span>{c.by || 'Note'} · {relativeTime(c.at, Date.now())}</span>
+                      <button type="button" onClick={() => void run(() => onRemoveComment(c.id))} aria-label="Remove comment"
+                        className="opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100 focus:opacity-100"><Trash2 className="h-3 w-3" /></button>
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <form className="mt-2 flex gap-2" onSubmit={(e) => { e.preventDefault(); const t = comment.trim(); if (t) void run(async () => { const ok = await onComment(t); if (ok) setComment(''); return ok; }); }}>
+              <input className={inputCls} value={comment} onChange={(e) => setComment(e.target.value)} maxLength={2000} placeholder="Add a comment…" data-testid={`input-comment-${r.id}`} />
+              <button type="submit" disabled={busy || !comment.trim()} data-testid={`button-comment-${r.id}`}
+                className="shrink-0 rounded-xl bg-primary px-3 text-sm font-bold text-primary-foreground disabled:opacity-40"><Send className="h-4 w-4" /></button>
+            </form>
+          </div>
+        </div>
+      )}
+    </li>
   );
 }
 

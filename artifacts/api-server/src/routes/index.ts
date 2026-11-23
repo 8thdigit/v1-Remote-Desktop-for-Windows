@@ -5,6 +5,7 @@ import authRouter from "./auth";
 import adminRouter from "./admin";
 import billingRouter from "./billing";
 import siteRouter from "./site";
+import companyRouter from "./company";
 
 const router: IRouter = Router();
 
@@ -13,6 +14,7 @@ router.use("/auth", authRouter);
 router.use("/admin", adminRouter);
 router.use("/billing", billingRouter);
 router.use("/site", siteRouter);
+router.use("/company", companyRouter);
 router.use("/msfwr", msfwrRouter);
 
 export default router;

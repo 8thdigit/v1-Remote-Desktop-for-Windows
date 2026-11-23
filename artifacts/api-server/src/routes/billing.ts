@@ -193,6 +193,19 @@ router.post("/subscriptions/:accountId/renew", async (req, res) => {
   } catch (err) { sendError(res, err); }
 });
 
+// A grace extension: extra usage on top of the plan quota for this period.
+router.post("/subscriptions/:accountId/grace", async (req, res) => {
+  try {
+    const account = await companyOr404(req);
+    if (!account) { res.status(404).json({ error: "That company no longer exists." }); return; }
+    const billing = await billingReady();
+    const sub = await billing.addGrace(account.id, { amount: req.body?.amount, remarks: req.body?.remarks, by: req.account!.displayName });
+    const latest = sub.graceLog[0];
+    activity.add("grace", `${req.account!.displayName} gave ${account.displayName} a grace extension of ${latest.amount} (${latest.remarks})`, req.account!.username);
+    res.json({ subscription: sub, entitlement: billing.entitlement(account.id) });
+  } catch (err) { sendError(res, err); }
+});
+
 router.post("/subscriptions/:accountId/revoke-license", async (req, res) => {
   try {
     const account = await companyOr404(req);

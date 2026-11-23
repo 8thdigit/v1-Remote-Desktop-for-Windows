@@ -56,8 +56,18 @@ export type Subscription = {
   startedAt: number;
   currentPeriodStart: number;
   currentPeriodEnd: number;
-  // Sessions counted in the current period; reset when the period rolls.
+  // Usage counted in the current period; reset when the period rolls. It is
+  // the sum of urlsUsed and extraSessionsUsed (plus any usage counted before
+  // the breakdown existed).
   sessionsUsed: number;
+  // Remote access URLs the company authorized with its Access PIN this period.
+  urlsUsed: number;
+  // Sessions started while another of the company's sessions was already live.
+  extraSessionsUsed: number;
+  // Extra usage an operator granted on top of the plan quota for this period.
+  graceSessions: number;
+  // Every grace extension ever granted, newest first.
+  graceLog: GraceExtension[];
   // Bumped to revoke every license issued before (a company that was
   // compromised, or a client that must be re-provisioned).
   licenseVersion: number;
@@ -71,6 +81,20 @@ export type Subscription = {
   createdAt: number;
   updatedAt: number;
 };
+
+export type GraceExtension = {
+  id: string;
+  amount: number;
+  remarks: string;
+  by: string;
+  at: number;
+  // The end of the period the extension applied to.
+  periodEnd: number;
+};
+
+export type UsageKind = "url" | "session";
+
+const MAX_GRACE_LOG = 100;
 
 export type PaymentStatus = "paid" | "due" | "overdue";
 
@@ -204,13 +228,39 @@ export function effectiveStatus(sub: Subscription, now: number): SubStatus {
   return sub.status;
 }
 
+// Fills in fields added after a subscription was first saved.
+function normalizeSub(sub: Subscription): Subscription {
+  return {
+    ...sub,
+    sessionsUsed: Number(sub.sessionsUsed) || 0,
+    urlsUsed: Number(sub.urlsUsed) || 0,
+    extraSessionsUsed: Number(sub.extraSessionsUsed) || 0,
+    graceSessions: Number(sub.graceSessions) || 0,
+    graceLog: Array.isArray(sub.graceLog) ? sub.graceLog : [],
+  };
+}
+
+// Starts a new period's usage from zero. A grace extension covers one period.
+function resetUsage(sub: Subscription) {
+  sub.sessionsUsed = 0;
+  sub.urlsUsed = 0;
+  sub.extraSessionsUsed = 0;
+  sub.graceSessions = 0;
+}
+
 export type Entitlement = {
   subscribed: boolean;
   status: SubStatus | "none";
   reason?: "inactive" | "expired" | "suspended" | "quota" | "license";
   plan?: Plan;
   sessionsUsed: number;
+  // The quota including any grace extension (0 = unlimited).
   sessionQuota: number;
+  // The plan's own quota and the grace on top of it.
+  planQuota: number;
+  graceSessions: number;
+  urlsUsed: number;
+  extraSessionsUsed: number;
   remaining: number | null; // null = unlimited
   currentPeriodEnd: number | null;
   maxConcurrentViewers: number;
@@ -237,7 +287,7 @@ export function createBilling(backend: BillingBackend, options: { secret?: strin
     const loaded = await backend.load();
     if (loaded) {
       plans.push(...(Array.isArray(loaded.plans) ? loaded.plans : []));
-      subscriptions.push(...(Array.isArray(loaded.subscriptions) ? loaded.subscriptions : []));
+      subscriptions.push(...(Array.isArray(loaded.subscriptions) ? loaded.subscriptions : []).map(normalizeSub));
       payments.push(...(Array.isArray(loaded.payments) ? loaded.payments : []));
       history.push(...(Array.isArray(loaded.history) ? loaded.history : []));
       storedSecret = loaded.secret;
@@ -286,7 +336,7 @@ export function createBilling(backend: BillingBackend, options: { secret?: strin
     }
     sub.currentPeriodStart = start;
     sub.currentPeriodEnd = end;
-    sub.sessionsUsed = 0;
+    resetUsage(sub);
     sub.updatedAt = now;
     void persist();
   }
@@ -295,14 +345,16 @@ export function createBilling(backend: BillingBackend, options: { secret?: strin
     const sub = subByAccount(accountId);
     if (!sub) {
       return {
-        subscribed: false, status: "none", sessionsUsed: 0, sessionQuota: 0, remaining: null,
+        subscribed: false, status: "none", sessionsUsed: 0, sessionQuota: 0, planQuota: 0, graceSessions: 0, urlsUsed: 0, extraSessionsUsed: 0, remaining: null,
         currentPeriodEnd: null, maxConcurrentViewers: 0, maxSessionMinutes: 0, licenseVersion: 0, requireLicense: false,
       };
     }
     rollIfLapsed(sub, now);
     const plan = planById(sub.planId);
     const status = effectiveStatus(sub, now);
-    const quota = plan?.sessionQuota ?? 0;
+    const planQuota = plan?.sessionQuota ?? 0;
+    // Grace only adds to a limited plan; an unlimited plan stays unlimited.
+    const quota = planQuota > 0 ? planQuota + sub.graceSessions : 0;
     const remaining = quota > 0 ? Math.max(0, quota - sub.sessionsUsed) : null;
     let reason: Entitlement["reason"] | undefined;
     if (status === "suspended") reason = "suspended";
@@ -315,6 +367,10 @@ export function createBilling(backend: BillingBackend, options: { secret?: strin
       plan,
       sessionsUsed: sub.sessionsUsed,
       sessionQuota: quota,
+      planQuota,
+      graceSessions: planQuota > 0 ? sub.graceSessions : 0,
+      urlsUsed: sub.urlsUsed,
+      extraSessionsUsed: sub.extraSessionsUsed,
       remaining,
       currentPeriodEnd: sub.currentPeriodEnd || null,
       maxConcurrentViewers: plan?.maxConcurrentViewers ?? 0,
@@ -472,8 +528,8 @@ export function createBilling(backend: BillingBackend, options: { secret?: strin
       if (!sub) {
         sub = {
           accountId, planId: null, status: "active", startedAt: now,
-          currentPeriodStart: now, currentPeriodEnd: 0, sessionsUsed: 0,
-          licenseVersion: 1, autoRenew: true, requireLicense: false, notes: "", createdAt: now, updatedAt: now,
+          currentPeriodStart: now, currentPeriodEnd: 0, sessionsUsed: 0, urlsUsed: 0, extraSessionsUsed: 0,
+          graceSessions: 0, graceLog: [], licenseVersion: 1, autoRenew: true, requireLicense: false, notes: "", createdAt: now, updatedAt: now,
         };
         subscriptions.push(sub);
       }
@@ -491,7 +547,7 @@ export function createBilling(backend: BillingBackend, options: { secret?: strin
         sub.currentPeriodStart = input.currentPeriodStart ?? now;
         sub.currentPeriodEnd = sub.currentPeriodStart + INTERVAL_DAYS[plan.interval] * DAY;
       }
-      if (input.resetUsage || planChanged) sub.sessionsUsed = 0;
+      if (input.resetUsage || planChanged) resetUsage(sub);
       sub.updatedAt = now;
       await persist();
       return { ...sub };
@@ -507,7 +563,7 @@ export function createBilling(backend: BillingBackend, options: { secret?: strin
       const base = sub.currentPeriodEnd && sub.currentPeriodEnd > now ? sub.currentPeriodEnd : now;
       sub.currentPeriodStart = base;
       sub.currentPeriodEnd = base + span;
-      sub.sessionsUsed = 0;
+      resetUsage(sub);
       sub.status = "active";
       sub.updatedAt = now;
       const payment = await api.addPayment(accountId, {
@@ -525,6 +581,27 @@ export function createBilling(backend: BillingBackend, options: { secret?: strin
       return { subscription: { ...sub }, payment };
     },
     // Invalidates every license issued for this company (re-provision needed).
+    // Grants extra usage on top of the plan quota for the current period, with
+    // a remark for the record. Used when a company hits its quota mid-period.
+    async addGrace(accountId: string, input: { amount: unknown; remarks?: unknown; by?: string }) {
+      const sub = subByAccount(accountId);
+      if (!sub) throw new BillingError(404, "This company has no subscription yet.");
+      const plan = planById(sub.planId);
+      if (!plan) throw new BillingError(400, "Assign a plan before adding a grace extension.");
+      if (!(plan.sessionQuota > 0)) throw new BillingError(400, "This plan is unlimited, so it needs no grace extension.");
+      const amount = Math.trunc(Number(input.amount));
+      if (!Number.isFinite(amount) || amount < 1 || amount > 100_000) throw new BillingError(400, "Enter how many extra sessions to allow, from 1 to 100000.");
+      const remarks = cleanText(input.remarks, 500);
+      if (!remarks) throw new BillingError(400, "Add a remark saying why the grace extension was given.");
+      const now = clock();
+      rollIfLapsed(sub, now);
+      sub.graceSessions += amount;
+      sub.graceLog.unshift({ id: id(), amount, remarks, by: cleanName(input.by, 80), at: now, periodEnd: sub.currentPeriodEnd });
+      if (sub.graceLog.length > MAX_GRACE_LOG) sub.graceLog.length = MAX_GRACE_LOG;
+      sub.updatedAt = now;
+      await persist();
+      return { ...sub, graceLog: structuredClone(sub.graceLog) };
+    },
     async revokeLicenses(accountId: string) {
       const sub = subByAccount(accountId);
       if (!sub) throw new BillingError(404, "This company has no subscription yet.");
@@ -635,15 +712,23 @@ export function createBilling(backend: BillingBackend, options: { secret?: strin
         .slice(0, limit)
         .map((h) => ({ ...h }));
     },
-    // Counts one started session against a company's quota. Call this when a
-    // session goes live, so the next start is blocked once the quota is hit.
-    async countSession(accountId: string) {
+    // Counts one unit of usage against a company's quota: a remote access URL
+    // it authorized ("url"), or a session started while another of its
+    // sessions was already live ("session"). Once the quota is reached, new
+    // sessions are refused and the company gets no new Access PIN.
+    async countUsage(accountId: string, kind: UsageKind) {
       const sub = subByAccount(accountId);
       if (!sub) return;
       rollIfLapsed(sub, clock());
       sub.sessionsUsed += 1;
+      if (kind === "url") sub.urlsUsed += 1;
+      else sub.extraSessionsUsed += 1;
       sub.updatedAt = clock();
       await persist();
+    },
+    // Kept for callers that count every session (older behavior).
+    async countSession(accountId: string) {
+      await api.countUsage(accountId, "session");
     },
     // Records an ended session in the history.
     async recordSession(record: Omit<SessionRecord, "id">) {

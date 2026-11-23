@@ -27,7 +27,13 @@ export type SiteSettings = {
   updatedAt: number;
 };
 
-export type RegistrationStatus = "pending" | "approved" | "dismissed";
+export type RegistrationStatus = "pending" | "accepted" | "rejected";
+
+// How a handled request ended: the person became a customer, or the query was
+// answered and closed. Empty while it is still being worked on.
+export type RegistrationOutcome = "" | "converted" | "closed";
+
+export type RegistrationComment = { id: string; text: string; by: string; at: number };
 
 export type Registration = {
   id: string;
@@ -37,10 +43,36 @@ export type Registration = {
   mobile: string;
   message: string;
   status: RegistrationStatus;
+  // What the team plans to do about the request.
+  actionPlan: string;
+  outcome: RegistrationOutcome;
+  // A running log of follow-ups (calls, WhatsApp messages, decisions).
+  comments: RegistrationComment[];
+  // Older single-line note; kept for requests saved before comments existed.
   note: string;
   createdAt: number;
   updatedAt: number;
 };
+
+const MAX_COMMENTS = 200;
+
+// Brings a stored request up to date: "approved" and "dismissed" became
+// "accepted" and "rejected", and an old note becomes the first comment.
+function normalizeRegistration(raw: Registration): Registration {
+  const r = { ...raw };
+  const stored: string = raw.status;
+  r.status = stored === "approved" || stored === "accepted" ? "accepted"
+    : stored === "dismissed" || stored === "rejected" ? "rejected"
+    : "pending";
+  r.actionPlan = typeof r.actionPlan === "string" ? r.actionPlan : "";
+  r.outcome = r.outcome === "converted" || r.outcome === "closed" ? r.outcome : "";
+  r.comments = Array.isArray(r.comments) ? r.comments : [];
+  r.note = typeof r.note === "string" ? r.note : "";
+  if (r.note.trim() && r.comments.length === 0) {
+    r.comments = [{ id: "note", text: r.note.trim(), by: "", at: r.updatedAt || r.createdAt }];
+  }
+  return r as Registration;
+}
 
 type SiteData = {
   settings?: Partial<SiteSettings>;
@@ -219,7 +251,7 @@ export function createSite(backend: SiteBackend, options: { clock?: () => number
     const loaded = await backend.load();
     settings = mergeSettings(loaded?.settings);
     assets = loaded?.assets ?? {};
-    registrations = Array.isArray(loaded?.registrations) ? loaded.registrations : [];
+    registrations = Array.isArray(loaded?.registrations) ? loaded.registrations.map(normalizeRegistration) : [];
   }
 
   const assetInfo = (k: AssetKind) => {
@@ -298,7 +330,7 @@ export function createSite(backend: SiteBackend, options: { clock?: () => number
       const entry: Registration = {
         id: randomBytes(9).toString("base64url"),
         name, company, email, mobile, message,
-        status: "pending", note: "", createdAt: now, updatedAt: now,
+        status: "pending", actionPlan: "", outcome: "", comments: [], note: "", createdAt: now, updatedAt: now,
       };
       registrations.unshift(entry);
       if (registrations.length > MAX_REGISTRATIONS) {
@@ -315,21 +347,54 @@ export function createSite(backend: SiteBackend, options: { clock?: () => number
       return { ...entry };
     },
 
-    listRegistrations() { return registrations.map((r) => ({ ...r })); },
+    listRegistrations() { return registrations.map((r) => structuredClone(r)); },
 
-    async updateRegistration(id: string, change: { status?: unknown; note?: unknown }) {
+    async updateRegistration(id: string, change: { status?: unknown; actionPlan?: unknown; outcome?: unknown; note?: unknown }) {
       const r = registrations.find((x) => x.id === id);
       if (!r) throw new SiteError(404, "That request no longer exists.");
       if (change.status !== undefined) {
-        if (change.status !== "pending" && change.status !== "approved" && change.status !== "dismissed") {
-          throw new SiteError(400, "Choose pending, approved or dismissed.");
+        if (change.status !== "pending" && change.status !== "accepted" && change.status !== "rejected") {
+          throw new SiteError(400, "Choose pending, accepted or rejected.");
         }
         r.status = change.status;
       }
+      if (change.outcome !== undefined) {
+        if (change.outcome !== "" && change.outcome !== "converted" && change.outcome !== "closed") {
+          throw new SiteError(400, "Choose converted to customer or query closed.");
+        }
+        r.outcome = change.outcome;
+        // An outcome means the request was handled.
+        if (r.outcome && r.status === "pending") r.status = r.outcome === "converted" ? "accepted" : "rejected";
+      }
+      if (change.actionPlan !== undefined) r.actionPlan = multi(change.actionPlan, 4000);
       if (change.note !== undefined) r.note = multi(change.note, 1000);
       r.updatedAt = clock();
       await persist();
-      return { ...r };
+      return structuredClone(r);
+    },
+
+    async addRegistrationComment(id: string, text: unknown, by: string) {
+      const r = registrations.find((x) => x.id === id);
+      if (!r) throw new SiteError(404, "That request no longer exists.");
+      const body = multi(text, 2000).trim();
+      if (!body) throw new SiteError(400, "Write a comment first.");
+      const now = clock();
+      r.comments.push({ id: randomBytes(6).toString("base64url"), text: body, by: line(by, 80), at: now });
+      if (r.comments.length > MAX_COMMENTS) r.comments.splice(0, r.comments.length - MAX_COMMENTS);
+      r.updatedAt = now;
+      await persist();
+      return structuredClone(r);
+    },
+
+    async removeRegistrationComment(id: string, commentId: string) {
+      const r = registrations.find((x) => x.id === id);
+      if (!r) throw new SiteError(404, "That request no longer exists.");
+      const i = r.comments.findIndex((c) => c.id === commentId);
+      if (i < 0) throw new SiteError(404, "That comment no longer exists.");
+      r.comments.splice(i, 1);
+      r.updatedAt = clock();
+      await persist();
+      return structuredClone(r);
     },
 
     async removeRegistration(id: string) {
@@ -340,8 +405,11 @@ export function createSite(backend: SiteBackend, options: { clock?: () => number
     },
 
     registrationCounts() {
-      const counts = { pending: 0, approved: 0, dismissed: 0, total: registrations.length };
-      for (const r of registrations) counts[r.status] += 1;
+      const counts = { pending: 0, accepted: 0, rejected: 0, converted: 0, closed: 0, total: registrations.length };
+      for (const r of registrations) {
+        counts[r.status] += 1;
+        if (r.outcome) counts[r.outcome] += 1;
+      }
       return counts;
     },
 

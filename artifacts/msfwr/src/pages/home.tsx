@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type
 import {
   acceptMsfwrRequest, connectMsfwrPc, getMsfwrInbox, listMsfwrCalls, useJoinMsfwr, type MsfwrInbox,
 } from '@workspace/api-client-react';
-import { Link } from 'wouter';
-import { ArrowRight, Bell, BellOff, BellRing, Building2, Check, Clock, Copy, Download, Eye, EyeOff, History, Laptop, Monitor, Pencil, Plus, RefreshCw, ShieldCheck, Star, Trash2, UserRound, Volume2, VolumeX, X } from 'lucide-react';
+import { Link, useLocation } from 'wouter';
+import { peekLanding, takeLanding } from '@/pages/sign-in';
+import { AlertTriangle, ArrowRight, Bell, BellOff, BellRing, Building2, Check, Clock, Copy, Download, Eye, EyeOff, History, Laptop, LayoutDashboard, Monitor, Pencil, Plus, RefreshCw, ShieldCheck, Star, Trash2, UserRound, Volume2, VolumeX, X } from 'lucide-react';
 import { AcceptedUrlTable, CompanyPinCard } from '@/components/access-pins';
+import { CompanyDashboardView } from '@/components/company-dashboard';
 import { LogoMark, Wordmark } from '@/components/logo';
 import LiveSession from '@/LiveSession';
 import { useSite } from '@/lib/site';
@@ -18,7 +20,7 @@ import {
 
 type Session = { token: string; verification: string; preapproved: boolean; code: string };
 type Presence = 'online' | 'busy' | 'offline' | 'unknown';
-type Tab = 'connect' | 'pcs' | 'download';
+type Tab = 'dashboard' | 'connect' | 'pcs' | 'download';
 
 const CALL_TTL = 2 * 60_000;
 const TAB_KEY = 'Msfwr.tab.v2';
@@ -65,6 +67,12 @@ function chime() {
 export default function Home() {
   const join = useJoinMsfwr();
   const { user } = useAuth();
+  const [, navigate] = useLocation();
+  // An admin who just signed in lands on the admin console's dashboard.
+  useEffect(() => {
+    if (peekLanding() === 'admin' && user.role === 'admin') navigate('/admin', { replace: true });
+    else takeLanding();
+  }, [navigate, user.role]);
   // Requests sent to this company's RA ID and the PCs pointed to it.
   const [inbox, setInbox] = useState<MsfwrInbox | null>(null);
   const [refreshingInbox, setRefreshingInbox] = useState(false);
@@ -83,11 +91,12 @@ export default function Home() {
   // The relay answered but has no Initiate endpoints: it runs an older build.
   const [relayOutdated, setRelayOutdated] = useState(false);
   const { site } = useSite();
+  // Every sign-in lands on the dashboard; the section then follows the URL
+  // hash (/#pcs), so a reload keeps the section that was open.
   const [chosenTab, setTabState] = useState<Tab>(() => {
-    const saved = readPref(TAB_KEY, '');
-    if (saved === 'connect' || saved === 'pcs' || saved === 'download') return saved;
-    // IT staff mostly come here to answer Initiate requests, so open on them.
-    return 'pcs';
+    if (peekLanding()) return 'dashboard';
+    const h = typeof window !== 'undefined' ? window.location.hash.slice(1) : '';
+    return h === 'connect' || h === 'pcs' || h === 'download' ? h : 'dashboard';
   });
   const [sound, setSound] = useState(() => readPref(SOUND_KEY, 'on') === 'on');
   const [alerts, setAlerts] = useState<NotificationPermission | 'unsupported'>(
@@ -104,12 +113,13 @@ export default function Home() {
   soundRef.current = sound;
 
   // An admin can hide sections in Site settings; fall back to the first visible one.
-  const visibleTabs = (['pcs', 'connect', 'download'] as const).filter((t) => site.tabs[t]);
-  const tab: Tab = visibleTabs.includes(chosenTab as never) ? chosenTab : visibleTabs[0] ?? 'pcs';
+  const visibleTabs: Tab[] = ['dashboard', ...(['pcs', 'connect', 'download'] as const).filter((t) => site.tabs[t])];
+  const tab: Tab = visibleTabs.includes(chosenTab) ? chosenTab : 'dashboard';
 
   function setTab(next: Tab) {
     setTabState(next);
     writePref(TAB_KEY, next);
+    window.history.replaceState(null, '', next === 'dashboard' ? window.location.pathname + window.location.search : `#${next}`);
   }
 
   const updatePCs = useCallback((update: (list: SavedPC[]) => SavedPC[]) => {
@@ -365,7 +375,10 @@ export default function Home() {
             </div>
           </div>
           {visibleTabs.length > 1 && (
-          <nav aria-label="Sections" className="order-3 flex w-full gap-1 rounded-xl bg-muted/80 p-1 sm:order-none sm:ml-auto sm:w-auto">
+          <nav aria-label="Sections" className="order-3 flex w-full gap-1 overflow-x-auto rounded-xl bg-muted/80 p-1 sm:order-none sm:ml-auto sm:w-auto">
+            <TabButton active={tab === 'dashboard'} onClick={() => setTab('dashboard')} testId="tab-dashboard">
+              <LayoutDashboard className="mr-1.5 h-3.5 w-3.5" /> Dashboard
+            </TabButton>
             {site.tabs.pcs && <TabButton active={tab === 'pcs'} onClick={() => setTab('pcs')} testId="tab-pcs">
               <BellRing className="mr-1.5 h-3.5 w-3.5" /> Requests &amp; PCs
               {alertCount > 0
@@ -476,7 +489,9 @@ export default function Home() {
           </div>
         )}
 
-        {tab !== 'pcs' && site.tabs.pcs && waiting.length === 0 && (
+        {tab === 'dashboard' && <CompanyDashboardView onOpen={(t) => setTab(site.tabs[t] ? t : 'dashboard')} />}
+
+        {tab !== 'pcs' && tab !== 'dashboard' && site.tabs.pcs && waiting.length === 0 && (
           <button type="button" onClick={() => setTab('pcs')} data-testid="button-open-requests"
             className="mb-6 flex w-full items-center gap-3 rounded-2xl border border-foreground/10 bg-card/80 px-4 py-3 text-left text-sm shadow-sm hover:bg-card">
             <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary/12 text-primary"><BellRing className="h-4.5 w-4.5" /></span>
@@ -614,6 +629,12 @@ function CompanyPanel({ inbox, raId, company, now, busy, savedPcs, refreshing, o
         </button>
       </div>
       {inbox?.accessPin && <CompanyPinCard pin={inbox.accessPin} />}
+      {inbox && !inbox.accessPin && (inbox as MsfwrInbox & { pinBlocked?: { reason: string; message: string } }).pinBlocked && (
+        <div role="alert" className="mt-4 flex items-start gap-3 rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive" data-testid="card-pin-blocked">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+          <span><b>No Access PIN right now.</b> {(inbox as MsfwrInbox & { pinBlocked: { message: string } }).pinBlocked.message} New remote access URLs cannot be authorized until this is resolved.</span>
+        </div>
+      )}
       {inbox && (
         <div className="mt-4" data-testid="section-access-pins">
           <h3 className="flex items-center gap-1.5 text-sm font-bold"><ShieldCheck className="h-4 w-4" /> URLs accepted with your PIN</h3>

@@ -61,9 +61,31 @@ test("access requests are validated, de-duplicated and moderated", async () => {
   await site.addRegistration({ name: "Asha", email: "asha@example.com", mobile: "+91 98765 43210", message: "" });
   assert.equal(site.listRegistrations().length, 1, "a second request from the same email updates the open one");
   assert.equal(site.listRegistrations()[0].message, "Need 10 seats");
-  await site.updateRegistration(r.id, { status: "approved", note: "Called" });
-  assert.deepEqual(site.registrationCounts(), { pending: 0, approved: 1, dismissed: 0, total: 1 });
-  await assert.rejects(site.updateRegistration(r.id, { status: "maybe" }), /pending, approved/);
+  await site.updateRegistration(r.id, { status: "accepted", actionPlan: "Call back\nSend a quote" });
+  assert.deepEqual(site.registrationCounts(), { pending: 0, accepted: 1, rejected: 0, converted: 0, closed: 0, total: 1 });
+  assert.equal(site.listRegistrations()[0].actionPlan, "Call back\nSend a quote");
+  await assert.rejects(site.updateRegistration(r.id, { status: "approved" }), /pending, accepted or rejected/);
+  await assert.rejects(site.updateRegistration(r.id, { outcome: "won" }), /converted to customer or query closed/);
+  await site.updateRegistration(r.id, { outcome: "converted" });
+  assert.equal(site.registrationCounts().converted, 1);
+  const c = await site.addRegistrationComment(r.id, "Spoke on WhatsApp", "Admin");
+  assert.equal(c.comments.length, 1);
+  assert.deepEqual([c.comments[0].text, c.comments[0].by], ["Spoke on WhatsApp", "Admin"]);
+  await assert.rejects(site.addRegistrationComment(r.id, "   ", "Admin"), /Write a comment/);
+  const left = await site.removeRegistrationComment(r.id, c.comments[0].id);
+  assert.equal(left.comments.length, 0);
   await site.removeRegistration(r.id);
   assert.equal(site.listRegistrations().length, 0);
+});
+
+test("older requests move to accepted and rejected, and their note becomes a comment", async () => {
+  const backend = memorySiteBackend({ registrations: [
+    { id: "a", name: "A", company: "", email: "a@b.co", mobile: "9876543210", message: "", status: "approved", note: "Called", createdAt: 1, updatedAt: 2 },
+    { id: "b", name: "B", company: "", email: "b@b.co", mobile: "9876543210", message: "", status: "dismissed", note: "", createdAt: 1, updatedAt: 1 },
+  ] });
+  const site = await makeSite(backend);
+  const [a, b] = site.listRegistrations();
+  assert.deepEqual([a.status, b.status], ["accepted", "rejected"]);
+  assert.equal(a.comments[0].text, "Called");
+  assert.deepEqual([b.comments, b.outcome, b.actionPlan], [[], "", ""]);
 });

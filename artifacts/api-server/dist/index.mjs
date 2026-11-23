@@ -843,12 +843,12 @@ var require_depd = __commonJS({
     }
     function callSiteLocation(callSite) {
       var file = callSite.getFileName() || "<anonymous>";
-      var line = callSite.getLineNumber();
+      var line2 = callSite.getLineNumber();
       var colm = callSite.getColumnNumber();
       if (callSite.isEval()) {
         file = callSite.getEvalOrigin() + ", " + file;
       }
-      var site = [file, line, colm];
+      var site = [file, line2, colm];
       site.callSite = callSite;
       site.name = callSite.getFunctionName();
       return site;
@@ -15252,11 +15252,11 @@ var require_mime_types = __commonJS({
       }
       return exts[0];
     }
-    function lookup(path5) {
-      if (!path5 || typeof path5 !== "string") {
+    function lookup(path6) {
+      if (!path6 || typeof path6 !== "string") {
         return false;
       }
-      var extension2 = extname("x." + path5).toLowerCase().slice(1);
+      var extension2 = extname("x." + path6).toLowerCase().slice(1);
       if (!extension2) {
         return false;
       }
@@ -19014,13 +19014,13 @@ var require_view = __commonJS({
   "../../node_modules/.pnpm/express@5.3.0/node_modules/express/lib/view.js"(exports, module) {
     "use strict";
     var debug = require_src()("express:view");
-    var path5 = __require("node:path");
+    var path6 = __require("node:path");
     var fs = __require("node:fs");
-    var dirname = path5.dirname;
-    var basename = path5.basename;
-    var extname = path5.extname;
-    var join = path5.join;
-    var resolve = path5.resolve;
+    var dirname = path6.dirname;
+    var basename = path6.basename;
+    var extname = path6.extname;
+    var join = path6.join;
+    var resolve = path6.resolve;
     module.exports = View;
     function View(name, options) {
       var opts = options || {};
@@ -19049,17 +19049,17 @@ var require_view = __commonJS({
       this.path = this.lookup(fileName);
     }
     View.prototype.lookup = function lookup(name) {
-      var path6;
+      var path7;
       var roots = [].concat(this.root);
       debug('lookup "%s"', name);
-      for (var i = 0; i < roots.length && !path6; i++) {
+      for (var i = 0; i < roots.length && !path7; i++) {
         var root = roots[i];
         var loc = resolve(root, name);
         var dir = dirname(loc);
         var file = basename(loc);
-        path6 = this.resolve(dir, file);
+        path7 = this.resolve(dir, file);
       }
-      return path6;
+      return path7;
     };
     View.prototype.render = function render(options, callback) {
       var sync = true;
@@ -19081,21 +19081,21 @@ var require_view = __commonJS({
     };
     View.prototype.resolve = function resolve2(dir, file) {
       var ext = this.ext;
-      var path6 = join(dir, file);
-      var stat = tryStat(path6);
+      var path7 = join(dir, file);
+      var stat = tryStat(path7);
       if (stat && stat.isFile()) {
-        return path6;
+        return path7;
       }
-      path6 = join(dir, basename(file, ext), "index" + ext);
-      stat = tryStat(path6);
+      path7 = join(dir, basename(file, ext), "index" + ext);
+      stat = tryStat(path7);
       if (stat && stat.isFile()) {
-        return path6;
+        return path7;
       }
     };
-    function tryStat(path6) {
-      debug('stat "%s"', path6);
+    function tryStat(path7) {
+      debug('stat "%s"', path7);
       try {
-        return fs.statSync(path6);
+        return fs.statSync(path7);
       } catch (e) {
         return void 0;
       }
@@ -20247,15 +20247,15 @@ var require_dist2 = __commonJS({
       let index = 0;
       function consumeUntil(end) {
         const output = [];
-        let path5 = "";
+        let path6 = "";
         function writePath() {
-          if (!path5)
+          if (!path6)
             return;
           output.push({
             type: "text",
-            value: encodePath(path5)
+            value: encodePath(path6)
           });
-          path5 = "";
+          path6 = "";
         }
         while (index < chars.length) {
           const value = chars[index++];
@@ -20267,7 +20267,7 @@ var require_dist2 = __commonJS({
             if (index === chars.length) {
               throw new PathError(`Unexpected end after \\ at index ${index}`, str);
             }
-            path5 += chars[index++];
+            path6 += chars[index++];
             continue;
           }
           if (value === ":" || value === "*") {
@@ -20311,7 +20311,7 @@ var require_dist2 = __commonJS({
           if (value === "}" || value === "(" || value === ")" || value === "[" || value === "]" || value === "+" || value === "?" || value === "!") {
             throw new PathError(`Unexpected ${value} at index ${index - 1}`, str);
           }
-          path5 += value;
+          path6 += value;
         }
         if (end) {
           throw new PathError(`Unexpected end at index ${index}, expected ${end}`, str);
@@ -20321,17 +20321,17 @@ var require_dist2 = __commonJS({
       }
       return new TokenData(consumeUntil(""), str);
     }
-    function compile(path5, options = {}) {
+    function compile(path6, options = {}) {
       const { encode: encode2 = encodeURIComponent, delimiter = DEFAULT_DELIMITER } = options;
-      const data = typeof path5 === "object" ? path5 : parse2(path5, options);
+      const data = typeof path6 === "object" ? path6 : parse2(path6, options);
       const fn = tokensToFunction(data.tokens, delimiter, encode2);
-      return function path6(params = {}) {
+      return function path7(params = {}) {
         const missing = [];
-        const path7 = fn(params, missing);
+        const path8 = fn(params, missing);
         if (missing.length) {
           throw new TypeError(`Missing parameters: ${missing.join(", ")}`);
         }
-        return path7;
+        return path8;
       };
     }
     function tokensToFunction(tokens, delimiter, encode2) {
@@ -20393,9 +20393,9 @@ var require_dist2 = __commonJS({
         return encodeValue(value);
       };
     }
-    function match(path5, options = {}) {
+    function match(path6, options = {}) {
       const { decode: decode2 = decodeURIComponent, delimiter = DEFAULT_DELIMITER } = options;
-      const { regexp, keys } = pathToRegexp(path5, options);
+      const { regexp, keys } = pathToRegexp(path6, options);
       const decoders = keys.map((key) => {
         if (decode2 === false)
           return NOOP_VALUE;
@@ -20407,7 +20407,7 @@ var require_dist2 = __commonJS({
         const m = regexp.exec(input);
         if (!m)
           return false;
-        const path6 = m[0];
+        const path7 = m[0];
         const params = /* @__PURE__ */ Object.create(null);
         for (let i = 1; i < m.length; i++) {
           if (m[i] === void 0)
@@ -20416,21 +20416,21 @@ var require_dist2 = __commonJS({
           const decoder = decoders[i - 1];
           params[key.name] = decoder(m[i]);
         }
-        return { path: path6, params };
+        return { path: path7, params };
       };
     }
-    function pathToRegexp(path5, options = {}) {
+    function pathToRegexp(path6, options = {}) {
       const { delimiter = DEFAULT_DELIMITER, end = true, sensitive = false, trailing = true } = options;
       const keys = [];
       let source = "";
       let combinations = 0;
-      function process2(path6) {
-        if (Array.isArray(path6)) {
-          for (const p of path6)
+      function process2(path7) {
+        if (Array.isArray(path7)) {
+          for (const p of path7)
             process2(p);
           return;
         }
-        const data = typeof path6 === "object" ? path6 : parse2(path6, options);
+        const data = typeof path7 === "object" ? path7 : parse2(path7, options);
         flatten(data.tokens, 0, [], (tokens) => {
           if (combinations >= 256) {
             throw new PathError("Too many path combinations", data.originalPath);
@@ -20441,7 +20441,7 @@ var require_dist2 = __commonJS({
           combinations++;
         });
       }
-      process2(path5);
+      process2(path6);
       let pattern = `^(?:${source})`;
       if (trailing)
         pattern += "(?:" + escape2(delimiter) + "$)?";
@@ -20581,18 +20581,18 @@ var require_layer = __commonJS({
     var TRAILING_SLASH_REGEXP = /\/+$/;
     var MATCHING_GROUP_REGEXP = /\((?:\?<(.*?)>)?(?!\?)/g;
     module.exports = Layer;
-    function Layer(path5, options, fn) {
+    function Layer(path6, options, fn) {
       if (!(this instanceof Layer)) {
-        return new Layer(path5, options, fn);
+        return new Layer(path6, options, fn);
       }
-      debug("new %o", path5);
+      debug("new %o", path6);
       const opts = options || {};
       this.handle = fn;
       this.keys = [];
       this.name = fn.name || "<anonymous>";
       this.params = void 0;
       this.path = void 0;
-      this.slash = path5 === "/" && opts.end === false;
+      this.slash = path6 === "/" && opts.end === false;
       function matcher(_path) {
         if (_path instanceof RegExp) {
           const keys = [];
@@ -20631,7 +20631,7 @@ var require_layer = __commonJS({
           decode: decodeParam
         });
       }
-      this.matchers = Array.isArray(path5) ? path5.map(matcher) : [matcher(path5)];
+      this.matchers = Array.isArray(path6) ? path6.map(matcher) : [matcher(path6)];
     }
     Layer.prototype.handleError = function handleError(error2, req, res, next) {
       const fn = this.handle;
@@ -20671,9 +20671,9 @@ var require_layer = __commonJS({
         next(err);
       }
     };
-    Layer.prototype.match = function match(path5) {
+    Layer.prototype.match = function match(path6) {
       let match2;
-      if (path5 != null) {
+      if (path6 != null) {
         if (this.slash) {
           this.params = {};
           this.path = "";
@@ -20681,7 +20681,7 @@ var require_layer = __commonJS({
         }
         let i = 0;
         while (!match2 && i < this.matchers.length) {
-          match2 = this.matchers[i](path5);
+          match2 = this.matchers[i](path6);
           i++;
         }
       }
@@ -20709,13 +20709,13 @@ var require_layer = __commonJS({
         throw err;
       }
     }
-    function loosen(path5) {
-      if (path5 instanceof RegExp || path5 === "/") {
-        return path5;
+    function loosen(path6) {
+      if (path6 instanceof RegExp || path6 === "/") {
+        return path6;
       }
-      return Array.isArray(path5) ? path5.map(function(p) {
+      return Array.isArray(path6) ? path6.map(function(p) {
         return loosen(p);
-      }) : String(path5).replace(TRAILING_SLASH_REGEXP, "");
+      }) : String(path6).replace(TRAILING_SLASH_REGEXP, "");
     }
   }
 });
@@ -20731,9 +20731,9 @@ var require_route = __commonJS({
     var flatten = Array.prototype.flat;
     var methods = METHODS.map((method) => method.toLowerCase());
     module.exports = Route;
-    function Route(path5) {
-      debug("new %o", path5);
-      this.path = path5;
+    function Route(path6) {
+      debug("new %o", path6);
+      this.path = path6;
       this.stack = [];
       this.methods = /* @__PURE__ */ Object.create(null);
     }
@@ -20854,27 +20854,27 @@ var require_router = __commonJS({
     var slice = Array.prototype.slice;
     var flatten = Array.prototype.flat;
     var methods = METHODS.map((method) => method.toLowerCase());
-    module.exports = Router7;
+    module.exports = Router9;
     module.exports.Route = Route;
-    function Router7(options) {
-      if (!(this instanceof Router7)) {
-        return new Router7(options);
+    function Router9(options) {
+      if (!(this instanceof Router9)) {
+        return new Router9(options);
       }
       const opts = options || {};
-      function router7(req, res, next) {
-        router7.handle(req, res, next);
+      function router9(req, res, next) {
+        router9.handle(req, res, next);
       }
-      Object.setPrototypeOf(router7, this);
-      router7.caseSensitive = opts.caseSensitive;
-      router7.mergeParams = opts.mergeParams;
-      router7.params = {};
-      router7.strict = opts.strict;
-      router7.stack = [];
-      return router7;
+      Object.setPrototypeOf(router9, this);
+      router9.caseSensitive = opts.caseSensitive;
+      router9.mergeParams = opts.mergeParams;
+      router9.params = {};
+      router9.strict = opts.strict;
+      router9.stack = [];
+      return router9;
     }
-    Router7.prototype = function() {
+    Router9.prototype = function() {
     };
-    Router7.prototype.param = function param(name, fn) {
+    Router9.prototype.param = function param(name, fn) {
       if (!name) {
         throw new TypeError("argument name is required");
       }
@@ -20894,7 +20894,7 @@ var require_router = __commonJS({
       params.push(fn);
       return this;
     };
-    Router7.prototype.handle = function handle(req, res, callback) {
+    Router9.prototype.handle = function handle(req, res, callback) {
       if (!callback) {
         throw new TypeError("argument callback is required");
       }
@@ -20941,8 +20941,8 @@ var require_router = __commonJS({
         if (++sync > 100) {
           return setImmediate(next, err);
         }
-        const path5 = getPathname(req);
-        if (path5 == null) {
+        const path6 = getPathname(req);
+        if (path6 == null) {
           return done(layerError);
         }
         let layer;
@@ -20950,7 +20950,7 @@ var require_router = __commonJS({
         let route;
         while (match !== true && idx < stack.length) {
           layer = stack[idx++];
-          match = matchLayer(layer, path5);
+          match = matchLayer(layer, path6);
           route = layer.route;
           if (typeof match !== "boolean") {
             layerError = layerError || match;
@@ -20988,18 +20988,18 @@ var require_router = __commonJS({
           } else if (route) {
             layer.handleRequest(req, res, next);
           } else {
-            trimPrefix(layer, layerError, layerPath, path5);
+            trimPrefix(layer, layerError, layerPath, path6);
           }
           sync = 0;
         });
       }
-      function trimPrefix(layer, layerError, layerPath, path5) {
+      function trimPrefix(layer, layerError, layerPath, path6) {
         if (layerPath.length !== 0) {
-          if (layerPath !== path5.substring(0, layerPath.length)) {
+          if (layerPath !== path6.substring(0, layerPath.length)) {
             next(layerError);
             return;
           }
-          const c = path5[layerPath.length];
+          const c = path6[layerPath.length];
           if (c && c !== "/") {
             next(layerError);
             return;
@@ -21021,9 +21021,9 @@ var require_router = __commonJS({
         }
       }
     };
-    Router7.prototype.use = function use(handler) {
+    Router9.prototype.use = function use(handler) {
       let offset = 0;
-      let path5 = "/";
+      let path6 = "/";
       if (typeof handler !== "function") {
         let arg = handler;
         while (Array.isArray(arg) && arg.length !== 0) {
@@ -21031,7 +21031,7 @@ var require_router = __commonJS({
         }
         if (typeof arg !== "function") {
           offset = 1;
-          path5 = handler;
+          path6 = handler;
         }
       }
       const callbacks = flatten.call(slice.call(arguments, offset), Infinity);
@@ -21043,8 +21043,8 @@ var require_router = __commonJS({
         if (typeof fn !== "function") {
           throw new TypeError("argument handler must be a function");
         }
-        debug("use %o %s", path5, fn.name || "<anonymous>");
-        const layer = new Layer(path5, {
+        debug("use %o %s", path6, fn.name || "<anonymous>");
+        const layer = new Layer(path6, {
           sensitive: this.caseSensitive,
           strict: false,
           end: false
@@ -21054,9 +21054,9 @@ var require_router = __commonJS({
       }
       return this;
     };
-    Router7.prototype.route = function route(path5) {
-      const route2 = new Route(path5);
-      const layer = new Layer(path5, {
+    Router9.prototype.route = function route(path6) {
+      const route2 = new Route(path6);
+      const layer = new Layer(path6, {
         sensitive: this.caseSensitive,
         strict: this.strict,
         end: true
@@ -21069,8 +21069,8 @@ var require_router = __commonJS({
       return route2;
     };
     methods.concat("all").forEach(function(method) {
-      Router7.prototype[method] = function(path5) {
-        const route = this.route(path5);
+      Router9.prototype[method] = function(path6) {
+        const route = this.route(path6);
         route[method].apply(route, slice.call(arguments, 1));
         return this;
       };
@@ -21099,9 +21099,9 @@ var require_router = __commonJS({
       const fqdnIndex = url.substring(0, pathLength).indexOf("://");
       return fqdnIndex !== -1 ? url.substring(0, url.indexOf("/", 3 + fqdnIndex)) : void 0;
     }
-    function matchLayer(layer, path5) {
+    function matchLayer(layer, path6) {
       try {
-        return layer.match(path5);
+        return layer.match(path6);
       } catch (err) {
         return err;
       }
@@ -21252,13 +21252,13 @@ var require_application = __commonJS({
     var compileTrust = require_utils3().compileTrust;
     var resolve = __require("node:path").resolve;
     var once = require_once();
-    var Router7 = require_router();
+    var Router9 = require_router();
     var slice = Array.prototype.slice;
     var flatten = Array.prototype.flat;
     var app2 = exports = module.exports = {};
     var trustProxyDefaultSymbol = "@@symbol:trust_proxy_default";
     app2.init = function init() {
-      var router7 = null;
+      var router9 = null;
       this.cache = /* @__PURE__ */ Object.create(null);
       this.engines = /* @__PURE__ */ Object.create(null);
       this.settings = /* @__PURE__ */ Object.create(null);
@@ -21267,13 +21267,13 @@ var require_application = __commonJS({
         configurable: true,
         enumerable: true,
         get: function getrouter() {
-          if (router7 === null) {
-            router7 = new Router7({
+          if (router9 === null) {
+            router9 = new Router9({
               caseSensitive: this.enabled("case sensitive routing"),
               strict: this.enabled("strict routing")
             });
           }
-          return router7;
+          return router9;
         }
       });
     };
@@ -21329,7 +21329,7 @@ var require_application = __commonJS({
     };
     app2.use = function use(fn) {
       var offset = 0;
-      var path5 = "/";
+      var path6 = "/";
       if (typeof fn !== "function") {
         var arg = fn;
         while (Array.isArray(arg) && arg.length !== 0) {
@@ -21337,22 +21337,22 @@ var require_application = __commonJS({
         }
         if (typeof arg !== "function") {
           offset = 1;
-          path5 = fn;
+          path6 = fn;
         }
       }
       var fns = flatten.call(slice.call(arguments, offset), Infinity);
       if (fns.length === 0) {
         throw new TypeError("app.use() requires a middleware function");
       }
-      var router7 = this.router;
+      var router9 = this.router;
       fns.forEach(function(fn2) {
         if (!fn2 || !fn2.handle || !fn2.set) {
-          return router7.use(path5, fn2);
+          return router9.use(path6, fn2);
         }
-        debug(".use app under %s", path5);
-        fn2.mountpath = path5;
+        debug(".use app under %s", path6);
+        fn2.mountpath = path6;
         fn2.parent = this;
-        router7.use(path5, function mounted_app(req, res, next) {
+        router9.use(path6, function mounted_app(req, res, next) {
           var orig = req.app;
           fn2.handle(req, res, function(err) {
             Object.setPrototypeOf(req, orig.request);
@@ -21364,8 +21364,8 @@ var require_application = __commonJS({
       }, this);
       return this;
     };
-    app2.route = function route(path5) {
-      return this.router.route(path5);
+    app2.route = function route(path6) {
+      return this.router.route(path6);
     };
     app2.engine = function engine(ext, fn) {
       if (typeof fn !== "function") {
@@ -21408,7 +21408,7 @@ var require_application = __commonJS({
       }
       return this;
     };
-    app2.path = function path5() {
+    app2.path = function path6() {
       return this.parent ? this.parent.path() + this.mountpath : "";
     };
     app2.enabled = function enabled(setting) {
@@ -21424,17 +21424,17 @@ var require_application = __commonJS({
       return this.set(setting, false);
     };
     methods.forEach(function(method) {
-      app2[method] = function(path5) {
+      app2[method] = function(path6) {
         if (method === "get" && arguments.length === 1) {
-          return this.set(path5);
+          return this.set(path6);
         }
-        var route = this.route(path5);
+        var route = this.route(path6);
         route[method].apply(route, slice.call(arguments, 1));
         return this;
       };
     });
-    app2.all = function all(path5) {
-      var route = this.route(path5);
+    app2.all = function all(path6) {
+      var route = this.route(path6);
       var args = slice.call(arguments, 1);
       for (var i = 0; i < methods.length; i++) {
         route[methods[i]].apply(route, args);
@@ -22280,7 +22280,7 @@ var require_request = __commonJS({
       var subdomains2 = !isIP(hostname) ? hostname.split(".").reverse() : [hostname];
       return subdomains2.slice(offset);
     });
-    defineGetter(req, "path", function path5() {
+    defineGetter(req, "path", function path6() {
       return parse2(this).pathname;
     });
     defineGetter(req, "host", function host() {
@@ -22818,27 +22818,27 @@ var require_send = __commonJS({
     var ms = require_ms();
     var onFinished = require_on_finished();
     var parseRange = require_range_parser();
-    var path5 = __require("path");
+    var path6 = __require("path");
     var statuses = require_statuses();
     var Stream = __require("stream");
     var util = __require("util");
-    var extname = path5.extname;
-    var join = path5.join;
-    var normalize = path5.normalize;
-    var resolve = path5.resolve;
-    var sep = path5.sep;
+    var extname = path6.extname;
+    var join = path6.join;
+    var normalize = path6.normalize;
+    var resolve = path6.resolve;
+    var sep = path6.sep;
     var BYTES_RANGE_REGEXP = /^ *bytes=/;
     var MAX_MAXAGE = 60 * 60 * 24 * 365 * 1e3;
     var UP_PATH_REGEXP = /(?:^|[\\/])\.\.(?:[\\/]|$)/;
     module.exports = send;
-    function send(req, path6, options) {
-      return new SendStream(req, path6, options);
+    function send(req, path7, options) {
+      return new SendStream(req, path7, options);
     }
-    function SendStream(req, path6, options) {
+    function SendStream(req, path7, options) {
       Stream.call(this);
       var opts = options || {};
       this.options = opts;
-      this.path = path6;
+      this.path = path7;
       this.req = req;
       this._acceptRanges = opts.acceptRanges !== void 0 ? Boolean(opts.acceptRanges) : true;
       this._cacheControl = opts.cacheControl !== void 0 ? Boolean(opts.cacheControl) : true;
@@ -22952,10 +22952,10 @@ var require_send = __commonJS({
       var lastModified = this.res.getHeader("Last-Modified");
       return parseHttpDate(lastModified) <= parseHttpDate(ifRange);
     };
-    SendStream.prototype.redirect = function redirect(path6) {
+    SendStream.prototype.redirect = function redirect(path7) {
       var res = this.res;
       if (hasListeners(this, "directory")) {
-        this.emit("directory", res, path6);
+        this.emit("directory", res, path7);
         return;
       }
       if (this.hasTrailingSlash()) {
@@ -22975,38 +22975,38 @@ var require_send = __commonJS({
     SendStream.prototype.pipe = function pipe2(res) {
       var root = this._root;
       this.res = res;
-      var path6 = decode2(this.path);
-      if (path6 === -1) {
+      var path7 = decode2(this.path);
+      if (path7 === -1) {
         this.error(400);
         return res;
       }
-      if (~path6.indexOf("\0")) {
+      if (~path7.indexOf("\0")) {
         this.error(400);
         return res;
       }
       var parts;
       if (root !== null) {
-        if (path6) {
-          path6 = normalize("." + sep + path6);
+        if (path7) {
+          path7 = normalize("." + sep + path7);
         }
-        if (UP_PATH_REGEXP.test(path6)) {
-          debug('malicious path "%s"', path6);
+        if (UP_PATH_REGEXP.test(path7)) {
+          debug('malicious path "%s"', path7);
           this.error(403);
           return res;
         }
-        parts = path6.split(sep);
-        path6 = normalize(join(root, path6));
+        parts = path7.split(sep);
+        path7 = normalize(join(root, path7));
       } else {
-        if (UP_PATH_REGEXP.test(path6)) {
-          debug('malicious path "%s"', path6);
+        if (UP_PATH_REGEXP.test(path7)) {
+          debug('malicious path "%s"', path7);
           this.error(403);
           return res;
         }
-        parts = normalize(path6).split(sep);
-        path6 = resolve(path6);
+        parts = normalize(path7).split(sep);
+        path7 = resolve(path7);
       }
       if (containsDotFile(parts)) {
-        debug('%s dotfile "%s"', this._dotfiles, path6);
+        debug('%s dotfile "%s"', this._dotfiles, path7);
         switch (this._dotfiles) {
           case "allow":
             break;
@@ -23020,13 +23020,13 @@ var require_send = __commonJS({
         }
       }
       if (this._index.length && this.hasTrailingSlash()) {
-        this.sendIndex(path6);
+        this.sendIndex(path7);
         return res;
       }
-      this.sendFile(path6);
+      this.sendFile(path7);
       return res;
     };
-    SendStream.prototype.send = function send2(path6, stat) {
+    SendStream.prototype.send = function send2(path7, stat) {
       var len = stat.size;
       var options = this.options;
       var opts = {};
@@ -23038,9 +23038,9 @@ var require_send = __commonJS({
         this.headersAlreadySent();
         return;
       }
-      debug('pipe "%s"', path6);
-      this.setHeader(path6, stat);
-      this.type(path6);
+      debug('pipe "%s"', path7);
+      this.setHeader(path7, stat);
+      this.type(path7);
       if (this.isConditionalGET()) {
         if (this.isPreconditionFailure()) {
           this.error(412);
@@ -23089,28 +23089,28 @@ var require_send = __commonJS({
         res.end();
         return;
       }
-      this.stream(path6, opts);
+      this.stream(path7, opts);
     };
-    SendStream.prototype.sendFile = function sendFile(path6) {
+    SendStream.prototype.sendFile = function sendFile(path7) {
       var i = 0;
       var self = this;
-      debug('stat "%s"', path6);
-      fs.stat(path6, function onstat(err, stat) {
-        var pathEndsWithSep = path6[path6.length - 1] === sep;
-        if (err && err.code === "ENOENT" && !extname(path6) && !pathEndsWithSep) {
+      debug('stat "%s"', path7);
+      fs.stat(path7, function onstat(err, stat) {
+        var pathEndsWithSep = path7[path7.length - 1] === sep;
+        if (err && err.code === "ENOENT" && !extname(path7) && !pathEndsWithSep) {
           return next(err);
         }
         if (err) return self.onStatError(err);
-        if (stat.isDirectory()) return self.redirect(path6);
+        if (stat.isDirectory()) return self.redirect(path7);
         if (pathEndsWithSep) return self.error(404);
-        self.emit("file", path6, stat);
-        self.send(path6, stat);
+        self.emit("file", path7, stat);
+        self.send(path7, stat);
       });
       function next(err) {
         if (self._extensions.length <= i) {
           return err ? self.onStatError(err) : self.error(404);
         }
-        var p = path6 + "." + self._extensions[i++];
+        var p = path7 + "." + self._extensions[i++];
         debug('stat "%s"', p);
         fs.stat(p, function(err2, stat) {
           if (err2) return next(err2);
@@ -23120,7 +23120,7 @@ var require_send = __commonJS({
         });
       }
     };
-    SendStream.prototype.sendIndex = function sendIndex(path6) {
+    SendStream.prototype.sendIndex = function sendIndex(path7) {
       var i = -1;
       var self = this;
       function next(err) {
@@ -23128,7 +23128,7 @@ var require_send = __commonJS({
           if (err) return self.onStatError(err);
           return self.error(404);
         }
-        var p = join(path6, self._index[i]);
+        var p = join(path7, self._index[i]);
         debug('stat "%s"', p);
         fs.stat(p, function(err2, stat) {
           if (err2) return next(err2);
@@ -23139,10 +23139,10 @@ var require_send = __commonJS({
       }
       next();
     };
-    SendStream.prototype.stream = function stream(path6, options) {
+    SendStream.prototype.stream = function stream(path7, options) {
       var self = this;
       var res = this.res;
-      var stream2 = fs.createReadStream(path6, options);
+      var stream2 = fs.createReadStream(path7, options);
       this.emit("stream", stream2);
       stream2.pipe(res);
       function cleanup() {
@@ -23157,17 +23157,17 @@ var require_send = __commonJS({
         self.emit("end");
       });
     };
-    SendStream.prototype.type = function type(path6) {
+    SendStream.prototype.type = function type(path7) {
       var res = this.res;
       if (res.getHeader("Content-Type")) return;
-      var ext = extname(path6);
+      var ext = extname(path7);
       var type2 = mime.contentType(ext) || "application/octet-stream";
       debug("content-type %s", type2);
       res.setHeader("Content-Type", type2);
     };
-    SendStream.prototype.setHeader = function setHeader(path6, stat) {
+    SendStream.prototype.setHeader = function setHeader(path7, stat) {
       var res = this.res;
-      this.emit("headers", res, path6, stat);
+      this.emit("headers", res, path7, stat);
       if (this._acceptRanges && !res.getHeader("Accept-Ranges")) {
         debug("accept ranges");
         res.setHeader("Accept-Ranges", "bytes");
@@ -23225,9 +23225,9 @@ var require_send = __commonJS({
       }
       return err instanceof Error ? createError(status, err, { expose: false }) : createError(status, err);
     }
-    function decode2(path6) {
+    function decode2(path7) {
       try {
-        return decodeURIComponent(path6);
+        return decodeURIComponent(path7);
       } catch (err) {
         return -1;
       }
@@ -23371,7 +23371,7 @@ var require_response = __commonJS({
     var http = __require("node:http");
     var onFinished = require_on_finished();
     var mime = require_mime_types();
-    var path5 = __require("node:path");
+    var path6 = __require("node:path");
     var pathIsAbsolute = __require("node:path").isAbsolute;
     var statuses = require_statuses();
     var sign = require_cookie_signature().sign;
@@ -23380,9 +23380,9 @@ var require_response = __commonJS({
     var setCharset = require_utils3().setCharset;
     var cookie = require_cookie();
     var send = require_send();
-    var extname = path5.extname;
-    var resolve = path5.resolve;
-    var basename = path5.basename;
+    var extname = path6.extname;
+    var resolve = path6.resolve;
+    var basename = path6.basename;
     var vary = require_vary();
     var { Buffer: Buffer2 } = __require("node:buffer");
     var res = Object.create(http.ServerResponse.prototype);
@@ -23526,26 +23526,26 @@ var require_response = __commonJS({
       this.type("txt");
       return this.send(body);
     };
-    res.sendFile = function sendFile(path6, options, callback) {
+    res.sendFile = function sendFile(path7, options, callback) {
       var done = callback;
       var req = this.req;
       var res2 = this;
       var next = req.next;
       var opts = options || {};
-      if (!path6) {
+      if (!path7) {
         throw new TypeError("path argument is required to res.sendFile");
       }
-      if (typeof path6 !== "string") {
+      if (typeof path7 !== "string") {
         throw new TypeError("path must be a string to res.sendFile");
       }
       if (typeof options === "function") {
         done = options;
         opts = {};
       }
-      if (!opts.root && !pathIsAbsolute(path6)) {
+      if (!opts.root && !pathIsAbsolute(path7)) {
         throw new TypeError("path must be absolute or specify root to res.sendFile");
       }
-      var pathname = encodeURI(path6);
+      var pathname = encodeURI(path7);
       opts.etag = this.app.enabled("etag");
       var file = send(req, pathname, opts);
       sendfile(res2, file, opts, function(err) {
@@ -23556,7 +23556,7 @@ var require_response = __commonJS({
         }
       });
     };
-    res.download = function download(path6, filename, options, callback) {
+    res.download = function download(path7, filename, options, callback) {
       var done = callback;
       var name = filename;
       var opts = options || null;
@@ -23573,7 +23573,7 @@ var require_response = __commonJS({
         opts = filename;
       }
       var headers = {
-        "Content-Disposition": contentDisposition.create(basename(name || path6))
+        "Content-Disposition": contentDisposition.create(basename(name || path7))
       };
       if (opts && opts.headers) {
         var keys = Object.keys(opts.headers);
@@ -23586,7 +23586,7 @@ var require_response = __commonJS({
       }
       opts = Object.create(opts);
       opts.headers = headers;
-      var fullPath = !opts.root ? resolve(path6) : path6;
+      var fullPath = !opts.root ? resolve(path7) : path7;
       return this.sendFile(fullPath, opts, done);
     };
     res.contentType = res.type = function contentType(type) {
@@ -23870,11 +23870,11 @@ var require_serve_static = __commonJS({
         }
         var forwardError = !fallthrough;
         var originalUrl = parseUrl.original(req);
-        var path5 = parseUrl(req).pathname;
-        if (path5 === "/" && originalUrl.pathname.substr(-1) !== "/") {
-          path5 = "";
+        var path6 = parseUrl(req).pathname;
+        if (path6 === "/" && originalUrl.pathname.substr(-1) !== "/") {
+          path6 = "";
         }
-        var stream = send(req, path5, opts);
+        var stream = send(req, path6, opts);
         stream.on("directory", onDirectory);
         if (setHeaders) {
           stream.on("headers", setHeaders);
@@ -23941,7 +23941,7 @@ var require_express = __commonJS({
     var EventEmitter = __require("node:events").EventEmitter;
     var mixin = require_merge_descriptors();
     var proto = require_application();
-    var Router7 = require_router();
+    var Router9 = require_router();
     var req = require_request();
     var res = require_response();
     exports = module.exports = createApplication;
@@ -23963,8 +23963,8 @@ var require_express = __commonJS({
     exports.application = proto;
     exports.request = req;
     exports.response = res;
-    exports.Route = Router7.Route;
-    exports.Router = Router7;
+    exports.Route = Router9.Route;
+    exports.Router = Router9;
     exports.json = bodyParser.json;
     exports.raw = bodyParser.raw;
     exports.static = require_serve_static();
@@ -24522,8 +24522,8 @@ var require_req = __commonJS({
       if (req.originalUrl) {
         _req.url = req.originalUrl;
       } else {
-        const path5 = req.path;
-        _req.url = typeof path5 === "string" ? path5 : req.url ? req.url.path || req.url : void 0;
+        const path6 = req.path;
+        _req.url = typeof path6 === "string" ? path6 : req.url ? req.url.path || req.url : void 0;
       }
       if (req.query) {
         _req.query = req.query;
@@ -24688,14 +24688,14 @@ var require_redact = __commonJS({
       }
       return obj;
     }
-    function parsePath(path5) {
+    function parsePath(path6) {
       const parts = [];
       let current = "";
       let inBrackets = false;
       let inQuotes = false;
       let quoteChar = "";
-      for (let i = 0; i < path5.length; i++) {
-        const char = path5[i];
+      for (let i = 0; i < path6.length; i++) {
+        const char = path6[i];
         if (!inBrackets && char === ".") {
           if (current) {
             parts.push(current);
@@ -24826,10 +24826,10 @@ var require_redact = __commonJS({
       return current;
     }
     function redactPaths(obj, paths, censor, remove = false) {
-      for (const path5 of paths) {
-        const parts = parsePath(path5);
+      for (const path6 of paths) {
+        const parts = parsePath(path6);
         if (parts.includes("*")) {
-          redactWildcardPath(obj, parts, censor, path5, remove);
+          redactWildcardPath(obj, parts, censor, path6, remove);
         } else {
           if (remove) {
             removeKey(obj, parts);
@@ -24914,8 +24914,8 @@ var require_redact = __commonJS({
           }
         } else {
           if (afterWildcard.includes("*")) {
-            const wrappedCensor = typeof censor === "function" ? (value, path5) => {
-              const fullPath = [...pathArray.slice(0, pathLength), ...path5];
+            const wrappedCensor = typeof censor === "function" ? (value, path6) => {
+              const fullPath = [...pathArray.slice(0, pathLength), ...path6];
               return censor(value, fullPath);
             } : censor;
             redactWildcardPath(current, afterWildcard, wrappedCensor, originalPath, remove);
@@ -24950,8 +24950,8 @@ var require_redact = __commonJS({
         return null;
       }
       const pathStructure = /* @__PURE__ */ new Map();
-      for (const path5 of pathsToClone) {
-        const parts = parsePath(path5);
+      for (const path6 of pathsToClone) {
+        const parts = parsePath(path6);
         let current = pathStructure;
         for (let i = 0; i < parts.length; i++) {
           const part = parts[i];
@@ -25003,24 +25003,24 @@ var require_redact = __commonJS({
       }
       return cloneSelectively(obj, pathStructure);
     }
-    function validatePath(path5) {
-      if (typeof path5 !== "string") {
+    function validatePath(path6) {
+      if (typeof path6 !== "string") {
         throw new Error("Paths must be (non-empty) strings");
       }
-      if (path5 === "") {
+      if (path6 === "") {
         throw new Error("Invalid redaction path ()");
       }
-      if (path5.includes("..")) {
-        throw new Error(`Invalid redaction path (${path5})`);
+      if (path6.includes("..")) {
+        throw new Error(`Invalid redaction path (${path6})`);
       }
-      if (path5.includes(",")) {
-        throw new Error(`Invalid redaction path (${path5})`);
+      if (path6.includes(",")) {
+        throw new Error(`Invalid redaction path (${path6})`);
       }
       let bracketCount = 0;
       let inQuotes = false;
       let quoteChar = "";
-      for (let i = 0; i < path5.length; i++) {
-        const char = path5[i];
+      for (let i = 0; i < path6.length; i++) {
+        const char = path6[i];
         if ((char === '"' || char === "'") && bracketCount > 0) {
           if (!inQuotes) {
             inQuotes = true;
@@ -25034,20 +25034,20 @@ var require_redact = __commonJS({
         } else if (char === "]" && !inQuotes) {
           bracketCount--;
           if (bracketCount < 0) {
-            throw new Error(`Invalid redaction path (${path5})`);
+            throw new Error(`Invalid redaction path (${path6})`);
           }
         }
       }
       if (bracketCount !== 0) {
-        throw new Error(`Invalid redaction path (${path5})`);
+        throw new Error(`Invalid redaction path (${path6})`);
       }
     }
     function validatePaths(paths) {
       if (!Array.isArray(paths)) {
         throw new TypeError("paths must be an array");
       }
-      for (const path5 of paths) {
-        validatePath(path5);
+      for (const path6 of paths) {
+        validatePath(path6);
       }
     }
     function slowRedact(options = {}) {
@@ -25215,8 +25215,8 @@ var require_redaction = __commonJS({
         if (shape[k] === null) {
           o[k] = (value) => topCensor(value, [k]);
         } else {
-          const wrappedCensor = typeof censor === "function" ? (value, path5) => {
-            return censor(value, [k, ...path5]);
+          const wrappedCensor = typeof censor === "function" ? (value, path6) => {
+            return censor(value, [k, ...path6]);
           } : censor;
           o[k] = Redact({
             paths: shape[k],
@@ -25437,7 +25437,7 @@ var require_sonic_boom = __commonJS({
     var fs = __require("fs");
     var EventEmitter = __require("events");
     var inherits = __require("util").inherits;
-    var path5 = __require("path");
+    var path6 = __require("path");
     var sleep = require_atomic_sleep();
     var assert2 = __require("assert");
     var BUSY_WRITE_TIMEOUT = 100;
@@ -25491,7 +25491,7 @@ var require_sonic_boom = __commonJS({
       const mode = sonic.mode;
       if (sonic.sync) {
         try {
-          if (sonic.mkdir) fs.mkdirSync(path5.dirname(file), { recursive: true });
+          if (sonic.mkdir) fs.mkdirSync(path6.dirname(file), { recursive: true });
           const fd = fs.openSync(file, flags, mode);
           fileOpened(null, fd);
         } catch (err) {
@@ -25499,7 +25499,7 @@ var require_sonic_boom = __commonJS({
           throw err;
         }
       } else if (sonic.mkdir) {
-        fs.mkdir(path5.dirname(file), { recursive: true }, (err) => {
+        fs.mkdir(path6.dirname(file), { recursive: true }, (err) => {
           if (err) return fileOpened(err);
           fs.open(file, flags, mode, fileOpened);
         });
@@ -25511,7 +25511,7 @@ var require_sonic_boom = __commonJS({
       if (!(this instanceof SonicBoom)) {
         return new SonicBoom(opts);
       }
-      let { fd, dest, minLength, maxLength, maxWrite, periodicFlush, sync, append = true, mkdir: mkdir4, retryEAGAIN, fsync, contentMode, mode } = opts || {};
+      let { fd, dest, minLength, maxLength, maxWrite, periodicFlush, sync, append = true, mkdir: mkdir5, retryEAGAIN, fsync, contentMode, mode } = opts || {};
       fd = fd || dest;
       this._len = 0;
       this.fd = -1;
@@ -25536,7 +25536,7 @@ var require_sonic_boom = __commonJS({
       this.append = append || false;
       this.mode = mode;
       this.retryEAGAIN = retryEAGAIN || (() => true);
-      this.mkdir = mkdir4 || false;
+      this.mkdir = mkdir5 || false;
       let fsWriteSync;
       let fsWrite;
       if (contentMode === kContentModeBuffer) {
@@ -28359,9 +28359,9 @@ var require_pino = __commonJS({
   "../../node_modules/.pnpm/pino@9.14.0/node_modules/pino/pino.js"(exports, module) {
     function pinoBundlerAbsolutePath(p) {
       try {
-        const path5 = __require("path");
-        const outputDir = "/home/user/Remote-Desktop-for-Windows/artifacts/api-server/dist";
-        return path5.resolve(outputDir, p.replace(/^\.\//, ""));
+        const path6 = __require("path");
+        const outputDir = "/home/user/repo/artifacts/api-server/dist";
+        return path6.resolve(outputDir, p.replace(/^\.\//, ""));
       } catch (e) {
         const f = new Function("p", "return new URL(p, import.meta.url).pathname");
         return f(p);
@@ -29993,7 +29993,7 @@ var require_utils5 = __commonJS({
     var nodeCrypto = __require("crypto");
     module.exports = {
       postgresMd5PasswordHash,
-      randomBytes: randomBytes4,
+      randomBytes: randomBytes5,
       deriveKey,
       sha256,
       hashByName,
@@ -30003,7 +30003,7 @@ var require_utils5 = __commonJS({
     var webCrypto = nodeCrypto.webcrypto || globalThis.crypto;
     var subtleCrypto = webCrypto.subtle;
     var textEncoder = new TextEncoder();
-    function randomBytes4(length) {
+    function randomBytes5(length) {
       return webCrypto.getRandomValues(Buffer.alloc(length));
     }
     async function md5(string4) {
@@ -32267,7 +32267,7 @@ var require_split2 = __commonJS({
 var require_helper = __commonJS({
   "../../node_modules/.pnpm/pgpass@1.0.5/node_modules/pgpass/lib/helper.js"(exports, module) {
     "use strict";
-    var path5 = __require("path");
+    var path6 = __require("path");
     var Stream = __require("stream").Stream;
     var split = require_split2();
     var util = __require("util");
@@ -32306,7 +32306,7 @@ var require_helper = __commonJS({
     };
     module.exports.getFileName = function(rawEnv) {
       var env = rawEnv || process.env;
-      var file = env.PGPASSFILE || (isWin ? path5.join(env.APPDATA || "./", "postgresql", "pgpass.conf") : path5.join(env.HOME || "./", ".pgpass"));
+      var file = env.PGPASSFILE || (isWin ? path6.join(env.APPDATA || "./", "postgresql", "pgpass.conf") : path6.join(env.HOME || "./", ".pgpass"));
       return file;
     };
     module.exports.usePgPass = function(stats, fname) {
@@ -32340,8 +32340,8 @@ var require_helper = __commonJS({
     module.exports.getPassword = function(connInfo, stream, cb) {
       var pass;
       var lineStream = stream.pipe(split());
-      function onLine(line) {
-        var entry = parseLine(line);
+      function onLine(line2) {
+        var entry = parseLine(line2);
         if (entry && isValidEntry(entry) && matcher(connInfo, entry)) {
           pass = entry[passKey];
           lineStream.end();
@@ -32359,8 +32359,8 @@ var require_helper = __commonJS({
       stream.on("error", onErr);
       lineStream.on("data", onLine).on("end", onEnd).on("error", onErr);
     };
-    var parseLine = module.exports.parseLine = function(line) {
-      if (line.length < 11 || line.match(/^\s+#/)) {
+    var parseLine = module.exports.parseLine = function(line2) {
+      if (line2.length < 11 || line2.match(/^\s+#/)) {
         return null;
       }
       var curChar = "";
@@ -32371,15 +32371,15 @@ var require_helper = __commonJS({
       var obj = {};
       var isLastField = false;
       var addToObj = function(idx, i0, i1) {
-        var field = line.substring(i0, i1);
+        var field = line2.substring(i0, i1);
         if (!Object.hasOwnProperty.call(process.env, "PGPASS_NO_DEESCAPE")) {
           field = field.replace(/\\([:\\])/g, "$1");
         }
         obj[fieldNames[idx]] = field;
       };
-      for (var i = 0; i < line.length - 1; i += 1) {
-        curChar = line.charAt(i + 1);
-        prevChar = line.charAt(i);
+      for (var i = 0; i < line2.length - 1; i += 1) {
+        curChar = line2.charAt(i + 1);
+        prevChar = line2.charAt(i);
         isLastField = fieldIdx == nrOfFields - 1;
         if (isLastField) {
           addToObj(fieldIdx, startIdx);
@@ -32438,7 +32438,7 @@ var require_helper = __commonJS({
 var require_lib4 = __commonJS({
   "../../node_modules/.pnpm/pgpass@1.0.5/node_modules/pgpass/lib/index.js"(exports, module) {
     "use strict";
-    var path5 = __require("path");
+    var path6 = __require("path");
     var fs = __require("fs");
     var helper = require_helper();
     module.exports = function(connInfo, cb) {
@@ -34169,12 +34169,12 @@ var init_esm = __esm({
 });
 
 // src/app.ts
-var import_express7 = __toESM(require_express2(), 1);
+var import_express9 = __toESM(require_express2(), 1);
 var import_cors = __toESM(require_lib3(), 1);
 var import_pino_http = __toESM(require_logger(), 1);
 
 // src/routes/index.ts
-var import_express6 = __toESM(require_express2(), 1);
+var import_express8 = __toESM(require_express2(), 1);
 
 // src/routes/health.ts
 var import_express = __toESM(require_express2(), 1);
@@ -34416,10 +34416,10 @@ function mergeDefs(...defs) {
 function cloneDef(schema) {
   return mergeDefs(schema._zod.def);
 }
-function getElementAtPath(obj, path5) {
-  if (!path5)
+function getElementAtPath(obj, path6) {
+  if (!path6)
     return obj;
-  return path5.reduce((acc, key) => acc?.[key], obj);
+  return path6.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -34759,11 +34759,11 @@ function explicitlyAborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path5, issues) {
+function prefixIssues(path6, issues) {
   return issues.map((iss) => {
     var _a3;
     (_a3 = iss).path ?? (_a3.path = []);
-    iss.path.unshift(path5);
+    iss.path.unshift(path6);
     return iss;
   });
 }
@@ -35221,16 +35221,16 @@ function flattenError(error2, mapper = (issue2) => issue2.message) {
 }
 function formatError(error2, mapper = (issue2) => issue2.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error3, path5 = []) => {
+  const processError = (error3, path6 = []) => {
     for (const issue2 of error3.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path5, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path6, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path5, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path6, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path5, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path6, ...issue2.path]);
       } else {
-        const fullpath = [...path5, ...issue2.path];
+        const fullpath = [...path6, ...issue2.path];
         if (fullpath.length === 0) {
           fieldErrors._errors.push(mapper(issue2));
         } else {
@@ -35821,8 +35821,8 @@ var Doc = class {
     const lines = content.split("\n").filter((x) => x);
     const minIndent = Math.min(...lines.map((x) => x.length - x.trimStart().length));
     const dedented = lines.map((x) => x.slice(minIndent)).map((x) => " ".repeat(this.indent * 2) + x);
-    for (const line of dedented) {
-      this.content.push(line);
+    for (const line2 of dedented) {
+      this.content.push(line2);
     }
   }
   compile() {
@@ -40589,12 +40589,14 @@ var createUserBodyUsernameMax = 64;
 var createUserBodyDisplayNameMax = 80;
 var createUserBodyPasswordMax = 200;
 var createUserBodyRaIdMax = 16;
+var createUserBodyAdminPinMax = 12;
 var CreateUserBody = object({
   "username": string2().max(createUserBodyUsernameMax),
   "displayName": string2().max(createUserBodyDisplayNameMax).optional(),
   "password": string2().max(createUserBodyPasswordMax),
   "role": _enum(["admin", "company"]),
-  "raId": string2().max(createUserBodyRaIdMax).optional().describe("Optional; six digits. A unique one is generated when empty.")
+  "raId": string2().max(createUserBodyRaIdMax).optional().describe("Optional; six digits. A unique one is generated when empty."),
+  "adminPin": string2().max(createUserBodyAdminPinMax).optional().describe("The six-digit admin creation PIN; required when role is admin")
 });
 var CreateUserResponse = object({
   "id": string2(),
@@ -40613,12 +40615,14 @@ var UpdateUserParams = object({
 var updateUserBodyDisplayNameMax = 80;
 var updateUserBodyPasswordMax = 200;
 var updateUserBodyRaIdMax = 16;
+var updateUserBodyAdminPinMax = 12;
 var UpdateUserBody = object({
   "displayName": string2().max(updateUserBodyDisplayNameMax).optional(),
   "password": string2().max(updateUserBodyPasswordMax).optional(),
   "role": _enum(["admin", "company"]).optional(),
   "disabled": boolean2().optional(),
-  "raId": string2().max(updateUserBodyRaIdMax).optional()
+  "raId": string2().max(updateUserBodyRaIdMax).optional(),
+  "adminPin": string2().max(updateUserBodyAdminPinMax).optional().describe("The six-digit admin creation PIN; required to make an account an admin")
 });
 var UpdateUserResponse = object({
   "id": string2(),
@@ -41421,6 +41425,15 @@ function createMsfwrStore(clock = Date.now, hooks = {}) {
         links: [...links.values()].map((l) => ({ code: l.code, ...linkStatusOf(l) }))
       };
     },
+    // Live sessions a company has open right now: the ones its operators
+    // opened, or (with no operator) on PCs pointing to its RA ID.
+    liveFor(raId) {
+      const seen = /* @__PURE__ */ new Set();
+      for (const { session } of peers.values()) {
+        if (session.state === "live" && !expired(session) && (session.operator?.raId ?? session.ra) === raId) seen.add(session);
+      }
+      return [...seen].map(view);
+    },
     endById(id) {
       for (const { session } of peers.values()) {
         if (session.id === id) {
@@ -41439,7 +41452,7 @@ function createMsfwrStore(clock = Date.now, hooks = {}) {
 }
 
 // src/lib/portal.ts
-import path4 from "node:path";
+import path5 from "node:path";
 
 // src/lib/accounts.ts
 import { createHmac, randomBytes as randomBytes2, randomInt as randomInt2, scrypt as scryptCb, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
@@ -41717,6 +41730,7 @@ var INTERVAL_DAYS = {
   annual: 365
 };
 var DAY = 24 * 60 * 6e4;
+var MAX_GRACE_LOG = 100;
 var MAX_HISTORY = 2e3;
 var MAX_PAYMENTS = 5e3;
 var BillingError = class extends Error {
@@ -41779,6 +41793,22 @@ function effectiveStatus(sub, now) {
   if (sub.currentPeriodEnd && sub.currentPeriodEnd <= now) return "expired";
   return sub.status;
 }
+function normalizeSub(sub) {
+  return {
+    ...sub,
+    sessionsUsed: Number(sub.sessionsUsed) || 0,
+    urlsUsed: Number(sub.urlsUsed) || 0,
+    extraSessionsUsed: Number(sub.extraSessionsUsed) || 0,
+    graceSessions: Number(sub.graceSessions) || 0,
+    graceLog: Array.isArray(sub.graceLog) ? sub.graceLog : []
+  };
+}
+function resetUsage(sub) {
+  sub.sessionsUsed = 0;
+  sub.urlsUsed = 0;
+  sub.extraSessionsUsed = 0;
+  sub.graceSessions = 0;
+}
 function createBilling(backend, options = {}) {
   const clock = options.clock ?? Date.now;
   const plans = [];
@@ -41793,7 +41823,7 @@ function createBilling(backend, options = {}) {
     const loaded = await backend.load();
     if (loaded) {
       plans.push(...Array.isArray(loaded.plans) ? loaded.plans : []);
-      subscriptions.push(...Array.isArray(loaded.subscriptions) ? loaded.subscriptions : []);
+      subscriptions.push(...(Array.isArray(loaded.subscriptions) ? loaded.subscriptions : []).map(normalizeSub));
       payments.push(...Array.isArray(loaded.payments) ? loaded.payments : []);
       history.push(...Array.isArray(loaded.history) ? loaded.history : []);
       storedSecret = loaded.secret;
@@ -41835,7 +41865,7 @@ function createBilling(backend, options = {}) {
     }
     sub.currentPeriodStart = start;
     sub.currentPeriodEnd = end;
-    sub.sessionsUsed = 0;
+    resetUsage(sub);
     sub.updatedAt = now;
     void persist();
   }
@@ -41847,6 +41877,10 @@ function createBilling(backend, options = {}) {
         status: "none",
         sessionsUsed: 0,
         sessionQuota: 0,
+        planQuota: 0,
+        graceSessions: 0,
+        urlsUsed: 0,
+        extraSessionsUsed: 0,
         remaining: null,
         currentPeriodEnd: null,
         maxConcurrentViewers: 0,
@@ -41858,7 +41892,8 @@ function createBilling(backend, options = {}) {
     rollIfLapsed(sub, now);
     const plan = planById(sub.planId);
     const status = effectiveStatus(sub, now);
-    const quota = plan?.sessionQuota ?? 0;
+    const planQuota = plan?.sessionQuota ?? 0;
+    const quota = planQuota > 0 ? planQuota + sub.graceSessions : 0;
     const remaining = quota > 0 ? Math.max(0, quota - sub.sessionsUsed) : null;
     let reason;
     if (status === "suspended") reason = "suspended";
@@ -41871,6 +41906,10 @@ function createBilling(backend, options = {}) {
       plan,
       sessionsUsed: sub.sessionsUsed,
       sessionQuota: quota,
+      planQuota,
+      graceSessions: planQuota > 0 ? sub.graceSessions : 0,
+      urlsUsed: sub.urlsUsed,
+      extraSessionsUsed: sub.extraSessionsUsed,
       remaining,
       currentPeriodEnd: sub.currentPeriodEnd || null,
       maxConcurrentViewers: plan?.maxConcurrentViewers ?? 0,
@@ -41976,6 +42015,10 @@ function createBilling(backend, options = {}) {
       return { archived: false };
     },
     // --- Subscriptions ---
+    // Every subscription with its effective status, for the dashboard.
+    listSubscriptions(now = clock()) {
+      return subscriptions.map((sub) => ({ ...sub, status: effectiveStatus(sub, now) }));
+    },
     getSubscription(accountId) {
       const sub = subByAccount(accountId);
       return sub ? { ...sub } : void 0;
@@ -42009,6 +42052,10 @@ function createBilling(backend, options = {}) {
           currentPeriodStart: now,
           currentPeriodEnd: 0,
           sessionsUsed: 0,
+          urlsUsed: 0,
+          extraSessionsUsed: 0,
+          graceSessions: 0,
+          graceLog: [],
           licenseVersion: 1,
           autoRenew: true,
           requireLicense: false,
@@ -42031,7 +42078,7 @@ function createBilling(backend, options = {}) {
         sub.currentPeriodStart = input.currentPeriodStart ?? now;
         sub.currentPeriodEnd = sub.currentPeriodStart + INTERVAL_DAYS[plan.interval] * DAY;
       }
-      if (input.resetUsage || planChanged) sub.sessionsUsed = 0;
+      if (input.resetUsage || planChanged) resetUsage(sub);
       sub.updatedAt = now;
       await persist();
       return { ...sub };
@@ -42047,7 +42094,7 @@ function createBilling(backend, options = {}) {
       const base = sub.currentPeriodEnd && sub.currentPeriodEnd > now ? sub.currentPeriodEnd : now;
       sub.currentPeriodStart = base;
       sub.currentPeriodEnd = base + span;
-      sub.sessionsUsed = 0;
+      resetUsage(sub);
       sub.status = "active";
       sub.updatedAt = now;
       const payment = await api.addPayment(accountId, {
@@ -42065,6 +42112,27 @@ function createBilling(backend, options = {}) {
       return { subscription: { ...sub }, payment };
     },
     // Invalidates every license issued for this company (re-provision needed).
+    // Grants extra usage on top of the plan quota for the current period, with
+    // a remark for the record. Used when a company hits its quota mid-period.
+    async addGrace(accountId, input) {
+      const sub = subByAccount(accountId);
+      if (!sub) throw new BillingError(404, "This company has no subscription yet.");
+      const plan = planById(sub.planId);
+      if (!plan) throw new BillingError(400, "Assign a plan before adding a grace extension.");
+      if (!(plan.sessionQuota > 0)) throw new BillingError(400, "This plan is unlimited, so it needs no grace extension.");
+      const amount = Math.trunc(Number(input.amount));
+      if (!Number.isFinite(amount) || amount < 1 || amount > 1e5) throw new BillingError(400, "Enter how many extra sessions to allow, from 1 to 100000.");
+      const remarks = cleanText(input.remarks, 500);
+      if (!remarks) throw new BillingError(400, "Add a remark saying why the grace extension was given.");
+      const now = clock();
+      rollIfLapsed(sub, now);
+      sub.graceSessions += amount;
+      sub.graceLog.unshift({ id: id(), amount, remarks, by: cleanName3(input.by, 80), at: now, periodEnd: sub.currentPeriodEnd });
+      if (sub.graceLog.length > MAX_GRACE_LOG) sub.graceLog.length = MAX_GRACE_LOG;
+      sub.updatedAt = now;
+      await persist();
+      return { ...sub, graceLog: structuredClone(sub.graceLog) };
+    },
     async revokeLicenses(accountId) {
       const sub = subByAccount(accountId);
       if (!sub) throw new BillingError(404, "This company has no subscription yet.");
@@ -42165,15 +42233,23 @@ function createBilling(backend, options = {}) {
     listSessions(filter = {}, limit = 200) {
       return history.filter((h) => (!filter.accountId || h.accountId === filter.accountId) && (!filter.raId || h.raId === filter.raId)).slice(0, limit).map((h) => ({ ...h }));
     },
-    // Counts one started session against a company's quota. Call this when a
-    // session goes live, so the next start is blocked once the quota is hit.
-    async countSession(accountId) {
+    // Counts one unit of usage against a company's quota: a remote access URL
+    // it authorized ("url"), or a session started while another of its
+    // sessions was already live ("session"). Once the quota is reached, new
+    // sessions are refused and the company gets no new Access PIN.
+    async countUsage(accountId, kind) {
       const sub = subByAccount(accountId);
       if (!sub) return;
       rollIfLapsed(sub, clock());
       sub.sessionsUsed += 1;
+      if (kind === "url") sub.urlsUsed += 1;
+      else sub.extraSessionsUsed += 1;
       sub.updatedAt = clock();
       await persist();
+    },
+    // Kept for callers that count every session (older behavior).
+    async countSession(accountId) {
+      await api.countUsage(accountId, "session");
     },
     // Records an ended session in the history.
     async recordSession(record) {
@@ -42223,14 +42299,56 @@ function createBilling(backend, options = {}) {
   return { init: init(), api };
 }
 
-// src/lib/linklog.ts
+// src/lib/site.ts
+import { randomBytes as randomBytes4 } from "node:crypto";
 import { mkdir as mkdir3, readFile as readFile3, rename as rename3, writeFile as writeFile3 } from "node:fs/promises";
 import path3 from "node:path";
-var MAX_RECORDS = 2e3;
-var MAX_SESSIONS = 50;
-function fileLinkLogBackend(dir) {
-  const file = path3.join(dir, "links.json");
+var MAX_COMMENTS = 200;
+function normalizeRegistration(raw2) {
+  const r = { ...raw2 };
+  const stored = raw2.status;
+  r.status = stored === "approved" || stored === "accepted" ? "accepted" : stored === "dismissed" || stored === "rejected" ? "rejected" : "pending";
+  r.actionPlan = typeof r.actionPlan === "string" ? r.actionPlan : "";
+  r.outcome = r.outcome === "converted" || r.outcome === "closed" ? r.outcome : "";
+  r.comments = Array.isArray(r.comments) ? r.comments : [];
+  r.note = typeof r.note === "string" ? r.note : "";
+  if (r.note.trim() && r.comments.length === 0) {
+    r.comments = [{ id: "note", text: r.note.trim(), by: "", at: r.updatedAt || r.createdAt }];
+  }
+  return r;
+}
+var ASSET_LIMITS = {
+  logo: 512 * 1024,
+  favicon: 256 * 1024,
+  og: 1536 * 1024
+};
+var ASSET_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif", "image/svg+xml", "image/x-icon"];
+var MAX_REGISTRATIONS = 2e3;
+var SiteError = class extends Error {
+  status;
+  constructor(status, message) {
+    super(message);
+    this.status = status;
+  }
+};
+var DEFAULT_SETTINGS = {
+  tabs: { pcs: true, connect: true, download: true },
+  signIn: { requestAccess: true, downloadLink: true },
+  og: {
+    title: "WINRSS.net",
+    description: "WINRSS.net is attended remote support for Windows. The person at the PC shares a one-time code and confirms a verification number before a helper can connect."
+  },
+  pages: {
+    disclaimer: { enabled: false, title: "Disclaimer", body: "" },
+    // An empty privacy body shows the built-in privacy notice.
+    privacy: { enabled: true, title: "Privacy", body: "" }
+  },
+  updatedAt: 0
+};
+function fileSiteBackend(dir) {
+  const file = path3.join(dir, "site.json");
   return {
+    describe: file,
     async load() {
       try {
         return JSON.parse(await readFile3(file, "utf8"));
@@ -42244,6 +42362,279 @@ function fileLinkLogBackend(dir) {
       const tmp = `${file}.${process.pid}.tmp`;
       await writeFile3(tmp, JSON.stringify(data), { mode: 384 });
       await rename3(tmp, file);
+    }
+  };
+}
+async function postgresSiteBackend(url) {
+  const { default: pg2 } = await Promise.resolve().then(() => (init_esm(), esm_exports));
+  const pool = new pg2.Pool({ connectionString: url, max: 2 });
+  await pool.query("CREATE TABLE IF NOT EXISTS msfwr_state (id text PRIMARY KEY, data jsonb NOT NULL)");
+  return {
+    describe: "PostgreSQL (DATABASE_URL)",
+    async load() {
+      const r = await pool.query("SELECT data FROM msfwr_state WHERE id = 'site'");
+      return r.rows[0]?.data;
+    },
+    async save(data) {
+      await pool.query(
+        "INSERT INTO msfwr_state (id, data) VALUES ('site', $1) ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data",
+        [JSON.stringify(data)]
+      );
+    }
+  };
+}
+var line = (v, max) => String(v ?? "").replace(/[\u0000-\u001f\u007f<>]/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
+var multi = (v, max) => String(v ?? "").replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "").slice(0, max);
+var bool = (v, fallback) => typeof v === "boolean" ? v : fallback;
+var EMAIL = /^[^\s@<>()",;:]{1,64}@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
+var MOBILE = /^\+?[0-9][0-9 ()-]{5,22}$/;
+function mergeSettings(stored) {
+  const d = DEFAULT_SETTINGS;
+  const s = stored ?? {};
+  const page = (key) => ({
+    enabled: bool(s.pages?.[key]?.enabled, d.pages[key].enabled),
+    title: line(s.pages?.[key]?.title ?? d.pages[key].title, 80) || d.pages[key].title,
+    body: multi(s.pages?.[key]?.body ?? d.pages[key].body, 5e4)
+  });
+  return {
+    tabs: {
+      pcs: bool(s.tabs?.pcs, d.tabs.pcs),
+      connect: bool(s.tabs?.connect, d.tabs.connect),
+      download: bool(s.tabs?.download, d.tabs.download)
+    },
+    signIn: {
+      requestAccess: bool(s.signIn?.requestAccess, d.signIn.requestAccess),
+      downloadLink: bool(s.signIn?.downloadLink, d.signIn.downloadLink)
+    },
+    og: {
+      title: line(s.og?.title ?? d.og.title, 120),
+      description: line(s.og?.description ?? d.og.description, 300)
+    },
+    pages: { disclaimer: page("disclaimer"), privacy: page("privacy") },
+    updatedAt: typeof s.updatedAt === "number" ? s.updatedAt : 0
+  };
+}
+function parseImage(kind, dataUrl, now) {
+  const m = /^data:([a-z0-9.+/-]+);base64,([A-Za-z0-9+/=\s]+)$/i.exec(String(dataUrl ?? ""));
+  if (!m) throw new SiteError(400, "Upload a PNG, JPEG, WebP, GIF, SVG or ICO image.");
+  let type = m[1].toLowerCase();
+  if (type === "image/vnd.microsoft.icon" || type === "image/ico") type = "image/x-icon";
+  if (type === "image/jpg") type = "image/jpeg";
+  if (!ASSET_TYPES.includes(type)) throw new SiteError(400, "Upload a PNG, JPEG, WebP, GIF, SVG or ICO image.");
+  if (kind === "og" && (type === "image/svg+xml" || type === "image/x-icon")) {
+    throw new SiteError(400, "Social networks only show PNG, JPEG, WebP or GIF share images.");
+  }
+  const buf = Buffer.from(m[2].replace(/\s+/g, ""), "base64");
+  if (!buf.length) throw new SiteError(400, "That image is empty.");
+  if (buf.length > ASSET_LIMITS[kind]) {
+    throw new SiteError(413, `That image is too large. The limit is ${Math.round(ASSET_LIMITS[kind] / 1024)} KB.`);
+  }
+  const head = buf.subarray(0, 16);
+  const ok = type === "image/png" ? head.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) : type === "image/jpeg" ? head[0] === 255 && head[1] === 216 && head[2] === 255 : type === "image/gif" ? head.subarray(0, 4).toString("latin1") === "GIF8" : type === "image/webp" ? head.subarray(0, 4).toString("latin1") === "RIFF" && head.subarray(8, 12).toString("latin1") === "WEBP" : type === "image/x-icon" ? head[0] === 0 && head[1] === 0 && head[2] === 1 && head[3] === 0 : /<svg[\s>]/i.test(buf.subarray(0, 4096).toString("utf8"));
+  if (!ok) throw new SiteError(400, "That file is not the image type it claims to be.");
+  return { type, data: buf.toString("base64"), bytes: buf.length, updatedAt: now };
+}
+function createSite(backend, options = {}) {
+  const clock = options.clock ?? Date.now;
+  let settings = mergeSettings(void 0);
+  let assets = {};
+  let registrations = [];
+  let writing = Promise.resolve();
+  const persist = () => {
+    const snapshot = { settings: structuredClone(settings), assets: { ...assets }, registrations: structuredClone(registrations) };
+    writing = writing.then(() => backend.save(snapshot));
+    return writing;
+  };
+  async function init() {
+    const loaded = await backend.load();
+    settings = mergeSettings(loaded?.settings);
+    assets = loaded?.assets ?? {};
+    registrations = Array.isArray(loaded?.registrations) ? loaded.registrations.map(normalizeRegistration) : [];
+  }
+  const assetInfo = (k) => {
+    const a = assets[k];
+    return a ? { url: `/api/site/asset/${k}?v=${a.updatedAt.toString(36)}`, type: a.type, bytes: a.bytes, updatedAt: a.updatedAt } : null;
+  };
+  const api = {
+    backend: backend.describe,
+    // What every visitor's page reads: the settings and where the images are.
+    publicSettings() {
+      return {
+        ...structuredClone(settings),
+        logo: assetInfo("logo"),
+        favicon: assetInfo("favicon"),
+        ogImage: assetInfo("og")
+      };
+    },
+    async updateSettings(change) {
+      const c = change && typeof change === "object" ? change : {};
+      const next = mergeSettings({
+        tabs: { ...settings.tabs, ...c.tabs ?? {} },
+        signIn: { ...settings.signIn, ...c.signIn ?? {} },
+        og: { ...settings.og, ...c.og ?? {} },
+        pages: {
+          disclaimer: { ...settings.pages.disclaimer, ...c.pages?.disclaimer ?? {} },
+          privacy: { ...settings.pages.privacy, ...c.pages?.privacy ?? {} }
+        }
+      });
+      if (!next.tabs.pcs && !next.tabs.connect && !next.tabs.download) {
+        throw new SiteError(400, "Keep at least one portal section visible.");
+      }
+      next.updatedAt = clock();
+      settings = next;
+      await persist();
+      return api.publicSettings();
+    },
+    getAsset(kind) {
+      return assets[kind];
+    },
+    async setAsset(kind, dataUrl) {
+      assets = { ...assets, [kind]: parseImage(kind, dataUrl, clock()) };
+      settings.updatedAt = clock();
+      await persist();
+      return api.publicSettings();
+    },
+    async removeAsset(kind) {
+      const { [kind]: _gone, ...rest } = assets;
+      assets = rest;
+      settings.updatedAt = clock();
+      await persist();
+      return api.publicSettings();
+    },
+    // --- Registration requests ---
+    async addRegistration(input) {
+      const name = line(input.name, 80);
+      const company = line(input.company, 120);
+      const email2 = line(input.email, 254).toLowerCase();
+      const mobile = line(input.mobile, 24);
+      const message = multi(input.message, 2e3).trim();
+      if (!name) throw new SiteError(400, "Enter your name.");
+      if (!EMAIL.test(email2)) throw new SiteError(400, "Enter a valid email address.");
+      if (!MOBILE.test(mobile) || mobile.replace(/\D/g, "").length < 7) throw new SiteError(400, "Enter a valid mobile number, with the country code if outside India.");
+      const open3 = registrations.find((r) => r.email === email2 && r.status === "pending");
+      const now = clock();
+      if (open3) {
+        Object.assign(open3, { name, company, mobile, message: message || open3.message, updatedAt: now });
+        await persist();
+        return { ...open3 };
+      }
+      const entry = {
+        id: randomBytes4(9).toString("base64url"),
+        name,
+        company,
+        email: email2,
+        mobile,
+        message,
+        status: "pending",
+        actionPlan: "",
+        outcome: "",
+        comments: [],
+        note: "",
+        createdAt: now,
+        updatedAt: now
+      };
+      registrations.unshift(entry);
+      if (registrations.length > MAX_REGISTRATIONS) {
+        for (let i = registrations.length - 1; i >= 0 && registrations.length > MAX_REGISTRATIONS; i--) {
+          if (registrations[i].status !== "pending") registrations.splice(i, 1);
+        }
+        if (registrations.length > MAX_REGISTRATIONS) {
+          registrations.shift();
+          throw new SiteError(503, "We cannot take new requests right now. Try again later.");
+        }
+      }
+      await persist();
+      return { ...entry };
+    },
+    listRegistrations() {
+      return registrations.map((r) => structuredClone(r));
+    },
+    async updateRegistration(id, change) {
+      const r = registrations.find((x) => x.id === id);
+      if (!r) throw new SiteError(404, "That request no longer exists.");
+      if (change.status !== void 0) {
+        if (change.status !== "pending" && change.status !== "accepted" && change.status !== "rejected") {
+          throw new SiteError(400, "Choose pending, accepted or rejected.");
+        }
+        r.status = change.status;
+      }
+      if (change.outcome !== void 0) {
+        if (change.outcome !== "" && change.outcome !== "converted" && change.outcome !== "closed") {
+          throw new SiteError(400, "Choose converted to customer or query closed.");
+        }
+        r.outcome = change.outcome;
+        if (r.outcome && r.status === "pending") r.status = r.outcome === "converted" ? "accepted" : "rejected";
+      }
+      if (change.actionPlan !== void 0) r.actionPlan = multi(change.actionPlan, 4e3);
+      if (change.note !== void 0) r.note = multi(change.note, 1e3);
+      r.updatedAt = clock();
+      await persist();
+      return structuredClone(r);
+    },
+    async addRegistrationComment(id, text, by) {
+      const r = registrations.find((x) => x.id === id);
+      if (!r) throw new SiteError(404, "That request no longer exists.");
+      const body = multi(text, 2e3).trim();
+      if (!body) throw new SiteError(400, "Write a comment first.");
+      const now = clock();
+      r.comments.push({ id: randomBytes4(6).toString("base64url"), text: body, by: line(by, 80), at: now });
+      if (r.comments.length > MAX_COMMENTS) r.comments.splice(0, r.comments.length - MAX_COMMENTS);
+      r.updatedAt = now;
+      await persist();
+      return structuredClone(r);
+    },
+    async removeRegistrationComment(id, commentId) {
+      const r = registrations.find((x) => x.id === id);
+      if (!r) throw new SiteError(404, "That request no longer exists.");
+      const i = r.comments.findIndex((c) => c.id === commentId);
+      if (i < 0) throw new SiteError(404, "That comment no longer exists.");
+      r.comments.splice(i, 1);
+      r.updatedAt = clock();
+      await persist();
+      return structuredClone(r);
+    },
+    async removeRegistration(id) {
+      const i = registrations.findIndex((x) => x.id === id);
+      if (i < 0) throw new SiteError(404, "That request no longer exists.");
+      registrations.splice(i, 1);
+      await persist();
+    },
+    registrationCounts() {
+      const counts = { pending: 0, accepted: 0, rejected: 0, converted: 0, closed: 0, total: registrations.length };
+      for (const r of registrations) {
+        counts[r.status] += 1;
+        if (r.outcome) counts[r.outcome] += 1;
+      }
+      return counts;
+    },
+    flush() {
+      return writing;
+    }
+  };
+  return { init: init(), api };
+}
+
+// src/lib/linklog.ts
+import { mkdir as mkdir4, readFile as readFile4, rename as rename4, writeFile as writeFile4 } from "node:fs/promises";
+import path4 from "node:path";
+var MAX_RECORDS = 2e3;
+var MAX_SESSIONS = 50;
+function fileLinkLogBackend(dir) {
+  const file = path4.join(dir, "links.json");
+  return {
+    async load() {
+      try {
+        return JSON.parse(await readFile4(file, "utf8"));
+      } catch (e) {
+        if (e.code === "ENOENT") return void 0;
+        throw e;
+      }
+    },
+    async save(data) {
+      await mkdir4(dir, { recursive: true, mode: 448 });
+      const tmp = `${file}.${process.pid}.tmp`;
+      await writeFile4(tmp, JSON.stringify(data), { mode: 384 });
+      await rename4(tmp, file);
     }
   };
 }
@@ -42354,10 +42745,12 @@ var store = createMsfwrStore(Date.now, {
   onLive(session) {
     const ra = session.operator?.raId ?? session.ra;
     if (!ra) return;
+    const others = store.liveFor(ra).filter((x) => x.id !== session.id).length;
+    if (others === 0) return;
     void (async () => {
       try {
         const account = (await accountsReady()).findRa(ra);
-        if (account) await (await billingReady()).countSession(account.id);
+        if (account) await (await billingReady()).countUsage(account.id, "session");
       } catch (err) {
         logger.warn({ err }, "Could not count session for billing");
       }
@@ -42398,6 +42791,7 @@ var store = createMsfwrStore(Date.now, {
   },
   onLinkClaimed(code, claim2, link) {
     void linkLogReady().then((log) => log.claimed(code, claim2, link)).catch((err) => logger.warn({ err }, "Could not record a URL claim"));
+    void billingReady().then((billing) => billing.countUsage(claim2.accountId, "url")).catch((err) => logger.warn({ err }, "Could not count a URL for billing"));
   },
   onLinkRevoked(code, at) {
     void linkLogReady().then((log) => log.revoked(code, at)).catch((err) => logger.warn({ err }, "Could not record a cleared URL"));
@@ -42413,7 +42807,7 @@ async function open2() {
   if (url) {
     backend = await postgresBackend(url);
   } else {
-    const dir = process.env["MSFWR_DATA_DIR"] || path4.resolve(process.cwd(), ".data");
+    const dir = process.env["MSFWR_DATA_DIR"] || path5.resolve(process.cwd(), ".data");
     backend = fileBackend(dir);
   }
   const accounts = await createAccounts(backend, { secret: process.env["SESSION_SECRET"] });
@@ -42436,7 +42830,7 @@ function accountsReady() {
 }
 async function openBilling() {
   const url = process.env["DATABASE_URL"];
-  const backend = url ? await postgresBillingBackend(url) : fileBillingBackend(process.env["MSFWR_DATA_DIR"] || path4.resolve(process.cwd(), ".data"));
+  const backend = url ? await postgresBillingBackend(url) : fileBillingBackend(process.env["MSFWR_DATA_DIR"] || path5.resolve(process.cwd(), ".data"));
   const secret = process.env["BILLING_SECRET"] || process.env["SESSION_SECRET"];
   const { init, api } = createBilling(backend, { secret });
   await init;
@@ -42453,7 +42847,7 @@ function billingReady() {
 }
 async function openLinkLog() {
   const url = process.env["DATABASE_URL"];
-  const backend = url ? await postgresLinkLogBackend(url) : fileLinkLogBackend(process.env["MSFWR_DATA_DIR"] || path4.resolve(process.cwd(), ".data"));
+  const backend = url ? await postgresLinkLogBackend(url) : fileLinkLogBackend(process.env["MSFWR_DATA_DIR"] || path5.resolve(process.cwd(), ".data"));
   const log = await createLinkLog(backend);
   store.restoreClaims(log.activeClaims(Date.now()));
   return log;
@@ -42484,6 +42878,21 @@ async function linkRegister(filter = {}) {
     };
   });
 }
+async function openSite() {
+  const url = process.env["DATABASE_URL"];
+  const backend = url ? await postgresSiteBackend(url) : fileSiteBackend(process.env["MSFWR_DATA_DIR"] || path5.resolve(process.cwd(), ".data"));
+  const { init, api } = createSite(backend);
+  await init;
+  return api;
+}
+var openingSite;
+function siteReady() {
+  openingSite ??= openSite().catch((err) => {
+    openingSite = void 0;
+    throw err;
+  });
+  return openingSite;
+}
 function subBlockMessage(reason) {
   switch (reason) {
     case "expired":
@@ -42491,7 +42900,7 @@ function subBlockMessage(reason) {
     case "suspended":
       return "This company's WINRSS.net subscription is suspended. Contact your provider.";
     case "quota":
-      return "This company has reached its session limit for the current billing period.";
+      return "This company has reached its usage limit (remote access URLs and extra sessions) for the current billing period. Ask your provider to renew or extend it.";
     case "license":
       return "This client's license is missing, invalid or revoked. Reconfigure it from the admin console.";
     default:
@@ -42590,7 +42999,7 @@ function requireUser(role, options = {}) {
   };
 }
 function sendError(res, err) {
-  if (err instanceof AccountError || err instanceof BillingError) {
+  if (err instanceof AccountError || err instanceof BillingError || err instanceof SiteError) {
     res.status(err.status).json({ error: err.message });
     return;
   }
@@ -42773,9 +43182,13 @@ router2.post("/call", async (req, res) => {
 router2.get("/inbox", requireUser(), async (req, res) => {
   const user = req.account;
   try {
-    const pin = store.companyPin({ id: user.id, name: user.displayName, raId: user.raId });
+    const gate = await connectGateForRa(user.raId);
+    let pin;
+    if (gate.ok) pin = store.companyPin({ id: user.id, name: user.displayName, raId: user.raId });
+    else store.dropCompanyPin(user.id);
     const links = await linkRegister({ accountId: user.id });
-    res.json(GetMsfwrInboxResponse.parse({ raId: user.raId, company: user.displayName, ...store.inbox(user.raId), accessPin: pin, links }));
+    const inbox = GetMsfwrInboxResponse.parse({ raId: user.raId, company: user.displayName, ...store.inbox(user.raId), accessPin: pin, links });
+    res.json(gate.ok ? inbox : { ...inbox, pinBlocked: { reason: gate.reason ?? "inactive", message: gate.message ?? "" } });
   } catch (err) {
     sendError(res, err);
   }
@@ -43138,12 +43551,40 @@ var auth_default = router3;
 
 // src/routes/admin.ts
 var import_express4 = __toESM(require_express2(), 1);
+import { createHash as createHash2, timingSafeEqual as timingSafeEqual4 } from "node:crypto";
 var router4 = (0, import_express4.Router)();
 router4.use((_req, res, next) => {
   res.set({ "Cache-Control": "no-store, private", "X-Content-Type-Options": "nosniff" });
   next();
 });
 router4.use(requireUser("admin"));
+var adminPinTries = limiter(5, 15 * 6e4);
+var digest = (v) => createHash2("sha256").update(v).digest();
+function adminPinOk(req, res) {
+  const secret = (process.env["ADMIN_CREATION_PIN"] ?? "").trim();
+  if (!/^\d{6}$/.test(secret)) {
+    res.status(503).json({ error: "Admin account creation is turned off: set ADMIN_CREATION_PIN (six digits) in the relay's environment." });
+    return false;
+  }
+  const key = req.account.id;
+  if (adminPinTries.blocked(key)) {
+    res.status(429).json({ error: "Too many wrong admin PINs. Try again in 15 minutes." });
+    return false;
+  }
+  const given = String(req.body?.adminPin ?? "").replace(/\D/g, "");
+  if (!given) {
+    res.status(403).json({ error: "Enter the 6-digit admin creation PIN." });
+    return false;
+  }
+  if (!timingSafeEqual4(digest(given), digest(secret))) {
+    adminPinTries.fail(key);
+    activity.add("admin-pin-failed", `${req.account.displayName} entered a wrong admin creation PIN`, req.account.username);
+    res.status(403).json({ error: "That admin creation PIN is not correct." });
+    return false;
+  }
+  adminPinTries.clear(key);
+  return true;
+}
 router4.get("/users", async (_req, res) => {
   try {
     const accounts = await accountsReady();
@@ -43160,6 +43601,7 @@ router4.post("/users", async (req, res) => {
       res.status(400).json({ error: "Fill in a login ID, a password and a role." });
       return;
     }
+    if (body.data.role === "admin" && !adminPinOk(req, res)) return;
     const user = await accounts.create({ ...body.data, mustChangePassword: true });
     activity.add("user-created", `${req.account.displayName} created ${user.role === "admin" ? "admin" : "company"} ${user.displayName} (${formatRaId(user.raId)})`, req.account.username);
     res.status(201).json(user);
@@ -43176,6 +43618,7 @@ router4.patch("/users/:id", async (req, res) => {
       return;
     }
     const before = accounts.get(req.params.id);
+    if (body.data.role === "admin" && before?.role !== "admin" && !adminPinOk(req, res)) return;
     const user = await accounts.update(req.params.id, body.data, req.account.id);
     if (user.disabled) {
       store.endOperator(user.id);
@@ -43222,6 +43665,172 @@ router4.post("/sessions/:id/end", (req, res) => {
   }
   activity.add("session-ended", `${req.account.displayName} ended a session from the admin console`, req.account.username);
   res.sendStatus(204);
+});
+router4.get("/dashboard", async (_req, res) => {
+  try {
+    const [accounts, billing, site] = await Promise.all([accountsReady(), billingReady(), siteReady()]);
+    const now = Date.now();
+    const users = accounts.list();
+    const companies = users.filter((u) => u.role === "company");
+    const nameOf = new Map(users.map((u) => [u.id, u.displayName]));
+    const { live, pcs, requests } = store.overview();
+    const subs = billing.listSubscriptions(now);
+    const subCount = { active: 0, trial: 0, expired: 0, suspended: 0, none: 0 };
+    const subscribed = /* @__PURE__ */ new Set();
+    const expiringSoon = [];
+    for (const sub of subs) {
+      if (!nameOf.has(sub.accountId)) continue;
+      subscribed.add(sub.accountId);
+      subCount[sub.status] += 1;
+      if ((sub.status === "active" || sub.status === "trial") && sub.currentPeriodEnd - now <= 7 * DAY) {
+        expiringSoon.push({ accountId: sub.accountId, company: nameOf.get(sub.accountId), status: sub.status, currentPeriodEnd: sub.currentPeriodEnd });
+      }
+    }
+    subCount.none = companies.filter((c) => !subscribed.has(c.id)).length;
+    expiringSoon.sort((a, b) => a.currentPeriodEnd - b.currentPeriodEnd);
+    const dues = billing.dues(now);
+    const withName = (p) => ({ ...p, company: nameOf.get(p.accountId) ?? "Deleted company" });
+    const upcoming30 = dues.upcoming.filter((p) => p.dueDate <= now + 30 * DAY);
+    const summary = billing.summary(now);
+    const history = billing.listSessions({}, 2e3);
+    const start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    const days = Array.from({ length: 14 }, (_, i) => ({ day: start.getTime() - (13 - i) * DAY, sessions: 0, minutes: 0 }));
+    for (const h of history) {
+      const i = Math.floor((h.startedAt - days[0].day) / DAY);
+      if (i >= 0 && i < 14) {
+        days[i].sessions += 1;
+        days[i].minutes += Math.round(h.durationMs / 6e4);
+      }
+    }
+    const registrations = site.listRegistrations();
+    res.json({
+      now,
+      companies: {
+        total: companies.length,
+        active: companies.filter((c) => !c.disabled).length,
+        disabled: companies.filter((c) => c.disabled).length,
+        admins: users.filter((u) => u.role === "admin").length
+      },
+      sessions: {
+        live: live.filter((s) => s.state === "live"),
+        pending: live.filter((s) => s.state === "pending").length,
+        pcsOnline: pcs.length,
+        waitingRequests: requests.filter((r) => r.status === "waiting").length,
+        last30Days: summary.sessionsThisMonth,
+        days
+      },
+      subscriptions: { ...subCount, mrrInr: summary.mrrInr, expiringSoon: expiringSoon.slice(0, 8) },
+      payments: {
+        overdueCount: dues.overdue.length,
+        overdueAmountInr: dues.overdue.reduce((t, p) => t + p.amountInr, 0),
+        upcomingCount: upcoming30.length,
+        upcomingAmountInr: upcoming30.reduce((t, p) => t + p.amountInr, 0),
+        overdue: dues.overdue.slice(0, 8).map(withName),
+        upcoming: upcoming30.slice(0, 8).map(withName)
+      },
+      registrations: {
+        ...site.registrationCounts(),
+        latest: registrations.filter((r) => r.status === "pending").slice(0, 5)
+      },
+      activity: activity.list(8)
+    });
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+var KINDS = ["logo", "favicon", "og"];
+var ASSET_NAME = { logo: "the logo", favicon: "the favicon", og: "the share image" };
+router4.get("/site", async (_req, res) => {
+  try {
+    res.json((await siteReady()).publicSettings());
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+router4.patch("/site", async (req, res) => {
+  try {
+    const settings = await (await siteReady()).updateSettings(req.body);
+    activity.add("site", `${req.account.displayName} changed the site settings`, req.account.username);
+    res.json(settings);
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+router4.put("/site/asset/:kind", async (req, res) => {
+  try {
+    const kind = req.params.kind;
+    if (!KINDS.includes(kind)) {
+      res.sendStatus(404);
+      return;
+    }
+    const settings = await (await siteReady()).setAsset(kind, req.body?.dataUrl);
+    activity.add("site", `${req.account.displayName} uploaded ${ASSET_NAME[kind]}`, req.account.username);
+    res.json(settings);
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+router4.delete("/site/asset/:kind", async (req, res) => {
+  try {
+    const kind = req.params.kind;
+    if (!KINDS.includes(kind)) {
+      res.sendStatus(404);
+      return;
+    }
+    const settings = await (await siteReady()).removeAsset(kind);
+    activity.add("site", `${req.account.displayName} removed ${ASSET_NAME[kind]}`, req.account.username);
+    res.json(settings);
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+router4.get("/registrations", async (_req, res) => {
+  try {
+    res.json({ registrations: (await siteReady()).listRegistrations() });
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+router4.patch("/registrations/:id", async (req, res) => {
+  try {
+    const body = req.body ?? {};
+    const entry = await (await siteReady()).updateRegistration(req.params.id, {
+      status: body.status,
+      actionPlan: body.actionPlan,
+      outcome: body.outcome,
+      note: body.note
+    });
+    const who = req.account.displayName;
+    if (body.status !== void 0) activity.add("registration", `${who} ${entry.status === "pending" ? "reopened" : entry.status} the access request from ${entry.name}`, req.account.username);
+    if (body.outcome) activity.add("registration", `${who} marked the access request from ${entry.name} as ${entry.outcome === "converted" ? "converted to customer" : "query closed"}`, req.account.username);
+    res.json(entry);
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+router4.post("/registrations/:id/comments", async (req, res) => {
+  try {
+    const entry = await (await siteReady()).addRegistrationComment(req.params.id, req.body?.text, req.account.displayName);
+    res.status(201).json(entry);
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+router4.delete("/registrations/:id/comments/:commentId", async (req, res) => {
+  try {
+    res.json(await (await siteReady()).removeRegistrationComment(req.params.id, req.params.commentId));
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+router4.delete("/registrations/:id", async (req, res) => {
+  try {
+    await (await siteReady()).removeRegistration(req.params.id);
+    res.sendStatus(204);
+  } catch (err) {
+    sendError(res, err);
+  }
 });
 var admin_default = router4;
 
@@ -43425,6 +44034,22 @@ router5.post("/subscriptions/:accountId/renew", async (req, res) => {
     sendError(res, err);
   }
 });
+router5.post("/subscriptions/:accountId/grace", async (req, res) => {
+  try {
+    const account = await companyOr404(req);
+    if (!account) {
+      res.status(404).json({ error: "That company no longer exists." });
+      return;
+    }
+    const billing = await billingReady();
+    const sub = await billing.addGrace(account.id, { amount: req.body?.amount, remarks: req.body?.remarks, by: req.account.displayName });
+    const latest = sub.graceLog[0];
+    activity.add("grace", `${req.account.displayName} gave ${account.displayName} a grace extension of ${latest.amount} (${latest.remarks})`, req.account.username);
+    res.json({ subscription: sub, entitlement: billing.entitlement(account.id) });
+  } catch (err) {
+    sendError(res, err);
+  }
+});
 router5.post("/subscriptions/:accountId/revoke-license", async (req, res) => {
   try {
     const account = await companyOr404(req);
@@ -43563,17 +44188,209 @@ router5.get("/companies/:accountId/client", async (req, res) => {
 });
 var billing_default = router5;
 
-// src/routes/index.ts
+// src/routes/site.ts
+var import_express6 = __toESM(require_express2(), 1);
 var router6 = (0, import_express6.Router)();
-router6.use(health_default);
-router6.use("/auth", auth_default);
-router6.use("/admin", admin_default);
-router6.use("/billing", billing_default);
-router6.use("/msfwr", msfwr_default);
-var routes_default = router6;
+var KINDS2 = ["logo", "favicon", "og"];
+var perAddress = keyedLimiter(5, 60 * 6e4);
+var perDay = keyedLimiter(200, 24 * 60 * 6e4);
+router6.get("/settings", async (_req, res) => {
+  try {
+    const site = await siteReady();
+    res.set("Cache-Control", "no-cache");
+    res.json(site.publicSettings());
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+router6.get("/asset/:kind", async (req, res) => {
+  try {
+    const kind = req.params.kind;
+    if (!KINDS2.includes(kind)) {
+      res.sendStatus(404);
+      return;
+    }
+    const asset = (await siteReady()).getAsset(kind);
+    if (!asset) {
+      res.sendStatus(404);
+      return;
+    }
+    res.set({
+      "Content-Type": asset.type,
+      // The URL carries the version, so a new upload gets a new URL.
+      "Cache-Control": req.query["v"] ? "public, max-age=31536000, immutable" : "public, max-age=300",
+      // Social networks and browsers load these from other origins.
+      "Cross-Origin-Resource-Policy": "cross-origin",
+      // An uploaded SVG must never run script, even when opened directly.
+      "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+    });
+    res.send(Buffer.from(asset.data, "base64"));
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+router6.post("/requests", async (req, res) => {
+  try {
+    res.set("Cache-Control", "no-store");
+    if (!req.is("application/json")) {
+      res.status(415).json({ error: "Send the request as JSON." });
+      return;
+    }
+    const site = await siteReady();
+    if (!site.publicSettings().signIn.requestAccess) {
+      res.status(403).json({ error: "Access requests are closed." });
+      return;
+    }
+    const body = req.body ?? {};
+    if (typeof body["website"] === "string" && body["website"].trim()) {
+      res.status(201).json({ ok: true });
+      return;
+    }
+    const address = req.ip ?? "";
+    if (perAddress.hit(address) || perDay.hit("all")) {
+      res.status(429).json({ error: "Too many requests. Try again in an hour." });
+      return;
+    }
+    const entry = await site.addRegistration({
+      name: body["name"],
+      company: body["company"],
+      email: body["email"],
+      mobile: body["mobile"],
+      message: body["message"]
+    });
+    activity.add("registration", `Access request from ${entry.name}${entry.company ? ` (${entry.company})` : ""}`);
+    logger.info({ id: entry.id }, "Access request received");
+    res.status(201).json({ ok: true });
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+var site_default = router6;
+
+// src/routes/company.ts
+var import_express7 = __toESM(require_express2(), 1);
+var router7 = (0, import_express7.Router)();
+router7.use((_req, res, next) => {
+  res.set({ "Cache-Control": "no-store, private", "X-Content-Type-Options": "nosniff" });
+  next();
+});
+router7.use(requireUser());
+router7.get("/dashboard", async (req, res) => {
+  try {
+    const user = req.account;
+    const billing = await billingReady();
+    const now = Date.now();
+    const ent = billing.entitlement(user.id, now);
+    const sub = billing.getSubscription(user.id);
+    const gate = await connectGateForRa(user.raId);
+    const live = store.liveFor(user.raId);
+    const inbox = store.inbox(user.raId);
+    const history = billing.listSessions({ accountId: user.id }, 2e3);
+    const start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    const days = Array.from({ length: 30 }, (_, i) => ({ day: start.getTime() - (29 - i) * DAY, sessions: 0, minutes: 0 }));
+    const byMode = { attended: 0, unattended: 0, link: 0 };
+    const byPc = /* @__PURE__ */ new Map();
+    const hours = Array.from({ length: 24 }, () => 0);
+    let minutes30 = 0;
+    let sessions30 = 0;
+    let longestMs = 0;
+    for (const h of history) {
+      const i = Math.floor((h.startedAt - days[0].day) / DAY);
+      if (i < 0 || i >= 30) continue;
+      const m = Math.round(h.durationMs / 6e4);
+      days[i].sessions += 1;
+      days[i].minutes += m;
+      sessions30 += 1;
+      minutes30 += m;
+      longestMs = Math.max(longestMs, h.durationMs);
+      byMode[h.mode] = (byMode[h.mode] ?? 0) + 1;
+      hours[new Date(h.startedAt).getHours()] += 1;
+      const pc = h.pcName || "Windows PC";
+      const row = byPc.get(pc) ?? { sessions: 0, minutes: 0 };
+      row.sessions += 1;
+      row.minutes += m;
+      byPc.set(pc, row);
+    }
+    const topPcs = [...byPc.entries()].map(([name, v]) => ({ name, ...v })).sort((a, b) => b.sessions - a.sessions).slice(0, 5);
+    const links = await linkRegister({ accountId: user.id });
+    const periodStart = sub?.currentPeriodStart ?? 0;
+    const payments = billing.listPayments(user.id, 100);
+    const open3 = payments.filter((p) => p.status !== "paid").sort((a, b) => a.dueDate - b.dueDate);
+    const lastPaid = payments.filter((p) => p.status === "paid").sort((a, b) => (b.paidAt ?? 0) - (a.paidAt ?? 0))[0];
+    res.json({
+      now,
+      company: { name: user.displayName, raId: user.raId },
+      subscription: ent.subscribed ? {
+        status: ent.status,
+        plan: ent.plan ? { name: ent.plan.name, description: ent.plan.description, interval: ent.plan.interval, priceInr: ent.plan.priceInr, maxConcurrentViewers: ent.plan.maxConcurrentViewers, maxSessionMinutes: ent.plan.maxSessionMinutes } : null,
+        startedAt: sub?.startedAt ?? null,
+        currentPeriodStart: sub?.currentPeriodStart ?? null,
+        currentPeriodEnd: ent.currentPeriodEnd,
+        autoRenew: sub?.autoRenew ?? false
+      } : null,
+      usage: {
+        used: ent.sessionsUsed,
+        quota: ent.sessionQuota,
+        planQuota: ent.planQuota,
+        grace: ent.graceSessions,
+        remaining: ent.remaining,
+        urls: ent.urlsUsed,
+        extraSessions: ent.extraSessionsUsed,
+        blocked: !gate.ok,
+        reason: gate.ok ? null : gate.reason ?? "inactive",
+        message: gate.ok ? null : gate.message ?? null,
+        // Grace extensions in the current period (amount and date only).
+        graceLog: (sub?.graceLog ?? []).filter((g) => g.at >= periodStart).map((g) => ({ amount: g.amount, at: g.at }))
+      },
+      live: live.map((s) => ({ id: s.id, name: s.name, mode: s.mode, viewers: s.viewers, liveAt: s.liveAt })),
+      pcs: { online: inbox.pcs.filter((p) => p.state === "online").length, busy: inbox.pcs.filter((p) => p.state === "busy").length, list: inbox.pcs },
+      requests: {
+        waiting: inbox.requests.filter((r) => r.status === "waiting").length,
+        accepted: inbox.requests.filter((r) => r.status === "accepted").length,
+        missed: inbox.requests.filter((r) => r.status === "missed").length
+      },
+      links: {
+        active: links.filter((l) => l.status === "active").length,
+        thisPeriod: links.filter((l) => (l.claim?.at ?? 0) >= periodStart).length,
+        total: links.length,
+        recent: links.slice(0, 6).map((l) => ({ code: l.code, pcName: l.pcName, status: l.status, online: l.online, claimedAt: l.claim?.at ?? null, expiresAt: l.expiresAt, sessions: l.sessions.length }))
+      },
+      history: {
+        days,
+        sessions30,
+        minutes30,
+        avgMinutes: sessions30 ? Math.round(minutes30 / sessions30) : 0,
+        longestMinutes: Math.round(longestMs / 6e4),
+        byMode,
+        hours,
+        topPcs
+      },
+      payments: {
+        open: open3.slice(0, 5).map((p) => ({ id: p.id, amountInr: p.amountInr, dueDate: p.dueDate, status: p.status, note: p.note })),
+        openAmountInr: open3.reduce((t, p) => t + p.amountInr, 0),
+        lastPaid: lastPaid ? { amountInr: lastPaid.amountInr, paidAt: lastPaid.paidAt, note: lastPaid.note } : null
+      }
+    });
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+var company_default = router7;
+
+// src/routes/index.ts
+var router8 = (0, import_express8.Router)();
+router8.use(health_default);
+router8.use("/auth", auth_default);
+router8.use("/admin", admin_default);
+router8.use("/billing", billing_default);
+router8.use("/site", site_default);
+router8.use("/company", company_default);
+router8.use("/msfwr", msfwr_default);
+var routes_default = router8;
 
 // src/app.ts
-var app = (0, import_express7.default)();
+var app = (0, import_express9.default)();
 app.set("trust proxy", 2);
 app.use(
   (0, import_pino_http.default)({
@@ -43596,8 +44413,9 @@ app.use(
   })
 );
 app.use((0, import_cors.default)());
-app.use(import_express7.default.json());
-app.use(import_express7.default.urlencoded({ extended: true }));
+app.use("/api/admin/site", import_express9.default.json({ limit: "3mb" }));
+app.use(import_express9.default.json());
+app.use(import_express9.default.urlencoded({ extended: true }));
 app.use(securityHeaders());
 app.use("/api", routes_default);
 var app_default = app;

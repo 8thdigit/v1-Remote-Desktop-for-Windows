@@ -730,6 +730,15 @@ export function createMsfwrStore(clock = Date.now, hooks: StoreHooks = {}) {
         links: [...links.values()].map((l) => ({code: l.code, ...linkStatusOf(l)})),
       };
     },
+    // Live sessions a company has open right now: the ones its operators
+    // opened, or (with no operator) on PCs pointing to its RA ID.
+    liveFor(raId: string) {
+      const seen = new Set<Session>();
+      for (const {session} of peers.values()) {
+        if (session.state === "live" && !expired(session) && (session.operator?.raId ?? session.ra) === raId) seen.add(session);
+      }
+      return [...seen].map(view);
+    },
     endById(id: string) {
       for (const {session} of peers.values()) {
         if (session.id === id) { end(session); return true; }

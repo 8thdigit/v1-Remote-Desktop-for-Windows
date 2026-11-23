@@ -168,3 +168,43 @@ test("requireLicense is persisted and surfaced on the entitlement", async () => 
   await b.setSubscription("acct-1", { requireLicense: false });
   assert.equal(b.entitlement("acct-1").requireLicense, false);
 });
+
+test("usage counts URLs and extra sessions, and a grace extension lifts the quota for the period", async () => {
+  const now = { value: 1_000_000 };
+  const b = await makeBilling(now);
+  const plan = await b.createPlan({ name: "Starter", priceInr: 500, interval: "monthly", sessionQuota: 2 });
+  await b.setSubscription("acct-1", { planId: plan.id, status: "active" });
+  await b.countUsage("acct-1", "url");
+  await b.countUsage("acct-1", "session");
+  let ent = b.entitlement("acct-1");
+  assert.deepEqual([ent.sessionsUsed, ent.urlsUsed, ent.extraSessionsUsed, ent.remaining], [2, 1, 1, 0]);
+  assert.equal(b.canStartSession("acct-1").reason, "quota");
+
+  await assert.rejects(b.addGrace("acct-1", { amount: 10, remarks: "" }), /remark/);
+  await assert.rejects(b.addGrace("acct-1", { amount: 0, remarks: "x" }), /extra sessions/);
+  await assert.rejects(b.addGrace("acct-2", { amount: 10, remarks: "x" }), /no subscription/);
+  const sub = await b.addGrace("acct-1", { amount: 10, remarks: "Waiting for PO", by: "Admin" });
+  assert.equal(sub.graceLog[0].amount, 10);
+  assert.equal(sub.graceLog[0].remarks, "Waiting for PO");
+  ent = b.entitlement("acct-1");
+  assert.deepEqual([ent.sessionQuota, ent.planQuota, ent.graceSessions, ent.remaining], [12, 2, 10, 10]);
+  assert.equal(b.canStartSession("acct-1").ok, true);
+
+  await b.renew("acct-1", { markPaid: true });
+  ent = b.entitlement("acct-1");
+  assert.deepEqual([ent.sessionQuota, ent.graceSessions, ent.urlsUsed], [2, 0, 0], "grace covers one period only");
+  assert.equal(b.getSubscription("acct-1").graceLog.length, 1, "the grace history is kept");
+});
+
+test("an unlimited plan needs no grace, and older subscriptions load with zero breakdown", async () => {
+  const backend = memoryBillingBackend({
+    plans: [{ id: "p", name: "Pro", description: "", priceInr: 1, interval: "monthly", sessionQuota: 0, maxConcurrentViewers: 0, maxSessionMinutes: 0, archived: false, createdAt: 1, updatedAt: 1 }],
+    subscriptions: [{ accountId: "a", planId: "p", status: "active", startedAt: 1, currentPeriodStart: 1, currentPeriodEnd: 10 * DAY, sessionsUsed: 9, licenseVersion: 1, autoRenew: true, requireLicense: false, notes: "", createdAt: 1, updatedAt: 1 }],
+    payments: [], history: [],
+  });
+  const { init, api: b } = createBilling(backend, { secret: "s", clock: () => 1000 });
+  await init;
+  const ent = b.entitlement("a");
+  assert.deepEqual([ent.sessionsUsed, ent.urlsUsed, ent.extraSessionsUsed, ent.graceSessions], [9, 0, 0, 0]);
+  await assert.rejects(b.addGrace("a", { amount: 5, remarks: "x" }), /unlimited/);
+});

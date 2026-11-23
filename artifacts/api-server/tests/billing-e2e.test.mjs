@@ -197,20 +197,27 @@ test("a company that is suspended or over quota cannot connect to its PC", async
   assert.equal(blocked.status, 402, JSON.stringify(blocked.json));
   assert.equal(blocked.json.reason, "suspended");
 
-  // Reactivated: it connects, which uses the one allowed session of the period.
+  // Reactivated: it connects. One session at a time does not use the quota.
   assert.equal((await admin("PUT", `/billing/subscriptions/${gateId}`, { status: "active" })).status, 200);
   const ok = await company("POST", "/msfwr/connect", { pc: pc.id });
   assert.equal(ok.status, 200, JSON.stringify(ok.json));
+  await new Promise((r) => setTimeout(r, 200));
+  const usedOf = async () => (await admin("GET", "/billing/companies")).json.companies.find((c) => c.id === gateId)?.entitlement.sessionsUsed ?? 0;
+  assert.equal(await usedOf(), 0, "a single live session is not counted");
 
+  // A second session while the first is live is counted against the quota.
+  assert.equal((await registerStanding(pcKey("m"), "Gate-PC2", gateRa)).status, 201);
+  const pc2 = (await company("GET", "/msfwr/inbox")).json.pcs.find((p) => p.name === "Gate-PC2");
+  const second = await company("POST", "/msfwr/connect", { pc: pc2.id });
+  assert.equal(second.status, 200, JSON.stringify(second.json));
   // Wait for that live-start to be counted (the store reports it to billing
   // asynchronously via its lifecycle hook).
   let used = 0;
   for (let i = 0; i < 50 && used < 1; i++) {
-    const list = await admin("GET", "/billing/companies");
-    used = list.json.companies.find((c) => c.id === gateId)?.entitlement.sessionsUsed ?? 0;
+    used = await usedOf();
     if (used < 1) await new Promise((r) => setTimeout(r, 50));
   }
-  assert.equal(used, 1, "the live session was counted against the quota");
+  assert.equal(used, 1, "the extra live session was counted against the quota");
 
   // The quota is now spent, so a further connect is refused for quota. The gate
   // runs before PC availability, so the reason is the subscription, not the PC.
