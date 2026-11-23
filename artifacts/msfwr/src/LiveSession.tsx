@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type WheelEvent } from 'react';
 import { ArrowLeft, Laptop, Maximize2, Minimize2, MousePointer2, ShieldCheck } from 'lucide-react';
 import { LogoMark, Wordmark } from '@/components/logo';
+import { BuddyPanel, useBuddyConfig } from '@/components/buddy-panel';
 import { endMsfwr, getGetMsfwrFrameUrl, getSendMsfwrInputUrl, sendMsfwrInput, type MsfwrInput } from '@workspace/api-client-react';
 
 type Props = { token: string; verification: string; preapproved?: boolean; onLeave: (message?: string) => void };
@@ -82,6 +83,13 @@ export default function LiveSession({ token, verification, preapproved = false, 
   const lastWheel = useRef(0);
   const pressed = useRef<number | null>(null);
   const headers = { Authorization: `Bearer ${token}` };
+  const buddy = useBuddyConfig(token, state === 'live');
+  // The AI Buddy reads still images of the screen. The screen is composed on
+  // a canvas, so it gets a JPEG snapshot of it, at most once a second, and
+  // only while it is on.
+  const [snapshot, setSnapshot] = useState<string>();
+  const wantSnapshot = useRef(false);
+  wantSnapshot.current = !!buddy;
   leaveRef.current = onLeave;
 
   function finish(message?: string, remoteAlreadyClosed = false) {
@@ -99,6 +107,9 @@ export default function LiveSession({ token, verification, preapproved = false, 
     const controller = new AbortController();
     stream.current = controller;
     let sequence = 0;
+    let snapAt = 0;
+    let snapTimer = 0;
+    let snapUrl: string | undefined;
     const buffer = document.createElement('canvas');
     screen.current = buffer;
     const paint = buffer.getContext('2d');
@@ -116,6 +127,21 @@ export default function LiveSession({ token, verification, preapproved = false, 
         visible?.drawImage(image, x, y);
         image.close();
       }
+    }
+    // Takes a snapshot for the AI Buddy now, or when a second has passed
+    // since the last one, so the settled screen is always captured.
+    function snap() {
+      if (!wantSnapshot.current || snapTimer) return;
+      snapTimer = window.setTimeout(() => {
+        snapTimer = 0;
+        snapAt = Date.now();
+        buffer.toBlob((blob) => {
+          if (!blob || controller.signal.aborted) return;
+          if (snapUrl) URL.revokeObjectURL(snapUrl);
+          snapUrl = URL.createObjectURL(blob);
+          setSnapshot(snapUrl);
+        }, 'image/jpeg', 0.9);
+      }, Math.max(0, 1000 - (Date.now() - snapAt)));
     }
     // Frames are long-polled: the relay answers as soon as the screen
     // changes, and the next request goes out at once. A relay without
@@ -153,6 +179,7 @@ export default function LiveSession({ token, verification, preapproved = false, 
           if (controller.signal.aborted) { images.forEach((u) => u.image.close()); return; }
           draw(images);
           setFrame(true);
+          snap();
           sequence = nextSequence;
         }
         if (!held || current !== 'live') {
@@ -172,6 +199,8 @@ export default function LiveSession({ token, verification, preapproved = false, 
     return () => {
       controller.abort();
       screen.current = null;
+      clearTimeout(snapTimer);
+      if (snapUrl) URL.revokeObjectURL(snapUrl);
       window.removeEventListener('pagehide', pageExit);
     };
   }, [token]);
@@ -274,6 +303,7 @@ export default function LiveSession({ token, verification, preapproved = false, 
               </button>
             </div>
           </div>
+          <div className={buddy ? 'grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]' : undefined}>
           <div ref={stage}
             className={full
               ? 'fixed inset-0 z-50 flex items-center justify-center bg-black text-background'
@@ -334,6 +364,8 @@ export default function LiveSession({ token, verification, preapproved = false, 
                 Waiting for the first screen frame…
               </div>
             )}
+          </div>
+          {buddy && <BuddyPanel token={token} frame={snapshot} config={buddy} />}
           </div>
           <p className="mt-3 text-sm text-muted-foreground">Primary display only. At the Windows PC, press Ctrl+2 or F12 to stop sharing.</p>
         </section>

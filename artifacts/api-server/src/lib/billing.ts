@@ -117,6 +117,8 @@ export type Payment = {
 // One completed (or ended) remote session, for history and quota auditing.
 export type SessionRecord = {
   id: string;
+  // The live session's internal id, which links AI Buddy's record to it.
+  sessionId?: string;
   accountId: string | null;
   raId: string;
   pcName: string;

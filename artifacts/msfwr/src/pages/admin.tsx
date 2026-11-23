@@ -19,10 +19,11 @@ import { errorText, raLabel, useAuth } from '@/lib/auth';
 import { relativeTime } from '@/lib/unattended';
 import { takeLanding } from './sign-in';
 import { SubscriptionsPanel, PaymentsPanel, SessionHistoryPanel } from './billing-admin';
+import { AiBuddyPanel, SessionSummariesPanel } from './admin-buddy';
 import { DashboardPanel, RegistrationsPanel, SiteSettingsPanel, useDashboard, type Registration } from './admin-dashboard';
 
-type Tab = 'dashboard' | 'users' | 'subscriptions' | 'payments' | 'pcs' | 'sessions' | 'requests' | 'registrations' | 'activity' | 'site';
-const TABS: Tab[] = ['dashboard', 'users', 'subscriptions', 'payments', 'pcs', 'sessions', 'requests', 'registrations', 'activity', 'site'];
+type Tab = 'dashboard' | 'users' | 'subscriptions' | 'payments' | 'pcs' | 'sessions' | 'summaries' | 'buddy' | 'requests' | 'registrations' | 'activity' | 'site';
+const TABS: Tab[] = ['dashboard', 'users', 'subscriptions', 'payments', 'pcs', 'sessions', 'summaries', 'buddy', 'requests', 'registrations', 'activity', 'site'];
 
 // Ends a session from the console (not part of the generated client).
 async function endSessionAsAdmin(id: string) {
@@ -134,8 +135,8 @@ export default function Admin() {
           </div>
         )}
 
-        <nav aria-label="Admin sections" className="mt-6 flex w-full gap-1 overflow-x-auto rounded-xl bg-muted/80 p-1 sm:w-fit">
-          {([['dashboard', 'Dashboard'], ['users', 'Companies'], ['subscriptions', 'Subscriptions'], ['payments', 'Payments'], ['pcs', `PCs${pcs.length ? ` (${pcs.length})` : ''}`], ['sessions', `Sessions${live.length ? ` (${live.length})` : ''}`], ['requests', `Initiate${waiting.length ? ` (${waiting.length})` : ''}`], ['registrations', `Access requests${pendingRegistrations ? ` (${pendingRegistrations})` : ''}`], ['activity', 'Activity'], ['site', 'Site settings']] as const).map(([id, text]) => (
+        <nav aria-label="Admin sections" className="mt-6 flex w-full max-w-full gap-1 overflow-x-auto rounded-xl bg-muted/80 p-1 sm:w-fit">
+          {([['dashboard', 'Dashboard'], ['users', 'Companies'], ['subscriptions', 'Subscriptions'], ['payments', 'Payments'], ['pcs', `PCs${pcs.length ? ` (${pcs.length})` : ''}`], ['sessions', `Sessions${live.length ? ` (${live.length})` : ''}`], ['summaries', 'Session summaries'], ['buddy', 'AI Buddy'], ['requests', `Initiate${waiting.length ? ` (${waiting.length})` : ''}`], ['registrations', `Access requests${pendingRegistrations ? ` (${pendingRegistrations})` : ''}`], ['activity', 'Activity'], ['site', 'Site settings']] as const).map(([id, text]) => (
             <button key={id} type="button" onClick={() => setTab(id)} aria-current={tab === id ? 'page' : undefined} data-testid={`admin-tab-${id}`}
               className={`flex-1 whitespace-nowrap rounded-lg px-4 py-1.5 text-sm font-semibold transition-colors sm:flex-none ${tab === id ? 'bg-card shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
               {text}
@@ -226,6 +227,8 @@ export default function Admin() {
             </Panel>
           )}
           {tab === 'sessions' && <div className="mt-4"><SessionHistoryPanel onError={setProblem} /></div>}
+          {tab === 'summaries' && <SessionSummariesPanel onError={setProblem} />}
+          {tab === 'buddy' && <AiBuddyPanel onError={setProblem} />}
           {tab === 'requests' && (
             <Panel title="Initiate requests" icon={Activity} action={<Refresh onClick={reload} />}>
               <RequestList requests={overview.data?.requests ?? []} byRa={byRa} now={now} />
