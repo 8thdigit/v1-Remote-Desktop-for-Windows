@@ -544,6 +544,8 @@ components:
         raId: {type: string}
         pin: {type: string}
         at: {type: number}
+        clientIp: {type: string, description: Address of the browser that entered the PIN}
+        clientAgent: {type: string, description: Browser that entered the PIN}
     MsfwrLinkRecord:
       type: object
       required: [code, pcName, createdAt, expiresAt, ttlHours, sessions, status, online, viewers, locked, blocked]

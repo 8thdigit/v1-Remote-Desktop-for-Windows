@@ -12,4 +12,8 @@ export interface MsfwrLinkClaim {
   raId: string;
   pin: string;
   at: number;
+  /** Address of the browser that entered the PIN */
+  clientIp?: string;
+  /** Browser that entered the PIN */
+  clientAgent?: string;
 }

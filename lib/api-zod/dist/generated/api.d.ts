@@ -254,6 +254,8 @@ export declare const GetMsfwrInboxResponse: zod.ZodObject<{
             raId: zod.ZodString;
             pin: zod.ZodString;
             at: zod.ZodNumber;
+            clientIp: zod.ZodOptional<zod.ZodString>;
+            clientAgent: zod.ZodOptional<zod.ZodString>;
         }, zod.z.core.$strip>>;
         sessions: zod.ZodArray<zod.ZodObject<{
             startedAt: zod.ZodNumber;
@@ -491,6 +493,8 @@ export declare const GetAdminOverviewResponse: zod.ZodObject<{
             raId: zod.ZodString;
             pin: zod.ZodString;
             at: zod.ZodNumber;
+            clientIp: zod.ZodOptional<zod.ZodString>;
+            clientAgent: zod.ZodOptional<zod.ZodString>;
         }, zod.z.core.$strip>>;
         sessions: zod.ZodArray<zod.ZodObject<{
             startedAt: zod.ZodNumber;

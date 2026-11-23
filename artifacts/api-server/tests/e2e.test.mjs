@@ -182,6 +182,7 @@ test("remote access URL: a company's PIN authors it, only that company sees it, 
   assert.notEqual(after.accessPin.pin, accessPin, "the company gets a new PIN for its next URL");
   assert.equal(after.links.length, 1);
   assert.deepEqual([after.links[0].code, after.links[0].claim.pin, after.links[0].claim.company], [link.code, accessPin, "Acme Ltd"]);
+  assert.ok(after.links[0].claim.clientIp, "the address of the browser that entered the PIN is recorded");
   assert.deepEqual((await rival("GET", "/msfwr/inbox")).json.links, [], "other companies do not see it");
   for (let i = 0; i < 20 && !(await acme("GET", "/msfwr/inbox")).json.links[0].sessions.length; i++) await new Promise((r) => setTimeout(r, 50));
   assert.equal((await acme("GET", "/msfwr/inbox")).json.links[0].sessions.length, 1, "the session is recorded against the URL");

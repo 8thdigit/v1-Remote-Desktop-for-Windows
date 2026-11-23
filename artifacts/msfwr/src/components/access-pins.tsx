@@ -102,6 +102,9 @@ function RecordRow({ r, showCompany, companyName }: { r: MsfwrLinkRecord; showCo
             Authorized {showCompany ? <>by {companyName?.(r.claim.raId) ?? r.claim.company} ({raLabel(r.claim.raId)})</> : ''} {when(r.claim.at)}
           </span>
           <span className="rounded bg-muted px-1.5 py-0.5 font-mono font-bold tracking-[0.2em]" data-testid={`text-link-pin-${r.code}`}>PIN {r.claim.pin}</span>
+          {r.claim.clientAgent || r.claim.clientIp ? (
+            <span className="text-muted-foreground">from {[browserLabel(r.claim.clientAgent), r.claim.clientIp].filter(Boolean).join(' · ')}</span>
+          ) : null}
           <span className="text-muted-foreground">
             {r.sessions.length ? `${r.sessions.length} ${r.sessions.length === 1 ? 'session' : 'sessions'} ended, ${minutes(used)} in all` : 'No session ended yet'}
           </span>
@@ -120,5 +123,73 @@ export function LinkRecordList({ records, showCompany = false, companyName }: {
     <ul className="divide-y divide-foreground/8" data-testid="list-link-records">
       {records.map((r) => <RecordRow key={r.code} r={r} showCompany={showCompany} companyName={companyName} />)}
     </ul>
+  );
+}
+
+// A short "Chrome on Windows" label for the browser that entered the PIN.
+export function browserLabel(agent?: string) {
+  if (!agent) return '';
+  const browser = /Edg\//.test(agent) ? 'Edge' : /OPR\//.test(agent) ? 'Opera' : /Firefox\//.test(agent) ? 'Firefox'
+    : /Chrome\//.test(agent) ? 'Chrome' : /Safari\//.test(agent) ? 'Safari' : 'Browser';
+  const os = /Windows/.test(agent) ? 'Windows' : /Android/.test(agent) ? 'Android' : /iPhone|iPad/.test(agent) ? 'iOS'
+    : /Mac OS X/.test(agent) ? 'macOS' : /Linux/.test(agent) ? 'Linux' : '';
+  return os ? `${browser} on ${os}` : browser;
+}
+
+// Every URL accepted with this company's PIN, newest first, as a table.
+export function AcceptedUrlTable({ records }: { records: MsfwrLinkRecord[] }) {
+  if (!records.length) {
+    return (
+      <p className="rounded-xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground" data-testid="text-no-accepted-urls">
+        No remote access URL has been accepted with your PIN yet. When someone opens a URL and enters your PIN, it is listed here.
+      </p>
+    );
+  }
+  const sorted = [...records].sort((a, b) => (b.claim?.at ?? b.createdAt) - (a.claim?.at ?? a.createdAt));
+  return (
+    <div className="overflow-x-auto rounded-xl border bg-background/60">
+      <table className="w-full min-w-[760px] text-left text-sm" data-testid="table-accepted-urls">
+        <thead className="border-b bg-muted/50 text-[11px] uppercase tracking-wide text-muted-foreground">
+          <tr>
+            <th className="px-3 py-2 font-semibold">Accepted</th>
+            <th className="px-3 py-2 font-semibold">URL</th>
+            <th className="px-3 py-2 font-semibold">Client</th>
+            <th className="px-3 py-2 font-semibold">PIN used</th>
+            <th className="px-3 py-2 font-semibold">Status</th>
+            <th className="px-3 py-2 font-semibold">Sessions</th>
+            <th className="px-3 py-2 font-semibold">Valid until</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-foreground/8">
+          {sorted.map((r) => {
+            const url = urlOf(r.code);
+            const [label, cls] = r.blocked && r.status === 'active' ? ['Blocked', 'bg-destructive/10 text-destructive']
+              : r.status === 'active' && r.viewers > 0 ? [`Live · ${r.viewers} connected`, 'bg-primary/12 text-primary']
+              : r.locked && r.status === 'active' ? ['Locked 15 min', 'bg-amber-500/15 text-amber-700'] : STATUS[r.status];
+            const used = r.sessions.reduce((t, x) => t + x.durationMs, 0);
+            const client = [browserLabel(r.claim?.clientAgent), r.claim?.clientIp].filter(Boolean).join(' · ');
+            return (
+              <tr key={r.code} className="align-top" data-testid={`row-accepted-${r.code}`}>
+                <td className="whitespace-nowrap px-3 py-2.5">{r.claim ? when(r.claim.at) : '—'}</td>
+                <td className="px-3 py-2.5">
+                  <span className="flex items-center gap-1">
+                    <span className="max-w-[16rem] truncate font-mono text-xs" title={url}>{url.replace(/^https?:\/\//, '')}</span>
+                    <CopyText text={url} label="Copy URL" />
+                  </span>
+                </td>
+                <td className="px-3 py-2.5">
+                  <p className="font-semibold">{r.pcName || 'Windows PC'}</p>
+                  {client && <p className="text-xs text-muted-foreground">Opened from {client}</p>}
+                </td>
+                <td className="px-3 py-2.5"><span className="rounded bg-muted px-1.5 py-0.5 font-mono font-bold tracking-[0.2em]">{r.claim?.pin ?? '—'}</span></td>
+                <td className="px-3 py-2.5"><span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold ${cls}`}>{label}</span></td>
+                <td className="whitespace-nowrap px-3 py-2.5 text-xs">{r.sessions.length ? `${r.sessions.length} ended · ${minutes(used)}` : 'None ended yet'}</td>
+                <td className="whitespace-nowrap px-3 py-2.5 text-xs">{when(r.expiresAt)}{r.revokedAt ? <span className="block text-muted-foreground">cleared {when(r.revokedAt)}</span> : null}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
