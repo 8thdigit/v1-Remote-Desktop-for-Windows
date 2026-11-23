@@ -13,7 +13,7 @@ app.set("trust proxy", 2);
 app.use(
   pinoHttp({
     logger,
-    autoLogging: { ignore: (req) => /^\/api\/msfwr\/(?:tick|frame|input)(?:\?|$)/.test(req.url ?? "") },
+    autoLogging: { ignore: (req) => /^\/api\/msfwr\/(?:tick|frame|input|events|view)(?:\?|$)/.test(req.url ?? "") },
     serializers: {
       req(req) {
         return {

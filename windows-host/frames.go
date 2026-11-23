@@ -147,53 +147,121 @@ func packUpdates(list []update) []byte {
 	return out
 }
 
+// profile is a picture quality a viewer can pick: the largest screen size
+// sent (larger screens are scaled down), the JPEG qualities the pacer steps
+// through, and whether colour is subsampled (4:2:0, smaller but smears
+// coloured text) or kept at full resolution (4:4:4).
+type profile struct {
+	name       string
+	maxW, maxH int
+	qualities  []int
+	subsample  bool
+}
+
+var profiles = map[string]profile{
+	// Native resolution (up to 4K) for reading small text.
+	"sharp": {"sharp", 3840, 2400, []int{90, 86, 82, 76, 68, 60}, false},
+	// Native on common 1080p screens; larger ones scaled to 1920 wide.
+	"balanced": {"balanced", 1920, 1200, []int{85, 80, 74, 66, 58, 50}, false},
+	// The old 1280×800 picture for slow links.
+	"fast": {"fast", 1280, 800, []int{70, 60, 50, 42, 34, 28}, true},
+}
+
+const defaultProfile = "balanced"
+
+// profileFor returns the named profile, or the default for an unknown name.
+func profileFor(name string) profile {
+	if p, ok := profiles[name]; ok {
+		return p
+	}
+	return profiles[defaultProfile]
+}
+
+// fitted scales a w×h screen down to fit maxW×maxH, keeping its shape.
+func fitted(w, h, maxW, maxH int) (int, int) {
+	if w > maxW {
+		h = max(1, h*maxW/w)
+		w = maxW
+	}
+	if h > maxH {
+		w = max(1, w*maxH/h)
+		h = maxH
+	}
+	return w, h
+}
+
+// max returns the larger of two ints (kept local for Go toolchain parity).
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 // pacer adapts JPEG quality and the gap between uploads to how fast uploads
 // reach the relay: slow uploads lower quality and leave room for input;
 // fast ones raise it again.
 type pacer struct {
+	prof  profile
 	level int
 	fast  int
 	gap   time.Duration
 }
 
-var qualities = []int{80, 70, 60, 50, 40, 30}
-
 const (
-	minGap  = 33 * time.Millisecond // at most about 30 uploads a second
+	minGap  = 20 * time.Millisecond // at most about 50 uploads a second
 	maxGap  = 400 * time.Millisecond
-	slowRTT = 300 * time.Millisecond
-	fastRTT = 120 * time.Millisecond
+	slowRTT = 450 * time.Millisecond
+	fastRTT = 200 * time.Millisecond
 )
 
-func newPacer() *pacer { return &pacer{level: 2, gap: minGap} }
+func newPacer() *pacer { return &pacer{prof: profileFor(defaultProfile), level: 1, gap: minGap} }
+
+// setProfile switches to the named picture quality. It reports whether
+// anything changed.
+func (p *pacer) setProfile(name string) bool {
+	next := profileFor(name)
+	if next.name == p.prof.name {
+		return false
+	}
+	p.prof, p.level, p.fast = next, 1, 0
+	return true
+}
 
 // quality is the JPEG quality for the next update.
-func (p *pacer) quality() int { return qualities[p.level] }
+func (p *pacer) quality() int { return p.prof.qualities[p.level] }
 
 // refineQuality is the quality of the keyframe sent once the screen settles.
 func (p *pacer) refineQuality() int {
-	q := qualities[p.level] + 15
-	if q > 85 {
-		q = 85
+	q := p.prof.qualities[0] + 4
+	if q > 94 {
+		q = 94
 	}
 	return q
 }
 
-// observe records how long an upload of n bytes took.
+// observe records how long an upload of n bytes took. Big uploads are
+// judged by throughput rather than time, so one large keyframe on a good
+// link does not lower the quality.
 func (p *pacer) observe(n int, took time.Duration) {
 	if n == 0 {
 		return
 	}
+	slow, fast := slowRTT, fastRTT
+	if extra := time.Duration(n/(256*1024)) * 150 * time.Millisecond; extra > 0 {
+		slow += extra
+		fast += extra
+	}
 	switch {
-	case took > slowRTT:
+	case took > slow:
 		p.fast = 0
-		if p.level < len(qualities)-1 {
+		if p.level < len(p.prof.qualities)-1 {
 			p.level++
 		}
 		p.gap *= 2
-	case took < fastRTT:
+	case took < fast:
 		p.fast++
-		if p.fast >= 8 && p.level > 0 {
+		if p.fast >= 6 && p.level > 0 {
 			p.level--
 			p.fast = 0
 		}

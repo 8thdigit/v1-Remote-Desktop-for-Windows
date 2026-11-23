@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"errors"
 	"image"
-	"image/jpeg"
 	"syscall"
 	"unsafe"
+
+	"msfwr.local/host/jpeg444"
 )
 
 var (
@@ -73,38 +74,29 @@ type dibInfo struct {
 	Compression, ImageSize, X, Y, Colors, Important uint32
 }
 
-// max returns the larger of two ints (kept local for Go toolchain parity).
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func fitted(w, h int) (int, int) {
-	if w > 1280 {
-		h = max(1, h*1280/w)
-		w = 1280
-	}
-	if h > 800 {
-		w = max(1, w*800/h)
-		h = 800
-	}
-	return w, h
-}
-
-// capturer grabs the primary screen, scaled to fit 1280×800, into a DIB it
-// keeps between frames. It keeps the last frame it reported, so it can tell
+// capturer grabs the primary screen at its native resolution (scaled down
+// only past the limit the viewer's picture quality sets) into a DIB it keeps
+// between frames. It keeps the last frame it reported, so it can tell
 // which regions changed and convert only those.
 type capturer struct {
 	src, dst, bitmap, old uintptr
 	pixel                 *byte
 	w, h, dw, dh          int
+	maxW, maxH            int         // the largest picture sent; 0 means the default
 	prev                  []byte      // BGRA of the last frame reported
 	img                   *image.RGBA // RGBA of the last frame reported
 }
 
 func newCapturer() *capturer { return &capturer{} }
+
+// limit sets the largest picture sent. A change takes effect on the next
+// grab, which then reports the whole screen.
+func (c *capturer) limit(maxW, maxH int) {
+	if c.maxW != maxW || c.maxH != maxH {
+		c.maxW, c.maxH = maxW, maxH
+		c.w, c.h = 0, 0 // force setup
+	}
+}
 
 func (c *capturer) close() {
 	if c.dst != 0 {
@@ -119,14 +111,19 @@ func (c *capturer) close() {
 	if c.src != 0 {
 		releaseDC.Call(0, c.src)
 	}
-	*c = capturer{}
+	*c = capturer{maxW: c.maxW, maxH: c.maxH}
 }
 
 func (c *capturer) setup(w, h int) error {
 	fail := errors.New("could not capture the primary screen")
 	c.close()
 	c.w, c.h = w, h
-	c.dw, c.dh = fitted(w, h)
+	maxW, maxH := c.maxW, c.maxH
+	if maxW <= 0 || maxH <= 0 {
+		def := profileFor(defaultProfile)
+		maxW, maxH = def.maxW, def.maxH
+	}
+	c.dw, c.dh = fitted(w, h, maxW, maxH)
 	c.src, _, _ = getDC.Call(0)
 	if c.src == 0 {
 		return fail
@@ -148,7 +145,10 @@ func (c *capturer) setup(w, h int) error {
 		c.close()
 		return fail
 	}
-	stretchMode.Call(c.dst, 3)
+	// HALFTONE averages pixels when the screen is scaled down, which keeps
+	// text legible; at native size it is a plain copy.
+	stretchMode.Call(c.dst, 4)
+	gdi.NewProc("SetBrushOrgEx").Call(c.dst, 0, 0, 0)
 	return nil
 }
 
@@ -199,19 +199,21 @@ func (c *capturer) grab() (*image.RGBA, int, int, []image.Rectangle, error) {
 }
 
 // encodeJPEG encodes img (or a region of it) at quality, lowering quality
-// until it fits what the relay accepts.
-func encodeJPEG(img image.Image, quality int) ([]byte, error) {
-	for _, q := range []int{quality, 40, 25} {
+// until it fits in limit bytes. Colour keeps full resolution (4:4:4) unless
+// subsample is set, so coloured and anti-aliased text stays sharp.
+func encodeJPEG(img image.Image, quality int, subsample bool, limit int) ([]byte, error) {
+	for _, q := range []int{quality, 60, 40, 25} {
 		if q > quality {
 			continue
 		}
 		var buf bytes.Buffer
-		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: q}); err != nil {
+		if err := jpeg444.Encode(&buf, img, &jpeg444.Options{Quality: q, Subsample: subsample}); err != nil {
 			return nil, err
 		}
-		if buf.Len() <= 700*1024 {
+		if buf.Len() <= limit {
 			return buf.Bytes(), nil
 		}
+		subsample = true
 	}
 	return nil, errors.New("screen frame is too large for the relay")
 }

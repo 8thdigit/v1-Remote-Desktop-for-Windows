@@ -6,7 +6,7 @@ import {
   GetMsfwrLinkInfoQueryParams, GetMsfwrLinkInfoResponse, JoinMsfwrLinkBody, JoinMsfwrLinkResponse,
   GetMsfwrInboxResponse, AcceptMsfwrRequestBody, AcceptMsfwrRequestResponse, ConnectMsfwrPcBody, ConnectMsfwrPcResponse,
 } from "@workspace/api-zod";
-import { decodeUpdates, encodeFrames, formatRaId, normalizeRaId, type Session } from "../lib/msfwr";
+import { decodeUpdates, encodeFrames, formatRaId, normalizeRaId, streamRecord, viewQualities, type Session, type ViewQuality } from "../lib/msfwr";
 import { accountsReady, activity, connectGateForRa, gateForRa, linkLogReady, linkRegister, operatorOf, requireUser, sendError, store } from "../lib/portal";
 import { keyedLimiter } from "../lib/security";
 
@@ -275,13 +275,69 @@ function hold(res: Response, s: Session, ready: () => boolean, ms: number, done:
 }
 const gone = (res: Response) => res.status(410).json({error: "This session ended or expired. Ask for a new code."});
 
+// A request number from a client that keeps several requests in flight.
+function sequenceOf(req: Request) {
+  const value = req.get("x-msfwr-seq");
+  return value && /^\d{1,9}$/.test(value) ? Number(value) : undefined;
+}
+
+// How long one streaming response lasts before the client opens the next,
+// and how often it carries a heartbeat (which also keeps the peer counted
+// as connected).
+export const streamMs = 25_000;
+const beatMs = 2_000;
+
+// Streams to one client until the session ends, the client leaves, or
+// streamMs pass. push() writes whatever is new; it runs at the start, when
+// the session changes, and when a slow client has taken what was written.
+// beat() writes a heartbeat. close() writes the final record.
+function stream(req: Request, res: Response, s: Session, role: "host" | "viewer", type: string,
+  handlers: { push: (write: (b: Buffer | string) => void) => void; beat: () => Buffer | string; close: (ended: boolean) => Buffer | string }) {
+  res.status(200).set({
+    "Content-Type": type, "Cache-Control": "no-store, no-transform, private",
+    "X-Accel-Buffering": "no", "X-Msfwr-State": s.state, "X-Msfwr-Stream": "1",
+  });
+  res.flushHeaders();
+  req.socket.setNoDelay(true);
+  const header = req.get("authorization");
+  let over = false;
+  let busy = false;
+  const write = (b: Buffer | string) => {
+    if (over) return;
+    if (!res.write(b)) {
+      busy = true;
+      res.once("drain", () => { busy = false; push(); });
+    }
+  };
+  const stop = () => { over = true; clearInterval(beat); clearTimeout(timer); unwatch(); };
+  const finish = (ended: boolean) => {
+    if (over) return;
+    write(handlers.close(ended));
+    stop();
+    res.end();
+  };
+  const push = () => {
+    if (over || busy) return;
+    if (s.closed) { finish(true); return; }
+    handlers.push(write);
+  };
+  const beat = setInterval(() => {
+    if (!store.authenticate(header, role)) { finish(true); return; }
+    if (!busy) write(handlers.beat());
+  }, beatMs);
+  const timer = setTimeout(() => finish(false), streamMs);
+  const unwatch = store.watch(s, () => setImmediate(push));
+  res.on("close", () => { if (!over) stop(); });
+  push();
+}
+
 // Host heartbeat. The body is a bare JPEG (a keyframe; older hosts) or, as
 // application/x-msfwr-frames, a list of keyframes and changed regions. A host
 // that reads input from /events sends X-Msfwr-Events: 1. The reply's
 // "patches" says this relay accepts changed regions; "key" asks for a keyframe.
 router.post("/tick",
   raw({type: "image/jpeg", limit: "768kb", inflate: false}),
-  raw({type: "application/x-msfwr-frames", limit: "1536kb", inflate: false}),
+  raw({type: "application/x-msfwr-frames", limit: "4mb", inflate: false}),
   (req, res) => {
     const s = auth(req, res, "host");
     if (!s) return;
@@ -299,14 +355,35 @@ router.post("/tick",
     if (frame && s.state !== "live") {
       res.status(409).json({error: "No screen can be uploaded before host approval."}); return;
     }
-    const reply = store.tick(s, frame, req.get("x-msfwr-events") === "1");
-    res.json({...TickMsfwrResponse.parse(reply), patches: true, ...("key" in reply ? {key: true} : {})});
+    const events = req.get("x-msfwr-events") === "1";
+    const seq = sequenceOf(req);
+    const reply = seq === undefined ? store.tick(s, frame, events) : store.tickInOrder(s, seq, frame, events);
+    // "pipeline": the host may number its ticks and keep several in flight.
+    // "quality": the picture quality the viewer asked for.
+    res.json({...TickMsfwrResponse.parse(reply), patches: true, pipeline: true, stream: true,
+      ...("key" in reply ? {key: true} : {}), ...(s.quality ? {quality: s.quality} : {})});
   });
 // The host's input channel: waits up to `wait` ms for viewer input, so input
 // reaches the PC one round trip after it is sent instead of on the next tick.
 router.get("/events", (req, res) => {
   const s = auth(req, res, "host");
   if (!s) return;
+  if (req.query.stream === "1") {
+    // Streaming input: one JSON line per batch, the moment it arrives, so
+    // input never waits for the host to ask again. A heartbeat line every
+    // two seconds; {"end": true} when the stream closes (with state
+    // "ended" when the session is over).
+    const line = (v: unknown) => JSON.stringify(v) + "\n";
+    stream(req, res, s, "host", "application/x-ndjson", {
+      push: (write) => {
+        if (s.state !== "live") { write(line({state: s.state, input: []})); return; }
+        if (s.input.length) write(line(TickMsfwrResponse.parse({state: s.state, input: store.takeInput(s)})));
+      },
+      beat: () => line({state: s.state, input: []}),
+      close: (ended) => line({state: ended ? "ended" : s.state, input: [], end: true}),
+    });
+    return;
+  }
   const query = GetMsfwrEventsQueryParams.safeParse(req.query);
   if (!query.success) { res.status(400).json({error: "Invalid wait."}); return; }
   const ready = () => s.state !== "live" || s.input.length > 0;
@@ -321,6 +398,29 @@ router.get("/events", (req, res) => {
 router.get("/frame", (req, res) => {
   const s = auth(req, res, "viewer");
   if (!s) return;
+  if (req.query.v === "3") {
+    // Streaming screen: records as in encodeFrames, written the moment the
+    // host uploads them, plus state records (kind 2) as heartbeats and a
+    // closing record (kind 3). A viewer that reads slowly gets what it
+    // missed in one go once it catches up.
+    const after = Number(req.query.after ?? 0);
+    if (!Number.isSafeInteger(after) || after < 0) { res.status(400).json({error: "Invalid frame sequence."}); return; }
+    let sent = after;
+    let shown = "";
+    stream(req, res, s, "viewer", "application/x-msfwr-stream", {
+      push: (write) => {
+        if (s.state !== shown) { shown = s.state; write(streamRecord(2, s.state)); }
+        if (s.state !== "live") return;
+        const items = store.updatesAfter(s, sent);
+        if (!items.length) return;
+        sent = items.at(-1)!.sequence;
+        write(encodeFrames(items));
+      },
+      beat: () => streamRecord(2, s.state),
+      close: (ended) => ended ? streamRecord(2, "ended") : streamRecord(3),
+    });
+    return;
+  }
   const query = GetMsfwrFrameQueryParams.safeParse(req.query);
   if (!query.success) { res.status(400).json({error: "Invalid frame sequence."}); return; }
   const after = query.data.after ?? 0;
@@ -364,9 +464,26 @@ router.post("/input", (req, res) => {
     }
     actions.push(a);
   }
+  const seq = sequenceOf(req);
+  if (seq !== undefined) {
+    if (!store.enqueueInOrder(s, req.get("authorization") ?? "", seq, actions)) { res.status(429).json({error: "Remote input was too fast."}); return; }
+    res.sendStatus(204);
+    return;
+  }
   for (const a of actions) {
     if (!store.enqueue(s, a)) { res.status(429).json({error: "Remote input was too fast."}); return; }
   }
+  res.sendStatus(204);
+});
+// A viewer picks the picture quality; the host applies it on its next tick.
+router.post("/view", (req, res) => {
+  const s = auth(req, res, "viewer");
+  if (!s) return;
+  const quality: unknown = req.body?.quality;
+  if (typeof quality !== "string" || !viewQualities.includes(quality as ViewQuality)) {
+    res.status(400).json({error: "Invalid picture quality."}); return;
+  }
+  store.setQuality(s, quality as ViewQuality);
   res.sendStatus(204);
 });
 

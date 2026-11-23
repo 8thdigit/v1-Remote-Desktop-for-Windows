@@ -5275,8 +5275,8 @@ var require_unpipe = __commonJS({
   "../../node_modules/.pnpm/unpipe@1.0.0/node_modules/unpipe/index.js"(exports, module) {
     "use strict";
     module.exports = unpipe;
-    function hasPipeDataListeners(stream2) {
-      var listeners = stream2.listeners("data");
+    function hasPipeDataListeners(stream3) {
+      var listeners = stream3.listeners("data");
       for (var i = 0; i < listeners.length; i++) {
         if (listeners[i].name === "ondata") {
           return true;
@@ -5284,25 +5284,25 @@ var require_unpipe = __commonJS({
       }
       return false;
     }
-    function unpipe(stream2) {
-      if (!stream2) {
+    function unpipe(stream3) {
+      if (!stream3) {
         throw new TypeError("argument stream is required");
       }
-      if (typeof stream2.unpipe === "function") {
-        stream2.unpipe();
+      if (typeof stream3.unpipe === "function") {
+        stream3.unpipe();
         return;
       }
-      if (!hasPipeDataListeners(stream2)) {
+      if (!hasPipeDataListeners(stream3)) {
         return;
       }
       var listener;
-      var listeners = stream2.listeners("close");
+      var listeners = stream3.listeners("close");
       for (var i = 0; i < listeners.length; i++) {
         listener = listeners[i];
         if (listener.name !== "cleanup" && listener.name !== "onclose") {
           continue;
         }
-        listener.call(stream2);
+        listener.call(stream3);
       }
     }
   }
@@ -5331,12 +5331,12 @@ var require_raw_body = __commonJS({
         });
       }
     }
-    function getRawBody(stream2, options, callback) {
+    function getRawBody(stream3, options, callback) {
       var done = callback;
       var opts = options || {};
-      if (stream2 === void 0) {
+      if (stream3 === void 0) {
         throw new TypeError("argument stream is required");
-      } else if (typeof stream2 !== "object" || stream2 === null || typeof stream2.on !== "function") {
+      } else if (typeof stream3 !== "object" || stream3 === null || typeof stream3.on !== "function") {
         throw new TypeError("argument stream must be a stream");
       }
       if (options === true || typeof options === "string") {
@@ -5358,22 +5358,22 @@ var require_raw_body = __commonJS({
       var limit2 = bytes.parse(opts.limit);
       var length = opts.length != null && !isNaN(opts.length) ? parseInt(opts.length, 10) : null;
       if (done) {
-        return readStream(stream2, encoding, length, limit2, wrap(done));
+        return readStream(stream3, encoding, length, limit2, wrap(done));
       }
       return new Promise(function executor(resolve2, reject) {
-        readStream(stream2, encoding, length, limit2, function onRead(err, buf) {
+        readStream(stream3, encoding, length, limit2, function onRead(err, buf) {
           if (err) return reject(err);
           resolve2(buf);
         });
       });
     }
-    function halt(stream2) {
-      unpipe(stream2);
-      if (typeof stream2.pause === "function") {
-        stream2.pause();
+    function halt(stream3) {
+      unpipe(stream3);
+      if (typeof stream3.pause === "function") {
+        stream3.pause();
       }
     }
-    function readStream(stream2, encoding, length, limit2, callback) {
+    function readStream(stream3, encoding, length, limit2, callback) {
       var complete = false;
       var sync = true;
       if (limit2 !== null && length !== null && length > limit2) {
@@ -5384,13 +5384,13 @@ var require_raw_body = __commonJS({
           type: "entity.too.large"
         }));
       }
-      var state = stream2._readableState;
-      if (stream2._decoder || state && (state.encoding || state.decoder)) {
+      var state = stream3._readableState;
+      if (stream3._decoder || state && (state.encoding || state.decoder)) {
         return done(createError(500, "stream encoding should not be set", {
           type: "stream.encoding.set"
         }));
       }
-      if (typeof stream2.readable !== "undefined" && !stream2.readable) {
+      if (typeof stream3.readable !== "undefined" && !stream3.readable) {
         return done(createError(500, "stream is not readable", {
           type: "stream.not.readable"
         }));
@@ -5403,11 +5403,11 @@ var require_raw_body = __commonJS({
         return done(err);
       }
       var buffer = decoder ? "" : [];
-      stream2.on("aborted", onAborted);
-      stream2.on("close", cleanup);
-      stream2.on("data", onData);
-      stream2.on("end", onEnd);
-      stream2.on("error", onEnd);
+      stream3.on("aborted", onAborted);
+      stream3.on("close", cleanup);
+      stream3.on("data", onData);
+      stream3.on("end", onEnd);
+      stream3.on("error", onEnd);
       sync = false;
       function done() {
         var args = new Array(arguments.length);
@@ -5423,7 +5423,7 @@ var require_raw_body = __commonJS({
         function invokeCallback() {
           cleanup();
           if (args[0]) {
-            halt(stream2);
+            halt(stream3);
           }
           callback.apply(null, args);
         }
@@ -5470,11 +5470,11 @@ var require_raw_body = __commonJS({
       }
       function cleanup() {
         buffer = null;
-        stream2.removeListener("aborted", onAborted);
-        stream2.removeListener("data", onData);
-        stream2.removeListener("end", onEnd);
-        stream2.removeListener("error", onEnd);
-        stream2.removeListener("close", cleanup);
+        stream3.removeListener("aborted", onAborted);
+        stream3.removeListener("data", onData);
+        stream3.removeListener("end", onEnd);
+        stream3.removeListener("error", onEnd);
+        stream3.removeListener("close", cleanup);
       }
     }
     function tryRequireAsyncHooks() {
@@ -15502,7 +15502,7 @@ var require_read = __commonJS({
         }
       }
       let length;
-      let stream2;
+      let stream3;
       const verify = options.verify;
       if (verify && encoding !== null && !iconv.encodingExists(encoding)) {
         return next(createError(415, 'unsupported charset "' + encoding.toUpperCase() + '"', {
@@ -15521,10 +15521,10 @@ var require_read = __commonJS({
         }
         if (contentEncoding === "identity") {
           length = req.headers["content-length"];
-          stream2 = req;
+          stream3 = req;
         } else {
-          stream2 = createDecompressionStream(contentEncoding, debug);
-          req.pipe(stream2);
+          stream3 = createDecompressionStream(contentEncoding, debug);
+          req.pipe(stream3);
         }
       } catch (err) {
         return next(err);
@@ -15535,7 +15535,7 @@ var require_read = __commonJS({
         limit: options.limit
       };
       debug("read body");
-      getBody(stream2, rawBodyOptions, function(error2, body) {
+      getBody(stream3, rawBodyOptions, function(error2, body) {
         if (error2) {
           let _error;
           if (error2.type === "encoding.unsupported") {
@@ -15546,20 +15546,20 @@ var require_read = __commonJS({
           } else {
             _error = createError(400, error2);
           }
-          if (stream2 !== req) {
+          if (stream3 !== req) {
             req.unpipe();
-            stream2.destroy();
+            stream3.destroy();
           }
           dump(req, function onfinished() {
             next(createError(400, _error));
           });
           return;
         }
-        if (stream2 !== req) {
-          req.unpipe(stream2);
-          stream2.on("error", () => {
+        if (stream3 !== req) {
+          req.unpipe(stream3);
+          stream3.on("error", () => {
           });
-          stream2.destroy();
+          stream3.destroy();
           req.resume();
         }
         if (verify) {
@@ -23139,21 +23139,21 @@ var require_send = __commonJS({
       }
       next();
     };
-    SendStream.prototype.stream = function stream2(path11, options) {
+    SendStream.prototype.stream = function stream3(path11, options) {
       var self = this;
       var res = this.res;
-      var stream3 = fs5.createReadStream(path11, options);
-      this.emit("stream", stream3);
-      stream3.pipe(res);
+      var stream4 = fs5.createReadStream(path11, options);
+      this.emit("stream", stream4);
+      stream4.pipe(res);
       function cleanup() {
-        stream3.destroy();
+        stream4.destroy();
       }
       onFinished(res, cleanup);
-      stream3.on("error", function onerror(err) {
+      stream4.on("error", function onerror(err) {
         cleanup();
         self.onStatError(err);
       });
-      stream3.on("end", function onend() {
+      stream4.on("end", function onend() {
         self.emit("end");
       });
     };
@@ -23874,24 +23874,24 @@ var require_serve_static = __commonJS({
         if (path10 === "/" && originalUrl.pathname.substr(-1) !== "/") {
           path10 = "";
         }
-        var stream2 = send(req, path10, opts);
-        stream2.on("directory", onDirectory);
+        var stream3 = send(req, path10, opts);
+        stream3.on("directory", onDirectory);
         if (setHeaders) {
-          stream2.on("headers", setHeaders);
+          stream3.on("headers", setHeaders);
         }
         if (fallthrough) {
-          stream2.on("file", function onFile() {
+          stream3.on("file", function onFile() {
             forwardError = true;
           });
         }
-        stream2.on("error", function error2(err) {
+        stream3.on("error", function error2(err) {
           if (forwardError || !(err.statusCode < 500)) {
             next(err);
             return;
           }
           next();
         });
-        stream2.pipe(res);
+        stream3.pipe(res);
       };
     }
     function collapseLeadingSlashes(str) {
@@ -26285,7 +26285,7 @@ var require_thread_stream = __commonJS({
       }
       worker.terminate();
     });
-    function createWorker(stream2, opts) {
+    function createWorker(stream3, opts) {
       const { filename, workerData } = opts;
       const bundlerOverrides = "__bundlerPathsOverrides" in globalThis ? globalThis.__bundlerPathsOverrides : {};
       const toExecute = bundlerOverrides["thread-stream-worker"] || join2(__dirname, "lib", "worker.js");
@@ -26294,8 +26294,8 @@ var require_thread_stream = __commonJS({
         trackUnmanagedFds: false,
         workerData: {
           filename: filename.indexOf("file://") === 0 ? filename : pathToFileURL(filename).href,
-          dataBuf: stream2[kImpl].dataBuf,
-          stateBuf: stream2[kImpl].stateBuf,
+          dataBuf: stream3[kImpl].dataBuf,
+          stateBuf: stream3[kImpl].stateBuf,
           workerData: {
             $context: {
               threadStreamVersion: version2
@@ -26304,107 +26304,107 @@ var require_thread_stream = __commonJS({
           }
         }
       });
-      worker.stream = new FakeWeakRef(stream2);
+      worker.stream = new FakeWeakRef(stream3);
       worker.on("message", onWorkerMessage);
       worker.on("exit", onWorkerExit);
-      registry3.register(stream2, worker);
+      registry3.register(stream3, worker);
       return worker;
     }
-    function drain(stream2) {
-      assert2(!stream2[kImpl].sync);
-      if (stream2[kImpl].needDrain) {
-        stream2[kImpl].needDrain = false;
-        stream2.emit("drain");
+    function drain(stream3) {
+      assert2(!stream3[kImpl].sync);
+      if (stream3[kImpl].needDrain) {
+        stream3[kImpl].needDrain = false;
+        stream3.emit("drain");
       }
     }
-    function nextFlush(stream2) {
-      const writeIndex = Atomics.load(stream2[kImpl].state, WRITE_INDEX);
-      let leftover = stream2[kImpl].data.length - writeIndex;
+    function nextFlush(stream3) {
+      const writeIndex = Atomics.load(stream3[kImpl].state, WRITE_INDEX);
+      let leftover = stream3[kImpl].data.length - writeIndex;
       if (leftover > 0) {
-        if (stream2[kImpl].buf.length === 0) {
-          stream2[kImpl].flushing = false;
-          if (stream2[kImpl].ending) {
-            end(stream2);
-          } else if (stream2[kImpl].needDrain) {
-            process.nextTick(drain, stream2);
+        if (stream3[kImpl].buf.length === 0) {
+          stream3[kImpl].flushing = false;
+          if (stream3[kImpl].ending) {
+            end(stream3);
+          } else if (stream3[kImpl].needDrain) {
+            process.nextTick(drain, stream3);
           }
           return;
         }
-        let toWrite = stream2[kImpl].buf.slice(0, leftover);
+        let toWrite = stream3[kImpl].buf.slice(0, leftover);
         let toWriteBytes = Buffer.byteLength(toWrite);
         if (toWriteBytes <= leftover) {
-          stream2[kImpl].buf = stream2[kImpl].buf.slice(leftover);
-          write(stream2, toWrite, nextFlush.bind(null, stream2));
+          stream3[kImpl].buf = stream3[kImpl].buf.slice(leftover);
+          write(stream3, toWrite, nextFlush.bind(null, stream3));
         } else {
-          stream2.flush(() => {
-            if (stream2.destroyed) {
+          stream3.flush(() => {
+            if (stream3.destroyed) {
               return;
             }
-            Atomics.store(stream2[kImpl].state, READ_INDEX, 0);
-            Atomics.store(stream2[kImpl].state, WRITE_INDEX, 0);
-            while (toWriteBytes > stream2[kImpl].data.length) {
+            Atomics.store(stream3[kImpl].state, READ_INDEX, 0);
+            Atomics.store(stream3[kImpl].state, WRITE_INDEX, 0);
+            while (toWriteBytes > stream3[kImpl].data.length) {
               leftover = leftover / 2;
-              toWrite = stream2[kImpl].buf.slice(0, leftover);
+              toWrite = stream3[kImpl].buf.slice(0, leftover);
               toWriteBytes = Buffer.byteLength(toWrite);
             }
-            stream2[kImpl].buf = stream2[kImpl].buf.slice(leftover);
-            write(stream2, toWrite, nextFlush.bind(null, stream2));
+            stream3[kImpl].buf = stream3[kImpl].buf.slice(leftover);
+            write(stream3, toWrite, nextFlush.bind(null, stream3));
           });
         }
       } else if (leftover === 0) {
-        if (writeIndex === 0 && stream2[kImpl].buf.length === 0) {
+        if (writeIndex === 0 && stream3[kImpl].buf.length === 0) {
           return;
         }
-        stream2.flush(() => {
-          Atomics.store(stream2[kImpl].state, READ_INDEX, 0);
-          Atomics.store(stream2[kImpl].state, WRITE_INDEX, 0);
-          nextFlush(stream2);
+        stream3.flush(() => {
+          Atomics.store(stream3[kImpl].state, READ_INDEX, 0);
+          Atomics.store(stream3[kImpl].state, WRITE_INDEX, 0);
+          nextFlush(stream3);
         });
       } else {
-        destroy(stream2, new Error("overwritten"));
+        destroy(stream3, new Error("overwritten"));
       }
     }
     function onWorkerMessage(msg) {
-      const stream2 = this.stream.deref();
-      if (stream2 === void 0) {
+      const stream3 = this.stream.deref();
+      if (stream3 === void 0) {
         this.exited = true;
         this.terminate();
         return;
       }
       switch (msg.code) {
         case "READY":
-          this.stream = new WeakRef2(stream2);
-          stream2.flush(() => {
-            stream2[kImpl].ready = true;
-            stream2.emit("ready");
+          this.stream = new WeakRef2(stream3);
+          stream3.flush(() => {
+            stream3[kImpl].ready = true;
+            stream3.emit("ready");
           });
           break;
         case "ERROR":
-          destroy(stream2, msg.err);
+          destroy(stream3, msg.err);
           break;
         case "EVENT":
           if (Array.isArray(msg.args)) {
-            stream2.emit(msg.name, ...msg.args);
+            stream3.emit(msg.name, ...msg.args);
           } else {
-            stream2.emit(msg.name, msg.args);
+            stream3.emit(msg.name, msg.args);
           }
           break;
         case "WARNING":
           process.emitWarning(msg.err);
           break;
         default:
-          destroy(stream2, new Error("this should not happen: " + msg.code));
+          destroy(stream3, new Error("this should not happen: " + msg.code));
       }
     }
     function onWorkerExit(code) {
-      const stream2 = this.stream.deref();
-      if (stream2 === void 0) {
+      const stream3 = this.stream.deref();
+      if (stream3 === void 0) {
         return;
       }
-      registry3.unregister(stream2);
-      stream2.worker.exited = true;
-      stream2.worker.off("exit", onWorkerExit);
-      destroy(stream2, code !== 0 ? new Error("the worker thread exited") : null);
+      registry3.unregister(stream3);
+      stream3.worker.exited = true;
+      stream3.worker.off("exit", onWorkerExit);
+      destroy(stream3, code !== 0 ? new Error("the worker thread exited") : null);
     }
     var ThreadStream = class extends EventEmitter {
       constructor(opts = {}) {
@@ -26537,125 +26537,125 @@ var require_thread_stream = __commonJS({
         return this[kImpl].errored;
       }
     };
-    function error2(stream2, err) {
+    function error2(stream3, err) {
       setImmediate(() => {
-        stream2.emit("error", err);
+        stream3.emit("error", err);
       });
     }
-    function destroy(stream2, err) {
-      if (stream2[kImpl].destroyed) {
+    function destroy(stream3, err) {
+      if (stream3[kImpl].destroyed) {
         return;
       }
-      stream2[kImpl].destroyed = true;
+      stream3[kImpl].destroyed = true;
       if (err) {
-        stream2[kImpl].errored = err;
-        error2(stream2, err);
+        stream3[kImpl].errored = err;
+        error2(stream3, err);
       }
-      if (!stream2.worker.exited) {
-        stream2.worker.terminate().catch(() => {
+      if (!stream3.worker.exited) {
+        stream3.worker.terminate().catch(() => {
         }).then(() => {
-          stream2[kImpl].closed = true;
-          stream2.emit("close");
+          stream3[kImpl].closed = true;
+          stream3.emit("close");
         });
       } else {
         setImmediate(() => {
-          stream2[kImpl].closed = true;
-          stream2.emit("close");
+          stream3[kImpl].closed = true;
+          stream3.emit("close");
         });
       }
     }
-    function write(stream2, data, cb) {
-      const current = Atomics.load(stream2[kImpl].state, WRITE_INDEX);
+    function write(stream3, data, cb) {
+      const current = Atomics.load(stream3[kImpl].state, WRITE_INDEX);
       const length = Buffer.byteLength(data);
-      stream2[kImpl].data.write(data, current);
-      Atomics.store(stream2[kImpl].state, WRITE_INDEX, current + length);
-      Atomics.notify(stream2[kImpl].state, WRITE_INDEX);
+      stream3[kImpl].data.write(data, current);
+      Atomics.store(stream3[kImpl].state, WRITE_INDEX, current + length);
+      Atomics.notify(stream3[kImpl].state, WRITE_INDEX);
       cb();
       return true;
     }
-    function end(stream2) {
-      if (stream2[kImpl].ended || !stream2[kImpl].ending || stream2[kImpl].flushing) {
+    function end(stream3) {
+      if (stream3[kImpl].ended || !stream3[kImpl].ending || stream3[kImpl].flushing) {
         return;
       }
-      stream2[kImpl].ended = true;
+      stream3[kImpl].ended = true;
       try {
-        stream2.flushSync();
-        let readIndex = Atomics.load(stream2[kImpl].state, READ_INDEX);
-        Atomics.store(stream2[kImpl].state, WRITE_INDEX, -1);
-        Atomics.notify(stream2[kImpl].state, WRITE_INDEX);
+        stream3.flushSync();
+        let readIndex = Atomics.load(stream3[kImpl].state, READ_INDEX);
+        Atomics.store(stream3[kImpl].state, WRITE_INDEX, -1);
+        Atomics.notify(stream3[kImpl].state, WRITE_INDEX);
         let spins = 0;
         while (readIndex !== -1) {
-          Atomics.wait(stream2[kImpl].state, READ_INDEX, readIndex, 1e3);
-          readIndex = Atomics.load(stream2[kImpl].state, READ_INDEX);
+          Atomics.wait(stream3[kImpl].state, READ_INDEX, readIndex, 1e3);
+          readIndex = Atomics.load(stream3[kImpl].state, READ_INDEX);
           if (readIndex === -2) {
-            destroy(stream2, new Error("end() failed"));
+            destroy(stream3, new Error("end() failed"));
             return;
           }
           if (++spins === 10) {
-            destroy(stream2, new Error("end() took too long (10s)"));
+            destroy(stream3, new Error("end() took too long (10s)"));
             return;
           }
         }
         process.nextTick(() => {
-          stream2[kImpl].finished = true;
-          stream2.emit("finish");
+          stream3[kImpl].finished = true;
+          stream3.emit("finish");
         });
       } catch (err) {
-        destroy(stream2, err);
+        destroy(stream3, err);
       }
     }
-    function writeSync(stream2) {
+    function writeSync(stream3) {
       const cb = () => {
-        if (stream2[kImpl].ending) {
-          end(stream2);
-        } else if (stream2[kImpl].needDrain) {
-          process.nextTick(drain, stream2);
+        if (stream3[kImpl].ending) {
+          end(stream3);
+        } else if (stream3[kImpl].needDrain) {
+          process.nextTick(drain, stream3);
         }
       };
-      stream2[kImpl].flushing = false;
-      while (stream2[kImpl].buf.length !== 0) {
-        const writeIndex = Atomics.load(stream2[kImpl].state, WRITE_INDEX);
-        let leftover = stream2[kImpl].data.length - writeIndex;
+      stream3[kImpl].flushing = false;
+      while (stream3[kImpl].buf.length !== 0) {
+        const writeIndex = Atomics.load(stream3[kImpl].state, WRITE_INDEX);
+        let leftover = stream3[kImpl].data.length - writeIndex;
         if (leftover === 0) {
-          flushSync(stream2);
-          Atomics.store(stream2[kImpl].state, READ_INDEX, 0);
-          Atomics.store(stream2[kImpl].state, WRITE_INDEX, 0);
+          flushSync(stream3);
+          Atomics.store(stream3[kImpl].state, READ_INDEX, 0);
+          Atomics.store(stream3[kImpl].state, WRITE_INDEX, 0);
           continue;
         } else if (leftover < 0) {
           throw new Error("overwritten");
         }
-        let toWrite = stream2[kImpl].buf.slice(0, leftover);
+        let toWrite = stream3[kImpl].buf.slice(0, leftover);
         let toWriteBytes = Buffer.byteLength(toWrite);
         if (toWriteBytes <= leftover) {
-          stream2[kImpl].buf = stream2[kImpl].buf.slice(leftover);
-          write(stream2, toWrite, cb);
+          stream3[kImpl].buf = stream3[kImpl].buf.slice(leftover);
+          write(stream3, toWrite, cb);
         } else {
-          flushSync(stream2);
-          Atomics.store(stream2[kImpl].state, READ_INDEX, 0);
-          Atomics.store(stream2[kImpl].state, WRITE_INDEX, 0);
-          while (toWriteBytes > stream2[kImpl].buf.length) {
+          flushSync(stream3);
+          Atomics.store(stream3[kImpl].state, READ_INDEX, 0);
+          Atomics.store(stream3[kImpl].state, WRITE_INDEX, 0);
+          while (toWriteBytes > stream3[kImpl].buf.length) {
             leftover = leftover / 2;
-            toWrite = stream2[kImpl].buf.slice(0, leftover);
+            toWrite = stream3[kImpl].buf.slice(0, leftover);
             toWriteBytes = Buffer.byteLength(toWrite);
           }
-          stream2[kImpl].buf = stream2[kImpl].buf.slice(leftover);
-          write(stream2, toWrite, cb);
+          stream3[kImpl].buf = stream3[kImpl].buf.slice(leftover);
+          write(stream3, toWrite, cb);
         }
       }
     }
-    function flushSync(stream2) {
-      if (stream2[kImpl].flushing) {
+    function flushSync(stream3) {
+      if (stream3[kImpl].flushing) {
         throw new Error("unable to flush while flushing");
       }
-      const writeIndex = Atomics.load(stream2[kImpl].state, WRITE_INDEX);
+      const writeIndex = Atomics.load(stream3[kImpl].state, WRITE_INDEX);
       let spins = 0;
       while (true) {
-        const readIndex = Atomics.load(stream2[kImpl].state, READ_INDEX);
+        const readIndex = Atomics.load(stream3[kImpl].state, READ_INDEX);
         if (readIndex === -2) {
           throw Error("_flushSync failed");
         }
         if (readIndex !== writeIndex) {
-          Atomics.wait(stream2[kImpl].state, READ_INDEX, readIndex, 1e3);
+          Atomics.wait(stream3[kImpl].state, READ_INDEX, readIndex, 1e3);
         } else {
           break;
         }
@@ -26678,52 +26678,52 @@ var require_transport = __commonJS({
     var sleep2 = require_atomic_sleep();
     var onExit = require_on_exit_leak_free();
     var ThreadStream = require_thread_stream();
-    function setupOnExit(stream2) {
-      onExit.register(stream2, autoEnd);
-      onExit.registerBeforeExit(stream2, flush);
-      stream2.on("close", function() {
-        onExit.unregister(stream2);
+    function setupOnExit(stream3) {
+      onExit.register(stream3, autoEnd);
+      onExit.registerBeforeExit(stream3, flush);
+      stream3.on("close", function() {
+        onExit.unregister(stream3);
       });
     }
     function buildStream(filename, workerData, workerOpts, sync) {
-      const stream2 = new ThreadStream({
+      const stream3 = new ThreadStream({
         filename,
         workerData,
         workerOpts,
         sync
       });
-      stream2.on("ready", onReady);
-      stream2.on("close", function() {
+      stream3.on("ready", onReady);
+      stream3.on("close", function() {
         process.removeListener("exit", onExit2);
       });
       process.on("exit", onExit2);
       function onReady() {
         process.removeListener("exit", onExit2);
-        stream2.unref();
+        stream3.unref();
         if (workerOpts.autoEnd !== false) {
-          setupOnExit(stream2);
+          setupOnExit(stream3);
         }
       }
       function onExit2() {
-        if (stream2.closed) {
+        if (stream3.closed) {
           return;
         }
-        stream2.flushSync();
+        stream3.flushSync();
         sleep2(100);
-        stream2.end();
+        stream3.end();
       }
-      return stream2;
+      return stream3;
     }
-    function autoEnd(stream2) {
-      stream2.ref();
-      stream2.flushSync();
-      stream2.end();
-      stream2.once("close", function() {
-        stream2.unref();
+    function autoEnd(stream3) {
+      stream3.ref();
+      stream3.flushSync();
+      stream3.end();
+      stream3.once("close", function() {
+        stream3.unref();
       });
     }
-    function flush(stream2) {
-      stream2.flushSync();
+    function flush(stream3) {
+      stream3.flushSync();
     }
     function transport(fullOptions) {
       const { pipeline, targets, levels, dedupe, worker = {}, caller = getCallers(), sync = false } = fullOptions;
@@ -27010,56 +27010,56 @@ var require_tools = __commonJS({
       }
       return data;
     }
-    function hasBeenTampered(stream2) {
-      return stream2.write !== stream2.constructor.prototype.write;
+    function hasBeenTampered(stream3) {
+      return stream3.write !== stream3.constructor.prototype.write;
     }
     function buildSafeSonicBoom(opts) {
-      const stream2 = new SonicBoom(opts);
-      stream2.on("error", filterBrokenPipe);
+      const stream3 = new SonicBoom(opts);
+      stream3.on("error", filterBrokenPipe);
       if (!opts.sync && isMainThread) {
-        onExit.register(stream2, autoEnd);
-        stream2.on("close", function() {
-          onExit.unregister(stream2);
+        onExit.register(stream3, autoEnd);
+        stream3.on("close", function() {
+          onExit.unregister(stream3);
         });
       }
-      return stream2;
+      return stream3;
       function filterBrokenPipe(err) {
         if (err.code === "EPIPE") {
-          stream2.write = noop2;
-          stream2.end = noop2;
-          stream2.flushSync = noop2;
-          stream2.destroy = noop2;
+          stream3.write = noop2;
+          stream3.end = noop2;
+          stream3.flushSync = noop2;
+          stream3.destroy = noop2;
           return;
         }
-        stream2.removeListener("error", filterBrokenPipe);
-        stream2.emit("error", err);
+        stream3.removeListener("error", filterBrokenPipe);
+        stream3.emit("error", err);
       }
     }
-    function autoEnd(stream2, eventName) {
-      if (stream2.destroyed) {
+    function autoEnd(stream3, eventName) {
+      if (stream3.destroyed) {
         return;
       }
       if (eventName === "beforeExit") {
-        stream2.flush();
-        stream2.on("drain", function() {
-          stream2.end();
+        stream3.flush();
+        stream3.on("drain", function() {
+          stream3.end();
         });
       } else {
-        stream2.flushSync();
+        stream3.flushSync();
       }
     }
     function createArgsNormalizer(defaultOptions) {
-      return function normalizeArgs(instance, caller, opts = {}, stream2) {
+      return function normalizeArgs(instance, caller, opts = {}, stream3) {
         if (typeof opts === "string") {
-          stream2 = buildSafeSonicBoom({ dest: opts });
+          stream3 = buildSafeSonicBoom({ dest: opts });
           opts = {};
-        } else if (typeof stream2 === "string") {
+        } else if (typeof stream3 === "string") {
           if (opts && opts.transport) {
             throw Error("only one of option.transport or stream can be specified");
           }
-          stream2 = buildSafeSonicBoom({ dest: stream2 });
+          stream3 = buildSafeSonicBoom({ dest: stream3 });
         } else if (opts instanceof SonicBoom || opts.writable || opts._writableState) {
-          stream2 = opts;
+          stream3 = opts;
           opts = {};
         } else if (opts.transport) {
           if (opts.transport instanceof SonicBoom || opts.transport.writable || opts.transport._writableState) {
@@ -27072,7 +27072,7 @@ var require_tools = __commonJS({
           if (opts.customLevels) {
             customLevels = opts.useOnlyCustomLevels ? opts.customLevels : Object.assign({}, opts.levels, opts.customLevels);
           }
-          stream2 = transport({ caller, ...opts.transport, levels: customLevels });
+          stream3 = transport({ caller, ...opts.transport, levels: customLevels });
         }
         opts = Object.assign({}, defaultOptions, opts);
         opts.serializers = Object.assign({}, defaultOptions.serializers, opts.serializers);
@@ -27083,14 +27083,14 @@ var require_tools = __commonJS({
         const { enabled, onChild } = opts;
         if (enabled === false) opts.level = "silent";
         if (!onChild) opts.onChild = noop2;
-        if (!stream2) {
+        if (!stream3) {
           if (!hasBeenTampered(process.stdout)) {
-            stream2 = buildSafeSonicBoom({ fd: process.stdout.fd || 1 });
+            stream3 = buildSafeSonicBoom({ fd: process.stdout.fd || 1 });
           } else {
-            stream2 = process.stdout;
+            stream3 = process.stdout;
           }
         }
-        return { opts, stream: stream2 };
+        return { opts, stream: stream3 };
       };
     }
     function stringify2(obj, stringifySafeFn) {
@@ -27177,11 +27177,11 @@ var require_levels = __commonJS({
       fatal: (hook) => {
         const logFatal = genLog(DEFAULT_LEVELS.fatal, hook);
         return function(...args) {
-          const stream2 = this[streamSym];
+          const stream3 = this[streamSym];
           logFatal.call(this, ...args);
-          if (typeof stream2.flushSync === "function") {
+          if (typeof stream3.flushSync === "function") {
             try {
-              stream2.flushSync();
+              stream3.flushSync();
             } catch (e) {
             }
           }
@@ -27568,23 +27568,23 @@ var require_proto = __commonJS({
         obj = mixinMergeStrategy(obj, mixin(obj, num, this));
       }
       const s = this[asJsonSym](obj, msg, num, t);
-      const stream2 = this[streamSym];
-      if (stream2[needsMetadataGsym] === true) {
-        stream2.lastLevel = num;
-        stream2.lastObj = obj;
-        stream2.lastMsg = msg;
-        stream2.lastTime = t.slice(this[timeSliceIndexSym]);
-        stream2.lastLogger = this;
+      const stream3 = this[streamSym];
+      if (stream3[needsMetadataGsym] === true) {
+        stream3.lastLevel = num;
+        stream3.lastObj = obj;
+        stream3.lastMsg = msg;
+        stream3.lastTime = t.slice(this[timeSliceIndexSym]);
+        stream3.lastLogger = this;
       }
-      stream2.write(streamWriteHook ? streamWriteHook(s) : s);
+      stream3.write(streamWriteHook ? streamWriteHook(s) : s);
     }
     function flush(cb) {
       if (cb != null && typeof cb !== "function") {
         throw Error("callback must be a function");
       }
-      const stream2 = this[streamSym];
-      if (typeof stream2.flush === "function") {
-        stream2.flush(cb || noop2);
+      const stream3 = this[streamSym];
+      if (typeof stream3.flush === "function") {
+        stream3.flush(cb || noop2);
       } else if (cb) cb();
     }
   }
@@ -28229,23 +28229,23 @@ var require_multistream = __commonJS({
         const level = this.lastLevel;
         const { streams } = this;
         let recordedLevel = 0;
-        let stream2;
+        let stream3;
         for (let i = initLoopVar(streams.length, opts.dedupe); checkLoopVar(i, streams.length, opts.dedupe); i = adjustLoopVar(i, opts.dedupe)) {
           dest = streams[i];
           if (dest.level <= level) {
             if (recordedLevel !== 0 && recordedLevel !== dest.level) {
               break;
             }
-            stream2 = dest.stream;
-            if (stream2[metadata]) {
+            stream3 = dest.stream;
+            if (stream3[metadata]) {
               const { lastTime, lastMsg, lastObj, lastLogger } = this;
-              stream2.lastLevel = level;
-              stream2.lastTime = lastTime;
-              stream2.lastMsg = lastMsg;
-              stream2.lastObj = lastObj;
-              stream2.lastLogger = lastLogger;
+              stream3.lastLevel = level;
+              stream3.lastTime = lastTime;
+              stream3.lastMsg = lastMsg;
+              stream3.lastObj = lastObj;
+              stream3.lastLogger = lastLogger;
             }
-            stream2.write(data);
+            stream3.write(data);
             if (opts.dedupe) {
               recordedLevel = dest.level;
             }
@@ -28255,16 +28255,16 @@ var require_multistream = __commonJS({
         }
       }
       function emit(...args) {
-        for (const { stream: stream2 } of this.streams) {
-          if (typeof stream2.emit === "function") {
-            stream2.emit(...args);
+        for (const { stream: stream3 } of this.streams) {
+          if (typeof stream3.emit === "function") {
+            stream3.emit(...args);
           }
         }
       }
       function flushSync() {
-        for (const { stream: stream2 } of this.streams) {
-          if (typeof stream2.flushSync === "function") {
-            stream2.flushSync();
+        for (const { stream: stream3 } of this.streams) {
+          if (typeof stream3.flushSync === "function") {
+            stream3.flushSync();
           }
         }
       }
@@ -28310,11 +28310,11 @@ var require_multistream = __commonJS({
         return res;
       }
       function end() {
-        for (const { stream: stream2 } of this.streams) {
-          if (typeof stream2.flushSync === "function") {
-            stream2.flushSync();
+        for (const { stream: stream3 } of this.streams) {
+          if (typeof stream3.flushSync === "function") {
+            stream3.flushSync();
           }
-          stream2.end();
+          stream3.end();
         }
       }
       function clone2(level) {
@@ -28360,7 +28360,7 @@ var require_pino = __commonJS({
     function pinoBundlerAbsolutePath(p) {
       try {
         const path10 = __require("path");
-        const outputDir = "/home/user/Remote-Desktop-for-Windows/artifacts/api-server/dist";
+        const outputDir = "/home/user/repo/artifacts/api-server/dist";
         return path10.resolve(outputDir, p.replace(/^\.\//, ""));
       } catch (e) {
         const f = new Function("p", "return new URL(p, import.meta.url).pathname");
@@ -28453,7 +28453,7 @@ var require_pino = __commonJS({
     var serializers = Object.assign(/* @__PURE__ */ Object.create(null), stdSerializers);
     function pino2(...args) {
       const instance = {};
-      const { opts, stream: stream2 } = normalize(instance, caller(), ...args);
+      const { opts, stream: stream3 } = normalize(instance, caller(), ...args);
       if (opts.level && typeof opts.level === "string" && DEFAULT_LEVELS[opts.level.toLowerCase()] !== void 0) opts.level = opts.level.toLowerCase();
       const {
         redact,
@@ -28516,8 +28516,8 @@ var require_pino = __commonJS({
       if (msgPrefix && typeof msgPrefix !== "string") throw Error(`Unknown msgPrefix type "${typeof msgPrefix}" - expected "string"`);
       assertDefaultLevelFound(level, customLevels, useOnlyCustomLevels);
       const levels = mappings(customLevels, useOnlyCustomLevels);
-      if (typeof stream2.emit === "function") {
-        stream2.emit("message", { code: "PINO_CONFIG", config: { levels, messageKey, errorKey } });
+      if (typeof stream3.emit === "function") {
+        stream3.emit("message", { code: "PINO_CONFIG", config: { levels, messageKey, errorKey } });
       }
       assertLevelComparison(levelComparison);
       const levelCompFunc = genLevelComparison(levelComparison);
@@ -28525,7 +28525,7 @@ var require_pino = __commonJS({
         levels,
         [levelCompSym]: levelCompFunc,
         [useOnlyCustomLevelsSym]: useOnlyCustomLevels,
-        [streamSym]: stream2,
+        [streamSym]: stream3,
         [timeSym]: time3,
         [timeSliceIndexSym]: timeSliceIndex,
         [stringifySym]: stringify2,
@@ -28607,9 +28607,9 @@ var require_logger = __commonJS({
     var getCallerFile = require_get_caller_file();
     var startTime = /* @__PURE__ */ Symbol("startTime");
     var reqObject = /* @__PURE__ */ Symbol("reqObject");
-    function pinoLogger(opts, stream2) {
+    function pinoLogger(opts, stream3) {
       if (opts && opts._writableState) {
-        stream2 = opts;
+        stream3 = opts;
         opts = null;
       }
       opts = Object.assign({}, opts);
@@ -28649,7 +28649,7 @@ var require_logger = __commonJS({
       }
       const customLogLevel = opts.customLogLevel;
       delete opts.customLogLevel;
-      const theStream = opts.stream || stream2;
+      const theStream = opts.stream || stream3;
       delete opts.stream;
       const autoLogging = opts.autoLogging !== false;
       const autoLoggingIgnore = opts.autoLogging && opts.autoLogging.ignore ? opts.autoLogging.ignore : null;
@@ -28766,7 +28766,7 @@ var require_logger = __commonJS({
         }
       }
     }
-    function wrapChild(opts, stream2) {
+    function wrapChild(opts, stream3) {
       const prevLogger = opts.logger;
       const prevGenReqId = opts.genReqId;
       let logger2 = null;
@@ -28780,7 +28780,7 @@ var require_logger = __commonJS({
         if (opts.transport && !opts.transport.caller) {
           opts.transport.caller = getCallerFile();
         }
-        logger2 = pino2(opts, stream2);
+        logger2 = pino2(opts, stream3);
       }
       return logger2;
     }
@@ -30163,18 +30163,18 @@ var require_sasl = __commonJS({
       return password.replace(nonAsciiSpace, " ").replace(mappedToNothing, "").normalize("NFKC");
     }
     var DEFAULT_MAX_SCRAM_ITERATIONS = 1e5;
-    function startSession(mechanisms, stream2, scramMaxIterations = DEFAULT_MAX_SCRAM_ITERATIONS) {
+    function startSession(mechanisms, stream3, scramMaxIterations = DEFAULT_MAX_SCRAM_ITERATIONS) {
       const candidates = ["SCRAM-SHA-256"];
-      if (stream2) candidates.unshift("SCRAM-SHA-256-PLUS");
+      if (stream3) candidates.unshift("SCRAM-SHA-256-PLUS");
       const mechanism = candidates.find((candidate) => mechanisms.includes(candidate));
       if (!mechanism) {
         throw new Error("SASL: Only mechanism(s) " + candidates.join(" and ") + " are supported");
       }
-      if (mechanism === "SCRAM-SHA-256-PLUS" && typeof stream2.getPeerCertificate !== "function") {
+      if (mechanism === "SCRAM-SHA-256-PLUS" && typeof stream3.getPeerCertificate !== "function") {
         throw new Error("SASL: Mechanism SCRAM-SHA-256-PLUS requires a certificate");
       }
       const clientNonce = crypto3.randomBytes(18).toString("base64");
-      const gs2Header = mechanism === "SCRAM-SHA-256-PLUS" ? "p=tls-server-end-point" : stream2 ? "y" : "n";
+      const gs2Header = mechanism === "SCRAM-SHA-256-PLUS" ? "p=tls-server-end-point" : stream3 ? "y" : "n";
       return {
         mechanism,
         clientNonce,
@@ -30183,7 +30183,7 @@ var require_sasl = __commonJS({
         scramMaxIterations
       };
     }
-    async function continueSession(session, password, serverData, stream2) {
+    async function continueSession(session, password, serverData, stream3) {
       if (session.message !== "SASLInitialResponse") {
         throw new Error("SASL: Last message was not SASLInitialResponse");
       }
@@ -30210,9 +30210,9 @@ var require_sasl = __commonJS({
       }
       const clientFirstMessageBare = "n=*,r=" + session.clientNonce;
       const serverFirstMessage = "r=" + sv.nonce + ",s=" + sv.salt + ",i=" + sv.iteration;
-      let channelBinding = stream2 ? "eSws" : "biws";
+      let channelBinding = stream3 ? "eSws" : "biws";
       if (session.mechanism === "SCRAM-SHA-256-PLUS") {
-        const peerCert = stream2.getPeerCertificate().raw;
+        const peerCert = stream3.getPeerCertificate().raw;
         let hashName = signatureAlgorithmHashFromCertificate(peerCert);
         if (hashName === "MD5" || hashName === "SHA-1") hashName = "SHA-256";
         const certHash = await crypto3.hashByName(hashName, peerCert);
@@ -31877,10 +31877,10 @@ var require_dist4 = __commonJS({
       return serializer_1.serialize;
     } });
     var parser_1 = require_parser();
-    function parse2(stream2, callback) {
+    function parse2(stream3, callback) {
       const parser = new parser_1.Parser();
-      stream2.on("data", (buffer) => parser.parse(buffer, callback));
-      return new Promise((resolve2) => stream2.on("end", () => resolve2()));
+      stream3.on("data", (buffer) => parser.parse(buffer, callback));
+      return new Promise((resolve2) => stream3.on("end", () => resolve2()));
     }
   }
 });
@@ -31966,8 +31966,8 @@ var require_connection = __commonJS({
     "use strict";
     var EventEmitter = __require("events").EventEmitter;
     var { parse: parse2, serialize: serialize2 } = require_dist4();
-    var stream2 = require_stream();
-    var { getStream } = stream2;
+    var stream3 = require_stream();
+    var { getStream } = stream3;
     var flushBuffer = serialize2.flush();
     var syncBuffer = serialize2.sync();
     var endBuffer = serialize2.end();
@@ -32062,7 +32062,7 @@ var require_connection = __commonJS({
           options.servername = host;
         }
         try {
-          self.stream = stream2.getSecureStream(options);
+          self.stream = stream3.getSecureStream(options);
         } catch (err) {
           return self.emit("error", err);
         }
@@ -32070,8 +32070,8 @@ var require_connection = __commonJS({
         self.stream.on("error", reportStreamError);
         self.emit("sslconnect");
       }
-      attachListeners(stream3) {
-        parse2(stream3, (msg) => {
+      attachListeners(stream4) {
+        parse2(stream4, (msg) => {
           const eventName = msg.name === "error" ? "errorMessage" : msg.name;
           if (this._emitMessage) {
             this.emit("message", msg);
@@ -32245,19 +32245,19 @@ var require_split2 = __commonJS({
       options.transform = transform2;
       options.flush = flush;
       options.readableObjectMode = true;
-      const stream2 = new Transform(options);
-      stream2[kLast] = "";
-      stream2[kDecoder] = new StringDecoder("utf8");
-      stream2.matcher = matcher;
-      stream2.mapper = mapper;
-      stream2.maxLength = options.maxLength;
-      stream2.skipOverflow = options.skipOverflow || false;
-      stream2.overflow = false;
-      stream2._destroy = function(err, cb) {
+      const stream3 = new Transform(options);
+      stream3[kLast] = "";
+      stream3[kDecoder] = new StringDecoder("utf8");
+      stream3.matcher = matcher;
+      stream3.mapper = mapper;
+      stream3.maxLength = options.maxLength;
+      stream3.skipOverflow = options.skipOverflow || false;
+      stream3.overflow = false;
+      stream3._destroy = function(err, cb) {
         this._writableState.errorEmitted = false;
         cb(err);
       };
-      return stream2;
+      return stream3;
     }
     module.exports = split;
   }
@@ -32299,9 +32299,9 @@ var require_helper = __commonJS({
         isWin = val;
       }
     });
-    module.exports.warnTo = function(stream2) {
+    module.exports.warnTo = function(stream3) {
       var old = warnStream;
-      warnStream = stream2;
+      warnStream = stream3;
       return old;
     };
     module.exports.getFileName = function(rawEnv) {
@@ -32337,9 +32337,9 @@ var require_helper = __commonJS({
         return prev && (entry[field] === "*" || entry[field] === connInfo[field]);
       }, true);
     };
-    module.exports.getPassword = function(connInfo, stream2, cb) {
+    module.exports.getPassword = function(connInfo, stream3, cb) {
       var pass;
-      var lineStream = stream2.pipe(split());
+      var lineStream = stream3.pipe(split());
       function onLine(line3) {
         var entry = parseLine(line3);
         if (entry && isValidEntry(entry) && matcher(connInfo, entry)) {
@@ -32348,15 +32348,15 @@ var require_helper = __commonJS({
         }
       }
       var onEnd = function() {
-        stream2.destroy();
+        stream3.destroy();
         cb(pass);
       };
       var onErr = function(err) {
-        stream2.destroy();
+        stream3.destroy();
         warn("WARNING: error on reading file: %s", err);
         cb(void 0);
       };
-      stream2.on("error", onErr);
+      stream3.on("error", onErr);
       lineStream.on("data", onLine).on("end", onEnd).on("error", onErr);
     };
     var parseLine = module.exports.parseLine = function(line3) {
@@ -34738,10 +34738,10 @@ function ReadableStreamFrom(iterable) {
     }
   });
 }
-function readableStreamIterator(stream2) {
-  if (stream2[Symbol.asyncIterator])
-    return stream2[Symbol.asyncIterator]();
-  const reader = stream2.getReader();
+function readableStreamIterator(stream3) {
+  if (stream3[Symbol.asyncIterator])
+    return stream3[Symbol.asyncIterator]();
+  const reader = stream3.getReader();
   return {
     async next() {
       try {
@@ -34762,8 +34762,8 @@ function readableStreamIterator(stream2) {
     }
   };
 }
-async function* ReadableStreamToAsyncIterable(stream2) {
-  const iter = readableStreamIterator(stream2);
+async function* ReadableStreamToAsyncIterable(stream3) {
+  const iter = readableStreamIterator(stream3);
   const reader = {};
   droppedReaders?.register(reader, iter, reader);
   try {
@@ -34773,14 +34773,14 @@ async function* ReadableStreamToAsyncIterable(stream2) {
     droppedReaders?.unregister(reader);
   }
 }
-async function CancelReadableStream(stream2) {
-  if (stream2 === null || typeof stream2 !== "object")
+async function CancelReadableStream(stream3) {
+  if (stream3 === null || typeof stream3 !== "object")
     return;
-  if (stream2[Symbol.asyncIterator]) {
-    await stream2[Symbol.asyncIterator]().return?.();
+  if (stream3[Symbol.asyncIterator]) {
+    await stream3[Symbol.asyncIterator]().return?.();
     return;
   }
-  const reader = stream2.getReader();
+  const reader = stream3.getReader();
   const cancelPromise = reader.cancel();
   reader.releaseLock();
   await cancelPromise;
@@ -35628,8 +35628,8 @@ function endApiCallSpan(span, result) {
     span.end();
   }
 }
-function observeStream(stream2, signal, observer) {
-  const iterate = stream2[Symbol.asyncIterator];
+function observeStream(stream3, signal, observer) {
+  const iterate = stream3[Symbol.asyncIterator];
   let ended = false;
   const end = (how) => {
     if (ended)
@@ -35646,7 +35646,7 @@ function observeStream(stream2, signal, observer) {
     return cancel();
   signal.addEventListener("abort", cancel, { once: true });
   let observed = false;
-  stream2[Symbol.asyncIterator] = function() {
+  stream3[Symbol.asyncIterator] = function() {
     const source = iterate.call(this);
     if (observed)
       return source;
@@ -35686,13 +35686,13 @@ function observeStream(stream2, signal, observer) {
     return iterator;
   };
 }
-function endApiCallSpanWhenStreamEnds(span, stream2, props) {
+function endApiCallSpanWhenStreamEnds(span, stream3, props) {
   if (!span.isRecording())
     return;
   span.setAttribute(ATTR_HTTP_RESPONSE_STATUS_CODE, props.response.status);
   setResponseHeaderAttributes(span, props.response);
-  const isSSE = stream2 instanceof Stream;
-  observeStream(stream2, props.controller.signal, {
+  const isSSE = stream3 instanceof Stream;
+  observeStream(stream3, props.controller.signal, {
     onEnd(end) {
       if (end.reason === "failed")
         setErrorStatus(span, end.error);
@@ -36863,14 +36863,14 @@ function recordStreamedMessageContent(client, call, body, message) {
     loggerFor(client).debug("could not record the streamed message on its span", problem);
   }
 }
-function endAnthropicApiCallSpanWhenStreamEnds(client, span, stream2, props) {
-  if (props.options.__span?.name === "anthropic.messages.create" && stream2 instanceof Stream) {
-    endMessagesCreateSpanWhenStreamEnds(client, span, stream2, props);
+function endAnthropicApiCallSpanWhenStreamEnds(client, span, stream3, props) {
+  if (props.options.__span?.name === "anthropic.messages.create" && stream3 instanceof Stream) {
+    endMessagesCreateSpanWhenStreamEnds(client, span, stream3, props);
   } else {
-    endApiCallSpanWhenStreamEnds(span, stream2, props);
+    endApiCallSpanWhenStreamEnds(span, stream3, props);
   }
 }
-function endMessagesCreateSpanWhenStreamEnds(client, span, stream2, props) {
+function endMessagesCreateSpanWhenStreamEnds(client, span, stream3, props) {
   if (!span.isRecording()) {
     return;
   }
@@ -36883,7 +36883,7 @@ function endMessagesCreateSpanWhenStreamEnds(client, span, stream2, props) {
   let sawDelta = false;
   let sawMessageDelta = false;
   let sawStop = false;
-  observeStream(stream2, props.controller.signal, {
+  observeStream(stream3, props.controller.signal, {
     onItem(event) {
       try {
         switch (event.type) {
@@ -40530,9 +40530,9 @@ var init_SessionToolRunner = __esm({
         let backoff3 = STREAM_BACKOFF_START_MS;
         while (!ctrl.signal.aborted) {
           try {
-            const stream2 = await this.client.beta.sessions.events.stream(this.sessionId, {}, __classPrivateFieldGet(this, _SessionToolRunner_instances, "m", _SessionToolRunner_requestOptions).call(this));
+            const stream3 = await this.client.beta.sessions.events.stream(this.sessionId, {}, __classPrivateFieldGet(this, _SessionToolRunner_instances, "m", _SessionToolRunner_requestOptions).call(this));
             await __classPrivateFieldGet(this, _SessionToolRunner_instances, "m", _SessionToolRunner_reconcile).call(this);
-            for await (const ev of stream2) {
+            for await (const ev of stream3) {
               backoff3 = STREAM_BACKOFF_START_MS;
               if (await __classPrivateFieldGet(this, _SessionToolRunner_instances, "m", _SessionToolRunner_handleStreamEvent).call(this, ev))
                 return;
@@ -42788,15 +42788,15 @@ async function readRangeStreaming(abs, filePath, startLine, endLine, limit2) {
   const lines = new LineRangeCollector(filePath, startLine, endLine, limit2);
   if (lines.rangeIsEmpty())
     return "";
-  const stream2 = fssync.createReadStream(abs, { highWaterMark: READ_STREAM_CHUNK_BYTES });
+  const stream3 = fssync.createReadStream(abs, { highWaterMark: READ_STREAM_CHUNK_BYTES });
   try {
-    for await (const chunk of stream2) {
+    for await (const chunk of stream3) {
       lines.collectFrom(chunk);
       if (lines.rangeIsCollected())
         break;
     }
   } finally {
-    stream2.destroy();
+    stream3.destroy();
   }
   return lines.text();
 }
@@ -43068,11 +43068,11 @@ async function runWalkGrep(pattern, root, signal) {
   return hits.join("\n");
 }
 async function grepFile(file, match, push, signal) {
-  const stream2 = fssync.createReadStream(file, { encoding: "utf8" });
-  stream2.on("error", () => {
+  const stream3 = fssync.createReadStream(file, { encoding: "utf8" });
+  stream3.on("error", () => {
   });
-  const rl = readline.createInterface({ input: stream2, crlfDelay: Infinity, signal });
-  stream2.on("data", (chunk) => {
+  const rl = readline.createInterface({ input: stream3, crlfDelay: Infinity, signal });
+  stream3.on("data", (chunk) => {
     if (chunk.includes("\0"))
       rl.close();
   });
@@ -43088,7 +43088,7 @@ async function grepFile(file, match, push, signal) {
     }
   } finally {
     rl.close();
-    stream2.destroy();
+    stream3.destroy();
   }
   return true;
 }
@@ -45865,9 +45865,9 @@ var init_BetaMessageStream = __esm({
          * Note that messages sent to the model do not appear in `.on('message')`
          * in this context.
          */
-        static fromReadableStream(stream2) {
+        static fromReadableStream(stream3) {
           const runner = new BetaMessageStream2(null);
-          runner._run(() => runner._fromReadableStream(stream2));
+          runner._run(() => runner._fromReadableStream(stream3));
           return runner;
         }
         static createMessage(messages, params, options, { logger: logger2, client } = {}) {
@@ -45892,11 +45892,11 @@ var init_BetaMessageStream = __esm({
           }
           const client = __classPrivateFieldGet(this, _BetaMessageStream_client, "f");
           __classPrivateFieldSet(this, _BetaMessageStream_client, void 0, "f");
-          const send = (body, options2) => create(body, options2)._thenUnwrap((stream2, { options: sent }) => {
+          const send = (body, options2) => create(body, options2)._thenUnwrap((stream3, { options: sent }) => {
             __classPrivateFieldSet(this, _BetaMessageStream_client, client, "f");
             __classPrivateFieldSet(this, _BetaMessageStream_span, sent.__span, "f");
             __classPrivateFieldSet(this, _BetaMessageStream_spanBody, sent.body, "f");
-            return stream2;
+            return stream3;
           });
           this._run(() => this._createMessage(send, { ...params, stream: true }, options).finally(onRequestEnd));
         }
@@ -45927,17 +45927,17 @@ var init_BetaMessageStream = __esm({
           try {
             __classPrivateFieldGet(this, _BetaMessageStream_instances, "m", _BetaMessageStream_beginRequest).call(this);
             __classPrivateFieldSet(this, _BetaMessageStream_span, options?.__span ?? (__classPrivateFieldGet(this, _BetaMessageStream_client, "f") && startMessagesStreamSpan(__classPrivateFieldGet(this, _BetaMessageStream_client, "f"), params, options)), "f");
-            const { response, data: stream2 } = await create({ ...params, stream: true }, { ...options, __span: __classPrivateFieldGet(this, _BetaMessageStream_span, "f"), signal: this.controller.signal }).withResponse();
+            const { response, data: stream3 } = await create({ ...params, stream: true }, { ...options, __span: __classPrivateFieldGet(this, _BetaMessageStream_span, "f"), signal: this.controller.signal }).withResponse();
             try {
               this._connected(response);
             } catch (error2) {
               if (__classPrivateFieldGet(this, _BetaMessageStream_span, "f")) {
                 __classPrivateFieldGet(this, _BetaMessageStream_span, "f").failure = error2;
               }
-              stream2.controller.abort();
+              stream3.controller.abort();
               throw error2;
             }
-            for await (const event of stream2) {
+            for await (const event of stream3) {
               try {
                 __classPrivateFieldGet(this, _BetaMessageStream_instances, "m", _BetaMessageStream_addStreamEvent).call(this, event);
               } catch (error2) {
@@ -45947,7 +45947,7 @@ var init_BetaMessageStream = __esm({
                 throw error2;
               }
             }
-            if (stream2.controller.signal?.aborted) {
+            if (stream3.controller.signal?.aborted) {
               throw new APIUserAbortError();
             }
             __classPrivateFieldGet(this, _BetaMessageStream_instances, "m", _BetaMessageStream_endRequest).call(this);
@@ -46116,11 +46116,11 @@ var init_BetaMessageStream = __esm({
           try {
             __classPrivateFieldGet(this, _BetaMessageStream_instances, "m", _BetaMessageStream_beginRequest).call(this);
             this._connected(null);
-            const stream2 = Stream.fromReadableStream(readableStream, this.controller);
-            for await (const event of stream2) {
+            const stream3 = Stream.fromReadableStream(readableStream, this.controller);
+            for await (const event of stream3) {
               __classPrivateFieldGet(this, _BetaMessageStream_instances, "m", _BetaMessageStream_addStreamEvent).call(this, event);
             }
-            if (stream2.controller.signal?.aborted) {
+            if (stream3.controller.signal?.aborted) {
               throw new APIUserAbortError();
             }
             __classPrivateFieldGet(this, _BetaMessageStream_instances, "m", _BetaMessageStream_endRequest).call(this);
@@ -46432,8 +46432,8 @@ var init_BetaMessageStream = __esm({
           };
         }
         toReadableStream() {
-          const stream2 = new Stream(this[Symbol.asyncIterator].bind(this), this.controller);
-          return stream2.toReadableStream();
+          const stream3 = new Stream(this[Symbol.asyncIterator].bind(this), this.controller);
+          return stream3.toReadableStream();
         }
       }
       return BetaMessageStream2;
@@ -56153,7 +56153,7 @@ var init_ThreadState = __esm({
          * The `create()` arguments of `turn` except `stream`: request fields, betas, the `thread` field with the delta or
          * full history, and request options.
          */
-        buildCreateArguments(turn, options, { stream: stream2 }) {
+        buildCreateArguments(turn, options, { stream: stream3 }) {
           __classPrivateFieldGet(this, _ThreadState_instances, "m", _ThreadState_checkCreateOnly).call(this, turn.createOnly);
           const anchor2 = __classPrivateFieldGet(this, _ThreadState_anchor, "f");
           let stored = anchor2.type === "continue" ? [] : __classPrivateFieldGet(this, _ThreadState_stored, "f").map((entry) => entry.param);
@@ -56175,7 +56175,7 @@ var init_ThreadState = __esm({
             for (const field of CREATE_ONLY_FIELDS)
               delete params[field];
           }
-          return { params, options: __classPrivateFieldGet(this, _ThreadState_instances, "m", _ThreadState_requestOptions).call(this, options, { stream: stream2 }) };
+          return { params, options: __classPrivateFieldGet(this, _ThreadState_instances, "m", _ThreadState_requestOptions).call(this, options, { stream: stream3 }) };
         }
         /** Throws if the thread refuses a turn with the overrides `fields`, as that turn would before it is sent. */
         checkNextTurn(fields) {
@@ -56236,9 +56236,9 @@ var init_ThreadState = __esm({
           const names = changed.map((field) => `\`${field}\``).join(" and ");
           throw new AnthropicError(`Cannot change ${names} on a thread: the server keeps the \`system\` and \`tools\` the thread was created with. To change them, start a new thread from \`thread.params\`.` + (changed.includes("tools") ? " To add or remove tools on this thread, send `tool_addition` or `tool_removal` blocks in a `system` message." : ""));
         }
-      }, _ThreadState_requestOptions = function _ThreadState_requestOptions2(overrides, { stream: stream2 }) {
+      }, _ThreadState_requestOptions = function _ThreadState_requestOptions2(overrides, { stream: stream3 }) {
         const options = { ...this.options, ...definedEntries(overrides) };
-        if (stream2) {
+        if (stream3) {
           options.headers = buildHeaders([{ [STAINLESS_HELPER_METHOD_HEADER]: "stream" }, options.headers]);
         }
         if (__classPrivateFieldGet(this, _ThreadState_anchor, "f").type !== "never_threaded") {
@@ -56264,11 +56264,11 @@ var init_ThreadState = __esm({
 
 // ../../node_modules/.pnpm/@anthropic-ai+sdk@1.12.0_zod@4.6.7/node_modules/@anthropic-ai/sdk/lib/internal/threads/tool-runner-params.mjs
 function splitToolRunnerParams(params) {
-  const { stream: stream2, max_iterations, runToolsEagerly, thread, ...threadParams } = params;
+  const { stream: stream3, max_iterations, runToolsEagerly, thread, ...threadParams } = params;
   if (thread !== void 0 && thread !== false) {
     throw new TypeError("`thread` cannot be set in the params of a tool runner. The runner sets it for each request itself. To run without a message thread, pass `thread: false`.");
   }
-  return { settings: { stream: stream2, max_iterations, runToolsEagerly }, thread, threadParams };
+  return { settings: { stream: stream3, max_iterations, runToolsEagerly }, thread, threadParams };
 }
 var init_tool_runner_params = __esm({
   "../../node_modules/.pnpm/@anthropic-ai+sdk@1.12.0_zod@4.6.7/node_modules/@anthropic-ai/sdk/lib/internal/threads/tool-runner-params.mjs"() {
@@ -56790,12 +56790,12 @@ var init_BetaToolRunner = __esm({
          * }
          */
         get deferredToolCalls() {
-          const stream2 = __classPrivateFieldGet(this, _BetaToolRunner_stream, "f");
+          const stream3 = __classPrivateFieldGet(this, _BetaToolRunner_stream, "f");
           const calls = __classPrivateFieldGet(this, _BetaToolRunner_calls, "f");
-          if (!(stream2 instanceof BetaToolRunnerStream) || !calls) {
+          if (!(stream3 instanceof BetaToolRunnerStream) || !calls) {
             return [];
           }
-          return stream2.toolCalls.filter((toolUse) => calls.get(toolUse.id)?.status === "held");
+          return stream3.toolCalls.filter((toolUse) => calls.get(toolUse.id)?.status === "held");
         }
         /**
          * Wait for the async iterator to complete. This works even if the async iterator hasn't yet started, and
@@ -57034,9 +57034,9 @@ var init_BetaToolRunner = __esm({
           });
           calls.set(toolUse.id, { status: "started", result });
         };
-        const stream2 = new BetaToolRunnerStream(thread._state.params, onToolCall, thread._client);
-        thread._stream(stream2, void 0, turnParams(thread), __classPrivateFieldGet(this, _BetaToolRunner_instances, "m", _BetaToolRunner_turnOptions).call(this, thread));
-        return stream2;
+        const stream3 = new BetaToolRunnerStream(thread._state.params, onToolCall, thread._client);
+        thread._stream(stream3, void 0, turnParams(thread), __classPrivateFieldGet(this, _BetaToolRunner_instances, "m", _BetaToolRunner_turnOptions).call(this, thread));
+        return stream3;
       }, _BetaToolRunner_startedCallsSettled = /** Waits for the calls of the last streamed reply that have started, whether or not their results were sent. */
       async function _BetaToolRunner_startedCallsSettled2() {
         const started = [...__classPrivateFieldGet(this, _BetaToolRunner_calls, "f")?.values() ?? []].filter((call) => call.status === "started");
@@ -57238,23 +57238,23 @@ var init_BetaMessageThread = __esm({
       }
       /** Like `send()`, and returns the reply's stream. The turn is in progress until the stream ends or is aborted. */
       stream(messages, params = {}, options = {}) {
-        const stream2 = new BetaMessageStream(this._state.params, {
+        const stream3 = new BetaMessageStream(this._state.params, {
           logger: loggerFor(this._client),
           client: this._client
         });
-        this._stream(stream2, messages, params, options);
-        return stream2;
+        this._stream(stream3, messages, params, options);
+        return stream3;
       }
       /**
        * @internal `stream()` on a stream the caller made: the thread records the reply once `stream` reaches `message_stop`,
        * and is free for the next turn when the request ends or `stream` is aborted, before the final events fire.
        */
-      _stream(stream2, messages, turnParams2, turnOptions) {
+      _stream(stream3, messages, turnParams2, turnOptions) {
         const turn = this._state.startTurn(toMessageList(messages), turnParams2);
         let received;
         let completedBlocks = 0;
         let stopped = false;
-        stream2.on("streamEvent", (event, snapshot) => {
+        stream3.on("streamEvent", (event, snapshot) => {
           if (stopped)
             return;
           received = snapshot;
@@ -57274,9 +57274,9 @@ var init_BetaMessageThread = __esm({
             this._state.recordPartialReply(received, completedBlocks);
           this._state.endTurn(turn);
         };
-        stream2.controller.signal.addEventListener("abort", endEarly, { once: true });
+        stream3.controller.signal.addEventListener("abort", endEarly, { once: true });
         const createTurn = (_body, options) => new APIPromise(this._client, this._createWithRecovery(turn, { ...turnOptions, signal: options?.signal }, { stream: true }).then(({ props }) => props));
-        stream2._start(createTurn, this._state.params, { signal: turnOptions.signal ?? this._state.options.signal }, endEarly);
+        stream3._start(createTurn, this._state.params, { signal: turnOptions.signal ?? this._state.options.signal }, endEarly);
       }
       /**
        * Change the request fields and request options of all later turns without sending anything. `system` and `tools`
@@ -57300,10 +57300,10 @@ var init_BetaMessageThread = __esm({
        * @internal One `create()` call for `turn` and the response to it, re-sent as long as the state can recover from
        * the rejection.
        */
-      async _createWithRecovery(turn, turnOptions, { stream: stream2 }) {
+      async _createWithRecovery(turn, turnOptions, { stream: stream3 }) {
         for (; ; ) {
-          const { params, options } = this._state.buildCreateArguments(turn, turnOptions, { stream: stream2 });
-          const request = this._client.beta.messages.create({ ...params, stream: stream2 }, options);
+          const { params, options } = this._state.buildCreateArguments(turn, turnOptions, { stream: stream3 });
+          const request = this._client.beta.messages.create({ ...params, stream: stream3 }, options);
           try {
             return { request, props: await request._responseProps() };
           } catch (error2) {
@@ -57860,9 +57860,9 @@ var init_MessageStream = __esm({
          * Note that messages sent to the model do not appear in `.on('message')`
          * in this context.
          */
-        static fromReadableStream(stream2) {
+        static fromReadableStream(stream3) {
           const runner = new MessageStream2(null);
-          runner._run(() => runner._fromReadableStream(stream2));
+          runner._run(() => runner._fromReadableStream(stream3));
           return runner;
         }
         static createMessage(messages, params, options, { logger: logger2, client } = {}) {
@@ -57901,17 +57901,17 @@ var init_MessageStream = __esm({
           try {
             __classPrivateFieldGet(this, _MessageStream_instances, "m", _MessageStream_beginRequest).call(this);
             __classPrivateFieldSet(this, _MessageStream_span, options?.__span ?? (__classPrivateFieldGet(this, _MessageStream_client, "f") && startMessagesStreamSpan2(__classPrivateFieldGet(this, _MessageStream_client, "f"), params, options)), "f");
-            const { response, data: stream2 } = await messages.create({ ...params, stream: true }, { ...options, __span: __classPrivateFieldGet(this, _MessageStream_span, "f"), signal: this.controller.signal }).withResponse();
+            const { response, data: stream3 } = await messages.create({ ...params, stream: true }, { ...options, __span: __classPrivateFieldGet(this, _MessageStream_span, "f"), signal: this.controller.signal }).withResponse();
             try {
               this._connected(response);
             } catch (error2) {
               if (__classPrivateFieldGet(this, _MessageStream_span, "f")) {
                 __classPrivateFieldGet(this, _MessageStream_span, "f").failure = error2;
               }
-              stream2.controller.abort();
+              stream3.controller.abort();
               throw error2;
             }
-            for await (const event of stream2) {
+            for await (const event of stream3) {
               try {
                 __classPrivateFieldGet(this, _MessageStream_instances, "m", _MessageStream_addStreamEvent).call(this, event);
               } catch (error2) {
@@ -57921,7 +57921,7 @@ var init_MessageStream = __esm({
                 throw error2;
               }
             }
-            if (stream2.controller.signal?.aborted) {
+            if (stream3.controller.signal?.aborted) {
               throw new APIUserAbortError();
             }
             __classPrivateFieldGet(this, _MessageStream_instances, "m", _MessageStream_endRequest).call(this);
@@ -58084,11 +58084,11 @@ var init_MessageStream = __esm({
           try {
             __classPrivateFieldGet(this, _MessageStream_instances, "m", _MessageStream_beginRequest).call(this);
             this._connected(null);
-            const stream2 = Stream.fromReadableStream(readableStream, this.controller);
-            for await (const event of stream2) {
+            const stream3 = Stream.fromReadableStream(readableStream, this.controller);
+            for await (const event of stream3) {
               __classPrivateFieldGet(this, _MessageStream_instances, "m", _MessageStream_addStreamEvent).call(this, event);
             }
-            if (stream2.controller.signal?.aborted) {
+            if (stream3.controller.signal?.aborted) {
               throw new APIUserAbortError();
             }
             __classPrivateFieldGet(this, _MessageStream_instances, "m", _MessageStream_endRequest).call(this);
@@ -58353,8 +58353,8 @@ var init_MessageStream = __esm({
           };
         }
         toReadableStream() {
-          const stream2 = new Stream(this[Symbol.asyncIterator].bind(this), this.controller);
-          return stream2.toReadableStream();
+          const stream3 = new Stream(this[Symbol.asyncIterator].bind(this), this.controller);
+          return stream3.toReadableStream();
         }
       }
       return MessageStream2;
@@ -71500,8 +71500,46 @@ function normalizeRaId(value) {
   return /^\d{6}$/.test(digits) ? digits : void 0;
 }
 var formatRaId = (raId) => `RA-${raId}`;
-var patchLogBytes = 4 * 1024 * 1024;
-var patchLogCount = 600;
+var patchLogBytes = 12 * 1024 * 1024;
+var patchLogCount = 1200;
+var viewQualities = ["sharp", "balanced", "fast"];
+var reorderWait = 1e3;
+var reorderMax = 8;
+function reorder(r, seq, item, now, resets = false) {
+  const ready = [];
+  let skipped = false;
+  if (r.next === void 0) r.next = 1;
+  if (seq < r.next) return { ready, late: true, skipped };
+  if (resets && seq > r.next) {
+    for (const k of [...r.pending.keys()]) if (k < seq) r.pending.delete(k);
+    r.next = seq;
+  }
+  r.pending.set(seq, { item, at: now });
+  const drain = () => {
+    while (r.pending.has(r.next)) {
+      ready.push(r.pending.get(r.next).item);
+      r.pending.delete(r.next);
+      r.next += 1;
+    }
+  };
+  drain();
+  if (r.pending.size) {
+    const oldest = Math.min(...[...r.pending.values()].map((p) => p.at));
+    if (r.pending.size >= reorderMax || now - oldest > reorderWait) {
+      r.next = Math.min(...r.pending.keys());
+      skipped = true;
+      drain();
+    }
+  }
+  return { ready, late: false, skipped };
+}
+function streamRecord(kind, text = "") {
+  const data = Buffer.from(text, "utf8");
+  const head = Buffer.alloc(13);
+  head.writeUInt8(kind, 4);
+  head.writeUInt32BE(data.length, 9);
+  return Buffer.concat([head, data]);
+}
 function encodeFrames(items) {
   const parts = [];
   for (const item of items) {
@@ -72158,6 +72196,42 @@ function createMsfwrStore(clock = Date.now, hooks = {}) {
       if (changed) notify(s);
       const input = events ? [] : store2.takeInput(s);
       return { state: s.state, input, ...s.wantKey ? { key: true } : {} };
+    },
+    // A tick numbered by the host (X-Msfwr-Seq), which may have several
+    // uploads in flight: updates are applied in the host's order. A patch
+    // that arrives after a later update was applied, or a skipped gap,
+    // leaves the screen wrong, so the host is asked for a keyframe.
+    tickInOrder(s, seq, frame, events = false) {
+      if (s.state !== "live") return store2.tick(s, frame, events);
+      const order = s.hostOrder ??= { pending: /* @__PURE__ */ new Map() };
+      const key = Buffer.isBuffer(frame) || !!frame?.[0]?.key;
+      const { ready, late, skipped } = reorder(order, seq, frame, clock(), key);
+      for (const f of ready) store2.tick(s, f, true);
+      if (late && frame || skipped) s.wantKey = true;
+      return store2.tick(s, void 0, events);
+    },
+    // Input numbered by the viewer (X-Msfwr-Seq), applied in its order. A
+    // lost or late batch could leave a button held, so it releases.
+    enqueueInOrder(s, viewer2, seq, items) {
+      const orders = s.inputOrder ??= /* @__PURE__ */ new Map();
+      let order = orders.get(viewer2);
+      if (!order) {
+        if (orders.size >= 16) orders.clear();
+        orders.set(viewer2, order = { pending: /* @__PURE__ */ new Map() });
+      }
+      const { ready, late, skipped } = reorder(order, seq, items, clock());
+      if (late || skipped) {
+        if (!store2.enqueue(s, { kind: "release" })) return false;
+      }
+      for (const list of ready) {
+        for (const item of list) if (!store2.enqueue(s, item)) return false;
+      }
+      return true;
+    },
+    setQuality(s, quality) {
+      if (s.quality === quality) return;
+      s.quality = quality;
+      notify(s);
     },
     // Removes and returns the input queued for the host.
     takeInput(s) {
@@ -74812,10 +74886,73 @@ function hold(res, s, ready, ms, done) {
   });
 }
 var gone = (res) => res.status(410).json({ error: "This session ended or expired. Ask for a new code." });
+function sequenceOf(req) {
+  const value = req.get("x-msfwr-seq");
+  return value && /^\d{1,9}$/.test(value) ? Number(value) : void 0;
+}
+var streamMs = 25e3;
+var beatMs = 2e3;
+function stream2(req, res, s, role, type, handlers) {
+  res.status(200).set({
+    "Content-Type": type,
+    "Cache-Control": "no-store, no-transform, private",
+    "X-Accel-Buffering": "no",
+    "X-Msfwr-State": s.state,
+    "X-Msfwr-Stream": "1"
+  });
+  res.flushHeaders();
+  req.socket.setNoDelay(true);
+  const header = req.get("authorization");
+  let over = false;
+  let busy = false;
+  const write = (b) => {
+    if (over) return;
+    if (!res.write(b)) {
+      busy = true;
+      res.once("drain", () => {
+        busy = false;
+        push();
+      });
+    }
+  };
+  const stop = () => {
+    over = true;
+    clearInterval(beat);
+    clearTimeout(timer);
+    unwatch();
+  };
+  const finish = (ended) => {
+    if (over) return;
+    write(handlers.close(ended));
+    stop();
+    res.end();
+  };
+  const push = () => {
+    if (over || busy) return;
+    if (s.closed) {
+      finish(true);
+      return;
+    }
+    handlers.push(write);
+  };
+  const beat = setInterval(() => {
+    if (!store.authenticate(header, role)) {
+      finish(true);
+      return;
+    }
+    if (!busy) write(handlers.beat());
+  }, beatMs);
+  const timer = setTimeout(() => finish(false), streamMs);
+  const unwatch = store.watch(s, () => setImmediate(push));
+  res.on("close", () => {
+    if (!over) stop();
+  });
+  push();
+}
 router2.post(
   "/tick",
   (0, import_express2.raw)({ type: "image/jpeg", limit: "768kb", inflate: false }),
-  (0, import_express2.raw)({ type: "application/x-msfwr-frames", limit: "1536kb", inflate: false }),
+  (0, import_express2.raw)({ type: "application/x-msfwr-frames", limit: "4mb", inflate: false }),
   (req, res) => {
     const s = auth(req, res, "host");
     if (!s) return;
@@ -74838,13 +74975,37 @@ router2.post(
       res.status(409).json({ error: "No screen can be uploaded before host approval." });
       return;
     }
-    const reply = store.tick(s, frame, req.get("x-msfwr-events") === "1");
-    res.json({ ...TickMsfwrResponse.parse(reply), patches: true, ..."key" in reply ? { key: true } : {} });
+    const events = req.get("x-msfwr-events") === "1";
+    const seq = sequenceOf(req);
+    const reply = seq === void 0 ? store.tick(s, frame, events) : store.tickInOrder(s, seq, frame, events);
+    res.json({
+      ...TickMsfwrResponse.parse(reply),
+      patches: true,
+      pipeline: true,
+      stream: true,
+      ..."key" in reply ? { key: true } : {},
+      ...s.quality ? { quality: s.quality } : {}
+    });
   }
 );
 router2.get("/events", (req, res) => {
   const s = auth(req, res, "host");
   if (!s) return;
+  if (req.query.stream === "1") {
+    const line3 = (v) => JSON.stringify(v) + "\n";
+    stream2(req, res, s, "host", "application/x-ndjson", {
+      push: (write) => {
+        if (s.state !== "live") {
+          write(line3({ state: s.state, input: [] }));
+          return;
+        }
+        if (s.input.length) write(line3(TickMsfwrResponse.parse({ state: s.state, input: store.takeInput(s) })));
+      },
+      beat: () => line3({ state: s.state, input: [] }),
+      close: (ended) => line3({ state: ended ? "ended" : s.state, input: [], end: true })
+    });
+    return;
+  }
   const query = GetMsfwrEventsQueryParams.safeParse(req.query);
   if (!query.success) {
     res.status(400).json({ error: "Invalid wait." });
@@ -74862,6 +75023,31 @@ router2.get("/events", (req, res) => {
 router2.get("/frame", (req, res) => {
   const s = auth(req, res, "viewer");
   if (!s) return;
+  if (req.query.v === "3") {
+    const after2 = Number(req.query.after ?? 0);
+    if (!Number.isSafeInteger(after2) || after2 < 0) {
+      res.status(400).json({ error: "Invalid frame sequence." });
+      return;
+    }
+    let sent = after2;
+    let shown = "";
+    stream2(req, res, s, "viewer", "application/x-msfwr-stream", {
+      push: (write) => {
+        if (s.state !== shown) {
+          shown = s.state;
+          write(streamRecord(2, s.state));
+        }
+        if (s.state !== "live") return;
+        const items = store.updatesAfter(s, sent);
+        if (!items.length) return;
+        sent = items.at(-1).sequence;
+        write(encodeFrames(items));
+      },
+      beat: () => streamRecord(2, s.state),
+      close: (ended) => ended ? streamRecord(2, "ended") : streamRecord(3)
+    });
+    return;
+  }
   const query = GetMsfwrFrameQueryParams.safeParse(req.query);
   if (!query.success) {
     res.status(400).json({ error: "Invalid frame sequence." });
@@ -74922,12 +75108,32 @@ router2.post("/input", (req, res) => {
     }
     actions.push(a);
   }
+  const seq = sequenceOf(req);
+  if (seq !== void 0) {
+    if (!store.enqueueInOrder(s, req.get("authorization") ?? "", seq, actions)) {
+      res.status(429).json({ error: "Remote input was too fast." });
+      return;
+    }
+    res.sendStatus(204);
+    return;
+  }
   for (const a of actions) {
     if (!store.enqueue(s, a)) {
       res.status(429).json({ error: "Remote input was too fast." });
       return;
     }
   }
+  res.sendStatus(204);
+});
+router2.post("/view", (req, res) => {
+  const s = auth(req, res, "viewer");
+  if (!s) return;
+  const quality = req.body?.quality;
+  if (typeof quality !== "string" || !viewQualities.includes(quality)) {
+    res.status(400).json({ error: "Invalid picture quality." });
+    return;
+  }
+  store.setQuality(s, quality);
   res.sendStatus(204);
 });
 var msfwr_default = router2;
@@ -76086,7 +76292,7 @@ app.set("trust proxy", 2);
 app.use(
   (0, import_pino_http.default)({
     logger,
-    autoLogging: { ignore: (req) => /^\/api\/msfwr\/(?:tick|frame|input)(?:\?|$)/.test(req.url ?? "") },
+    autoLogging: { ignore: (req) => /^\/api\/msfwr\/(?:tick|frame|input|events|view)(?:\?|$)/.test(req.url ?? "") },
     serializers: {
       req(req) {
         return {
