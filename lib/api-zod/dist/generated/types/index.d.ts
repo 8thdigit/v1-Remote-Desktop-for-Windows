@@ -19,6 +19,7 @@ export * from './adminSessionMode';
 export * from './adminSessionState';
 export * from './authLogin';
 export * from './authStatus';
+export * from './getMsfwrEventsParams';
 export * from './getMsfwrFrameParams';
 export * from './getMsfwrLinkInfoParams';
 export * from './getMsfwrLinkStatusParams';

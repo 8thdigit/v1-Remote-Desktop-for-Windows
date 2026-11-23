@@ -127,7 +127,8 @@ on again. Uninstalling removes the key and the startup entry.
 Shares the primary display only. No file transfer, clipboard sync, audio,
 administrator elevation, or Windows sign-in/UAC control.
 The relay terminates TLS and can read screen frames and control events. Use a
-relay you and your helper trust. It holds only the latest frame in memory and
+relay you and your helper trust. It holds only the latest full frame, and the
+changed regions sent since it (at most 4 MB), in memory and
 does not record sessions. Sessions are process-local and require a single
 relay instance. Restarting that instance ends all sessions.
 

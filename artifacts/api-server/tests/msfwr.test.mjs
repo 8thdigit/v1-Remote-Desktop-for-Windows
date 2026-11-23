@@ -458,3 +458,57 @@ test("a URL the relay did not record (made before a restart) still gets its clai
   await bare.claimed("LABCDEF12345", {accountId: "a1", company: "Acme", raId: "135790", pin: "1234", at: now}, {name: "PC", createdAt: now, expiresAt: now + 3_600_000, ttlHours: 1});
   assert.equal(bare.list({accountId: "a1"}).length, 1);
 });
+
+test("keyframes and patches: viewers get what they are missing, and a full log asks for a keyframe", async () => {
+  const { decodeUpdates, encodeFrames, patchLogCount } = await import("../src/lib/msfwr.ts");
+  const store = createMsfwrStore();
+  const host = store.invite();
+  const s = store.authenticate(bearer(host.token), "host");
+  store.join(host.code);
+  store.approve(s);
+  const jpeg = (n) => Buffer.from([255, 216, n, 255, 217]);
+  // A patch before any keyframe cannot be shown.
+  assert.equal(store.tick(s, [{key: false, x: 16, y: 32, data: jpeg(1)}]).key, true);
+  assert.equal(s.sequence, 0);
+  store.tick(s, [{key: true, x: 0, y: 0, data: jpeg(2)}, {key: false, x: 16, y: 32, data: jpeg(3)}]);
+  store.tick(s, [{key: false, x: 0, y: 48, data: jpeg(4)}]);
+  assert.equal(s.sequence, 3);
+  assert.deepEqual(store.updatesAfter(s, 0).map((u) => [u.sequence, u.key, u.x, u.y]), [[1, true, 0, 0], [2, false, 16, 32], [3, false, 0, 48]]);
+  assert.deepEqual(store.updatesAfter(s, 2).map((u) => u.sequence), [3]);
+  assert.deepEqual(store.updatesAfter(s, 3), []);
+  // A new keyframe resets the log; a viewer behind it gets the keyframe.
+  store.tick(s, jpeg(5));
+  assert.deepEqual(store.updatesAfter(s, 2).map((u) => [u.sequence, u.key]), [[4, true]]);
+  for (let i = 0; i < patchLogCount; i++) store.tick(s, [{key: false, x: 0, y: 0, data: jpeg(6)}]);
+  assert.equal(store.tick(s, [{key: false, x: 0, y: 0, data: jpeg(7)}]).key, true);
+  assert.equal(store.tick(s, [{key: true, x: 0, y: 0, data: jpeg(8)}]).key, undefined);
+
+  // The wire formats round-trip, and a malformed upload is refused.
+  const upload = Buffer.concat([Buffer.from([1, 0, 16, 0, 32, 0, 0, 0, 5]), jpeg(9)]);
+  assert.deepEqual(decodeUpdates(upload), [{key: false, x: 16, y: 32, data: jpeg(9)}]);
+  assert.equal(decodeUpdates(upload.subarray(0, 12)), undefined);
+  assert.equal(decodeUpdates(Buffer.concat([Buffer.from([0, 0, 16, 0, 0, 0, 0, 0, 5]), jpeg(9)])), undefined, "a keyframe starts at 0,0");
+  assert.equal(decodeUpdates(Buffer.from([1, 0, 0, 0, 0, 0, 0, 0, 3, 1, 2, 3])), undefined, "only JPEGs");
+  const out = encodeFrames([{sequence: 7, key: false, x: 16, y: 32, data: jpeg(9)}]);
+  assert.deepEqual([out.readUInt32BE(0), out[4], out.readUInt16BE(5), out.readUInt16BE(7), out.readUInt32BE(9)], [7, 1, 16, 32, 5]);
+});
+
+test("watchers wake on frames, input and the end; an events host leaves input out of ticks", () => {
+  const store = createMsfwrStore();
+  const host = store.invite();
+  const s = store.authenticate(bearer(host.token), "host");
+  store.join(host.code);
+  store.approve(s);
+  let woke = 0;
+  const stop = store.watch(s, () => { woke += 1; });
+  store.enqueue(s, {kind: "move", x: 0.1, y: 0.1});
+  assert.equal(woke, 1);
+  assert.deepEqual(store.tick(s, undefined, true).input, [], "a host on /events gets input there");
+  assert.deepEqual(store.takeInput(s), [{kind: "move", x: 0.1, y: 0.1}]);
+  store.tick(s, Buffer.from([255, 216, 255, 217]));
+  assert.equal(woke, 2);
+  store.end(s);
+  assert.equal(woke, 3);
+  assert.equal(s.closed, true);
+  stop();
+});

@@ -40,6 +40,9 @@ type invite struct {
 type tick struct {
 	State, Verification string
 	Input               []event
+	// Patches says the relay accepts changed regions; Key asks for a
+	// keyframe. Older relays send neither.
+	Patches, Key bool
 }
 
 type event struct {
@@ -78,6 +81,28 @@ func (e *statusError) Error() string { return e.text }
 
 func (r *relay) post(ctx context.Context, path string, jpeg []byte, response any) error {
 	return r.send(ctx, path, jpeg, "image/jpeg", response)
+}
+
+// tick sends a heartbeat with packed screen updates (see packUpdates), if
+// any. With events set, the relay leaves input for the events channel.
+func (r *relay) tick(ctx context.Context, updates []byte, events bool, response *tick) error {
+	var extra map[string]string
+	if events {
+		extra = map[string]string{"X-Msfwr-Events": "1"}
+	}
+	return r.sendWith(ctx, "tick", updates, "application/x-msfwr-frames", extra, r.client, response)
+}
+
+// events waits up to wait for remote input. Relays without the input
+// channel answer 404.
+func (r *relay) events(ctx context.Context, wait time.Duration, response *tick) error {
+	client := *r.client
+	client.Timeout = wait + 6*time.Second
+	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%sevents?wait=%d", r.base, wait.Milliseconds()), nil)
+	if err != nil {
+		return err
+	}
+	return r.do(&client, req, "events", response)
 }
 
 func (r *relay) postJSON(ctx context.Context, path string, body, response any) error {
@@ -193,6 +218,10 @@ func (r *relay) revokeLink(ctx context.Context, id, key string) error {
 }
 
 func (r *relay) send(ctx context.Context, path string, payload []byte, contentType string, response any) error {
+	return r.sendWith(ctx, path, payload, contentType, nil, r.client, response)
+}
+
+func (r *relay) sendWith(ctx context.Context, path string, payload []byte, contentType string, extra map[string]string, client *http.Client, response any) error {
 	req, err := http.NewRequestWithContext(ctx, "POST", r.base+path, bytes.NewReader(payload))
 	if err != nil {
 		return err
@@ -200,10 +229,17 @@ func (r *relay) send(ctx context.Context, path string, payload []byte, contentTy
 	if len(payload) != 0 {
 		req.Header.Set("Content-Type", contentType)
 	}
+	for k, v := range extra {
+		req.Header.Set(k, v)
+	}
+	return r.do(client, req, path, response)
+}
+
+func (r *relay) do(client *http.Client, req *http.Request, path string, response any) error {
 	if r.token != "" {
 		req.Header.Set("Authorization", "Bearer "+r.token)
 	}
-	res, err := r.client.Do(req)
+	res, err := client.Do(req)
 	if err != nil {
 		return err
 	}

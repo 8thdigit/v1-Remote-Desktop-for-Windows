@@ -128,11 +128,74 @@ export type Session = {
   recorded?: boolean;
   expires: number;
   hostSeen: number;
+  // The latest full screen (a keyframe) and its sequence number.
   frame?: Buffer;
+  keySequence?: number;
+  // Changed regions sent since that keyframe, in order. A viewer composes
+  // the keyframe and these to get the current screen.
+  patches?: FramePatch[];
+  patchBytes?: number;
+  // Set when the patch log is full; the host is asked for a new keyframe.
+  wantKey?: boolean;
+  // The sequence number of the newest keyframe or patch.
   sequence: number;
   lastFrame: number;
   input: { item: MsfwrInput; time: number }[];
+  // Long-polling requests waiting for a frame, input or the session's end.
+  watchers?: Set<() => void>;
+  closed?: boolean;
 };
+
+// One screen update: a keyframe (the whole screen) or a patch (a JPEG of the
+// region at x, y).
+export type FrameUpdate = { key: boolean; x: number; y: number; data: Buffer };
+export type FramePatch = FrameUpdate & { sequence: number };
+
+// Bounds the patch log of one session. Past it, patches are ignored until the
+// host sends a new keyframe (the tick reply asks for one).
+export const patchLogBytes = 4 * 1024 * 1024;
+export const patchLogCount = 600;
+
+// Encodes updates for a viewer: for each, the sequence (u32), kind (u8, 0 for
+// a keyframe, 1 for a patch), x and y (u16), the JPEG length (u32) and the
+// JPEG. Big-endian.
+export function encodeFrames(items: FramePatch[]) {
+  const parts: Buffer[] = [];
+  for (const item of items) {
+    const head = Buffer.alloc(13);
+    head.writeUInt32BE(item.sequence, 0);
+    head.writeUInt8(item.key ? 0 : 1, 4);
+    head.writeUInt16BE(item.x, 5);
+    head.writeUInt16BE(item.y, 7);
+    head.writeUInt32BE(item.data.length, 9);
+    parts.push(head, item.data);
+  }
+  return Buffer.concat(parts);
+}
+
+const isJpeg = (b: Buffer) => b.length >= 4 && b.readUInt16BE(0) === 0xffd8 && b.readUInt16BE(b.length - 2) === 0xffd9;
+
+// Decodes what a host uploads: for each update, the kind (u8, 0 for a
+// keyframe, 1 for a patch), x and y (u16), the JPEG length (u32) and the
+// JPEG. Returns undefined when the body is malformed.
+export function decodeUpdates(body: Buffer): FrameUpdate[] | undefined {
+  const out: FrameUpdate[] = [];
+  let at = 0;
+  while (at < body.length) {
+    if (body.length - at < 9 || out.length >= 64) return;
+    const kind = body.readUInt8(at);
+    const x = body.readUInt16BE(at + 1);
+    const y = body.readUInt16BE(at + 3);
+    const length = body.readUInt32BE(at + 5);
+    at += 9;
+    if (kind > 1 || length > body.length - at) return;
+    const data = body.subarray(at, at + length);
+    at += length;
+    if (!isJpeg(data) || (kind === 0 && (x !== 0 || y !== 0))) return;
+    out.push({key: kind === 0, x, y, data: Buffer.from(data)});
+  }
+  return out.length ? out : undefined;
+}
 
 export type RequestStatus = "waiting" | "accepted" | "missed";
 
@@ -254,7 +317,18 @@ export function createMsfwrStore(clock = Date.now, hooks: StoreHooks = {}) {
     for (const token of s.viewers.keys()) peers.delete(token);
     s.viewers.clear();
     s.frame = undefined;
+    s.patches = undefined;
+    s.patchBytes = 0;
     s.input = [];
+    s.closed = true;
+    notify(s);
+  };
+  // Wakes the long-polling requests of a session so they check again.
+  const notify = (s: Session) => {
+    if (!s.watchers?.size) return;
+    for (const fn of [...s.watchers]) {
+      try { fn(); } catch { /* a watcher must not break the others */ }
+    }
   };
   const addViewer = (s: Session) => {
     const token = randomBytes(32).toString("base64url");
@@ -690,20 +764,67 @@ export function createMsfwrStore(clock = Date.now, hooks: StoreHooks = {}) {
       goLive(s);
       return true;
     },
-    tick(s: Session, frame?: Buffer) {
+    // A host heartbeat, with the screen updates it carries: a bare JPEG (a
+    // keyframe, from older hosts) or a list of keyframes and patches. With
+    // events set, the host reads input from /events, so the queue is left.
+    tick(s: Session, frame?: Buffer | FrameUpdate[], events = false) {
       if (s.state !== "live") return {state: s.state, verification: s.verification, input: []};
       const now = clock();
-      if (frame && now - s.lastFrame >= 100) {
+      const updates = Buffer.isBuffer(frame) ? [{key: true, x: 0, y: 0, data: frame}] : frame ?? [];
+      let changed = false;
+      for (const u of updates) {
+        if (u.key) {
+          s.sequence += 1;
+          s.frame = u.data;
+          s.keySequence = s.sequence;
+          s.patches = [];
+          s.patchBytes = 0;
+          s.wantKey = false;
+        } else {
+          // A patch applies on top of the current keyframe; without one, or
+          // once the log is full, it cannot be shown, so the host is asked
+          // for a keyframe instead.
+          if (!s.frame || s.wantKey || (s.patchBytes ?? 0) + u.data.length > patchLogBytes ||
+              (s.patches?.length ?? 0) >= patchLogCount) {
+            s.wantKey = true;
+            continue;
+          }
+          s.sequence += 1;
+          (s.patches ??= []).push({...u, sequence: s.sequence});
+          s.patchBytes = (s.patchBytes ?? 0) + u.data.length;
+        }
         s.lastFrame = now;
-        s.frame = frame;
-        s.sequence += 1;
+        changed = true;
       }
+      if (changed) notify(s);
+      const input = events ? [] : store.takeInput(s);
+      return {state: s.state, input, ...(s.wantKey ? {key: true} : {})};
+    },
+    // Removes and returns the input queued for the host.
+    takeInput(s: Session): MsfwrInput[] {
+      const now = clock();
       const queued = s.input.splice(0);
       // Drop old actions instead of replaying them after a stall. Ensure that
       // a dropped button-up cannot leave a mouse button held on the host.
       const stale = queued.some(({time}) => now - time > 1000);
-      const input: MsfwrInput[] = stale ? [{kind:"release"}] : queued.map(({item}) => item);
-      return {state: s.state, input};
+      return stale ? [{kind:"release"}] : queued.map(({item}) => item);
+    },
+    // The screen updates a viewer that has seen sequence `after` still
+    // needs: the keyframe and every patch after it when the viewer is behind
+    // the keyframe, otherwise only the newer patches.
+    updatesAfter(s: Session, after: number): FramePatch[] {
+      if (!s.frame || s.keySequence === undefined || s.sequence <= after) return [];
+      const patches = s.patches ?? [];
+      if (after < s.keySequence) {
+        return [{key: true, x: 0, y: 0, data: s.frame, sequence: s.keySequence}, ...patches];
+      }
+      return patches.filter((p) => p.sequence > after);
+    },
+    // Runs fn whenever the session gets a frame or input, or ends, until the
+    // returned function is called.
+    watch(s: Session, fn: () => void) {
+      (s.watchers ??= new Set()).add(fn);
+      return () => { s.watchers?.delete(fn); };
     },
     enqueue(s: Session, item: MsfwrInput) {
       const last = s.input.at(-1);
@@ -711,9 +832,11 @@ export function createMsfwrStore(clock = Date.now, hooks: StoreHooks = {}) {
       if (item.kind === "move" && last?.item.kind === "move") s.input.pop();
       if (s.input.length >= 48) {
         s.input = [{item: {kind: "release"}, time: clock()}];
+        notify(s);
         return false;
       }
       s.input.push({item, time: clock()});
+      notify(s);
       return true;
     },
 

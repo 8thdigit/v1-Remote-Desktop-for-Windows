@@ -2,9 +2,10 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"runtime"
+	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -91,53 +92,32 @@ func run(parent context.Context, r *relay, lines <-chan string, updates chan<- s
 	}
 }
 
+// stream shares the screen and applies remote input until the session ends.
+// Screen updates and input travel separately: the screen loop uploads only
+// the regions that changed, as fast as the link allows, while input arrives
+// on its own long-polling channel (on relays that offer it) and is applied
+// the moment it lands.
 func stream(ctx context.Context, r *relay) error {
+	ctx, cancel := context.WithCancel(ctx)
 	input := newControls()
-	defer input.release()
-	cadence := time.NewTicker(200 * time.Millisecond)
-	defer cadence.Stop()
-	deadline := time.Now().Add(30 * time.Minute)
-	var digest [32]byte
-	var lastUpload time.Time
-	for {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		if time.Now().After(deadline) {
-			return errors.New("the 30-minute session limit was reached")
-		}
-		if !onDefaultDesktop() {
-			return errors.New("Windows switched to a locked or protected desktop")
-		}
-		frame, w, h, err := snapshot()
-		if err != nil {
-			return err
-		}
-		hash := sha256.Sum256(frame.Pix)
-		var data []byte
-		if hash != digest || time.Since(lastUpload) > 10*time.Second {
-			data, err = encodeJPEG(frame)
-			if err != nil {
-				return err
-			}
-		}
-		var reply tick
-		if err := r.post(ctx, "tick", data, &reply); err != nil {
-			return err
-		}
-		if reply.State != "live" {
-			return errors.New("relay ended the approved session")
-		}
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		if !onDefaultDesktop() || !sameScreen(w, h) {
-			return errors.New("Windows desktop or display configuration changed")
-		}
-		if len(data) > 0 {
-			digest, lastUpload = hash, time.Now()
-		}
-		for _, a := range reply.Input {
+	var inputMu sync.Mutex
+	defer func() {
+		// Stop the input channel first, so nothing is pressed after release.
+		cancel()
+		inputMu.Lock()
+		input.release()
+		inputMu.Unlock()
+	}()
+	screen := newCapturer()
+	defer screen.close()
+	frame, w, h, rects, err := screen.grab()
+	if err != nil {
+		return err
+	}
+	apply := func(list []event) error {
+		inputMu.Lock()
+		defer inputMu.Unlock()
+		for _, a := range list {
 			if ctx.Err() != nil || stopPressed() {
 				return context.Canceled
 			}
@@ -146,10 +126,195 @@ func stream(ctx context.Context, r *relay) error {
 		if time.Since(input.lastPointer) > 3*time.Second {
 			input.release()
 		}
+		return nil
+	}
+
+	// The input channel. A relay without /events answers 404; input then
+	// comes with each tick, as before.
+	var eventsOn atomic.Bool
+	inputDone := make(chan error, 1)
+	go func() {
+		var reply tick
+		if err := r.events(ctx, 0, &reply); err != nil {
+			var status *statusError
+			if errors.As(err, &status) && status.status == 404 {
+				inputDone <- nil
+				return
+			}
+			inputDone <- err
+			cancel()
+			return
+		}
+		eventsOn.Store(true)
+		for {
+			if reply.State != "live" {
+				inputDone <- errors.New("relay ended the approved session")
+				cancel()
+				return
+			}
+			if err := apply(reply.Input); err != nil {
+				inputDone <- err
+				cancel()
+				return
+			}
+			reply = tick{}
+			if err := r.events(ctx, 4*time.Second, &reply); err != nil {
+				inputDone <- err
+				cancel()
+				return
+			}
+		}
+	}()
+	fail := func(err error) error {
+		// Prefer the input channel's reason when it stopped the session.
 		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-cadence.C:
+		case inErr := <-inputDone:
+			if inErr != nil {
+				return inErr
+			}
+		default:
+		}
+		return err
+	}
+
+	pace := newPacer()
+	deadline := time.Now().Add(30 * time.Minute)
+	patches := false // the relay accepts patches (learned from its replies)
+	needKey := true  // the next update must be a keyframe
+	refine := false  // patches were sent since the last keyframe
+	var keyBytes, sinceKey int
+	var lastChange, lastTick time.Time
+	for {
+		if ctx.Err() != nil {
+			return fail(ctx.Err())
+		}
+		if time.Now().After(deadline) {
+			return errors.New("the 30-minute session limit was reached")
+		}
+		if !onDefaultDesktop() {
+			return errors.New("Windows switched to a locked or protected desktop")
+		}
+		started := time.Now()
+		if rects != nil {
+			lastChange = started
+		}
+		// Decide what to send: a keyframe when one is due, the changed
+		// regions otherwise, or nothing.
+		var list []update
+		key := needKey || !patches || (rects != nil && totalArea(rects, frame.Rect.Dx(), frame.Rect.Dy()) > keyArea) ||
+			(rects != nil && keyBytes > 0 && sinceKey > 2*keyBytes)
+		quality := pace.quality()
+		if rects == nil && !needKey {
+			key = false
+			// Once the screen settles, replace the patches with a sharper
+			// keyframe so their edges and low-quality blocks clear.
+			if refine && patches && started.Sub(lastChange) > 1200*time.Millisecond {
+				key, quality = true, pace.refineQuality()
+			}
+		}
+		if key {
+			data, err := encodeJPEG(frame, quality)
+			if err != nil {
+				return err
+			}
+			list = []update{{key: true, jpeg: data}}
+		} else if rects != nil {
+			for _, rc := range rects {
+				data, err := encodeJPEG(frame.SubImage(rc), quality)
+				if err != nil {
+					return err
+				}
+				list = append(list, update{x: rc.Min.X, y: rc.Min.Y, jpeg: data})
+			}
+		}
+		heartbeat := 200 * time.Millisecond
+		if eventsOn.Load() {
+			heartbeat = time.Second
+		}
+		if len(list) > 0 || time.Since(lastTick) >= heartbeat {
+			var reply tick
+			sent := 0
+			t0 := time.Now()
+			switch {
+			case len(list) == 0:
+				err = r.tick(ctx, nil, eventsOn.Load(), &reply)
+			case patches:
+				body := packUpdates(list)
+				if !list[0].key && len(body) > 1400*1024 {
+					// Too many changes for one upload: send the whole screen.
+					data, err := encodeJPEG(frame, quality)
+					if err != nil {
+						return err
+					}
+					list = []update{{key: true, jpeg: data}}
+					body = packUpdates(list)
+				}
+				sent = len(body)
+				err = r.tick(ctx, body, eventsOn.Load(), &reply)
+			default:
+				// A relay without patches takes a bare JPEG keyframe.
+				sent = len(list[0].jpeg)
+				err = r.post(ctx, "tick", list[0].jpeg, &reply)
+			}
+			if err != nil {
+				return fail(err)
+			}
+			lastTick = time.Now()
+			pace.observe(sent, lastTick.Sub(t0))
+			if reply.State != "live" {
+				return errors.New("relay ended the approved session")
+			}
+			if len(list) > 0 {
+				if list[0].key {
+					keyBytes, sinceKey = sent, 0
+					refine = false
+				} else {
+					sinceKey += sent
+					refine = true
+				}
+				needKey = false
+			}
+			// A relay that does not know patches never says so; it is
+			// sent keyframes only.
+			if reply.Patches {
+				patches = true
+			}
+			if reply.Key {
+				needKey = true
+			}
+			if len(reply.Input) > 0 {
+				if err := apply(reply.Input); err != nil {
+					return err
+				}
+			}
+		}
+		if ctx.Err() != nil {
+			return fail(ctx.Err())
+		}
+		if !onDefaultDesktop() || !sameScreen(w, h) {
+			return errors.New("Windows desktop or display configuration changed")
+		}
+		// Older relays ignore frames closer than 100 ms apart.
+		gap := pace.gap
+		if !patches && gap < 100*time.Millisecond {
+			gap = 100 * time.Millisecond
+		}
+		if len(list) == 0 {
+			// Nothing changed: look again soon, so a change shows quickly.
+			gap = minGap
+		}
+		if wait := gap - time.Since(started); wait > 0 {
+			t := time.NewTimer(wait)
+			select {
+			case <-ctx.Done():
+				t.Stop()
+				return fail(ctx.Err())
+			case <-t.C:
+			}
+		}
+		frame, _, _, rects, err = screen.grab()
+		if err != nil {
+			return err
 		}
 	}
 }

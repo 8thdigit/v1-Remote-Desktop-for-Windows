@@ -432,10 +432,27 @@ export type GetMsfwrLinkInfoParams = {
      */
     code: string;
 };
+export type GetMsfwrEventsParams = {
+    /**
+     * @minimum 0
+     * @maximum 8000
+     */
+    wait?: number;
+};
 export type GetMsfwrFrameParams = {
     /**
      * @minimum 0
      */
     after?: number;
+    /**
+     * @minimum 2
+     * @maximum 2
+     */
+    v?: number;
+    /**
+     * @minimum 0
+     * @maximum 8000
+     */
+    wait?: number;
 };
 //# sourceMappingURL=api.schemas.d.ts.map
