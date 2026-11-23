@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { accessPinLimit, accessPinTries, createMsfwrStore, pcId, standingCode } from "../src/lib/msfwr.ts";
+import { accessPinLimit, accessPinTries, companyPinTTL, createMsfwrStore, standingCode } from "../src/lib/msfwr.ts";
 
 const bearer = (token) => `Bearer ${token}`;
-// A link's Access PIN, as the admin console sees it.
-const apin = (store, link) => store.overview().links.find((l) => l.id === pcId(link.code)).accessPin;
+// A PIN that opens the link: the PIN it was authored with, or else a test
+// company's current PIN (which authors it).
+const testCompany = {id: "acct-test", name: "Test Co", raId: "999001"};
+const apin = (store, link) => store.claimOf(link.code)?.pin ?? store.companyPin(testCompany).pin;
 
 test("the invite is one-time and viewer and host capabilities cannot be swapped", () => {
   const store = createMsfwrStore();
@@ -346,66 +348,83 @@ test("a waiting registration that never goes live is not recorded", () => {
   assert.equal(ended.length, 0, "a session that never went live is not in history");
 });
 
-test("a link also needs the company's Access PIN; only the company sees it, and wrong PINs lock then block the link", () => {
+test("company PINs are unique, change every three minutes until used, and author the URL they are used on", () => {
   let now = 11_000_000;
   const store = createMsfwrStore(() => now);
-  store.setPinSecret("secret-one");
-  store.standing(key("p"), "FRONT-DESK", "135790");
+  const acme = {id: "a1", name: "Acme", raId: "135790"};
+  const globex = {id: "g1", name: "Globex", raId: "246802"};
+  store.standing(key("p"), "FRONT-DESK", "111111");
   const link = store.linkCreate(key("p"), "FRONT-DESK", 24);
-  assert.equal(link.accessPin, undefined, "the PC that creates the URL is not given the Access PIN");
-  assert.equal(store.linkStatus(link.id, key("p")).link.accessPin, undefined);
-  const [mine] = store.companyLinks("135790");
-  assert.match(mine.accessPin, /^\d{4}$/);
-  assert.deepEqual([mine.name, mine.online, mine.locked, mine.blocked], ["FRONT-DESK", true, false, false]);
-  assert.equal(mine.expiresAt, link.expiresAt, "the PIN is valid for as long as the URL");
-  assert.equal(mine.code, undefined, "the company view never carries the link's code");
-  assert.deepEqual(store.companyLinks("246802"), [], "another company sees nothing");
+  assert.equal(link.accessPin, undefined);
   assert.equal(store.linkInfo(link.code).accessPinRequired, true);
+  assert.equal(store.linkInfo(link.code).claimed, false);
 
-  // The URL with its access code alone is not enough.
+  const first = store.companyPin(acme);
+  assert.match(first.pin, /^\d{4}$/);
+  assert.equal(first.expiresAt - first.issuedAt, companyPinTTL);
+  assert.equal(store.companyPin(acme).pin, first.pin, "the same PIN while it is valid");
+  assert.notEqual(store.companyPin(globex).pin, first.pin, "two companies never hold the same PIN");
+  now += companyPinTTL;
+  store.standing(key("p"), "FRONT-DESK", "111111"); // the PC keeps polling
+  const second = store.companyPin(acme);
+  assert.ok(second.issuedAt > first.issuedAt, "an unused PIN is replaced after three minutes");
+  assert.deepEqual(store.linkJoin(link.code, link.pin, first.pin === second.pin ? "x" : first.pin), {error: "access-pin"}, "an expired PIN does not work");
+
+  // The URL and access code alone are not enough.
   assert.deepEqual(store.linkJoin(link.code, link.pin), {error: "access-pin-required"});
-  const wrong = mine.accessPin === "0000" ? "0001" : "0000";
-  for (let i = 0; i < accessPinTries - 1; i++) assert.deepEqual(store.linkJoin(link.code, link.pin, wrong), {error: "access-pin"});
-  assert.deepEqual(store.linkJoin(link.code, link.pin, wrong), {error: "access-pin"});
-  assert.deepEqual(store.linkJoin(link.code, link.pin, mine.accessPin), {error: "locked"}, "five wrong PINs lock the link");
-  assert.equal(store.companyLinks("135790")[0].locked, true);
-  now += 15 * 60_000 + 1;
-  store.standing(key("p"), "FRONT-DESK", "135790");
-  assert.ok(store.linkJoin(link.code, link.pin, mine.accessPin).viewer, "the right PIN connects");
+  assert.deepEqual(store.linkAuthor(link.code, second.pin), {accountId: "a1", raId: "135790"});
+  const joined = store.linkJoin(link.code, link.pin, second.pin);
+  assert.ok(joined.viewer);
+  assert.equal(joined.claimed, true);
+  assert.deepEqual([joined.claim.company, joined.claim.pin], ["Acme", second.pin]);
+  assert.equal(store.claimOf(link.code).accountId, "a1");
+  assert.equal(store.linkInfo(link.code).claimed, true);
+  assert.notEqual(store.companyPin(acme).pin, second.pin, "a used PIN is replaced at once for the next URL");
+  assert.equal(store.overview().live[0].operator, "Acme", "the session is authored by the company");
 
-  // The PIN survives a relay restart (same secret) but differs per link.
-  const restarted = createMsfwrStore(() => now);
-  restarted.setPinSecret("secret-one");
-  restarted.standing(key("p"), "FRONT-DESK", "135790");
-  restarted.linkRestore({id: link.id, key: key("p"), pin: link.pin, name: "FRONT-DESK", createdAt: link.createdAt, expiresAt: link.expiresAt});
-  assert.equal(restarted.companyLinks("135790")[0].accessPin, mine.accessPin);
-  const other = restarted.linkCreate(key("p"), "FRONT-DESK", 24);
-  assert.equal(restarted.companyLinks("135790").length, 2);
-
-  // Too many wrong PINs in all and the URL stops working for good.
-  const otherPin = apin(restarted, other);
-  const bad = otherPin === "0000" ? "0001" : "0000";
-  for (let i = 0; i < accessPinLimit; i++) {
-    restarted.linkJoin(other.code, other.pin, bad);
-    now += 15 * 60_000 + 1;
-    restarted.standing(key("p"), "FRONT-DESK", "135790");
-  }
-  assert.deepEqual(restarted.linkJoin(other.code, other.pin, otherPin), {error: "blocked"});
-  assert.equal(restarted.linkInfo(other.code).blocked, true);
-  assert.equal(restarted.companyLinks("135790").find((l) => l.id === pcId(other.code)).blocked, true);
+  // Once authored, only that PIN opens the URL, for as long as the URL lives.
+  const globexPin = store.companyPin(globex).pin;
+  assert.deepEqual(store.linkJoin(link.code, link.pin, globexPin), {error: "access-pin"}, "another company cannot author it too");
+  now += 20 * 3_600_000;
+  store.standing(key("p"), "FRONT-DESK", "111111");
+  assert.ok(store.linkJoin(link.code, link.pin, second.pin).viewer, "the used PIN still opens it hours later");
 });
 
-test("a link's company follows the PC's RA ID and is kept while the PC is offline", () => {
+test("a company PIN used on another URL authors that one separately", () => {
+  let now = 11_500_000;
+  const store = createMsfwrStore(() => now);
+  const acme = {id: "a1", name: "Acme", raId: "135790"};
+  const globex = {id: "g1", name: "Globex", raId: "246802"};
+  store.standing(key("u"), "PC-ONE");
+  store.standing(key("v"), "PC-TWO");
+  const one = store.linkCreate(key("u"), "PC-ONE", 4);
+  const two = store.linkCreate(key("v"), "PC-TWO", 4);
+  const a = store.companyPin(acme).pin;
+  assert.ok(store.linkJoin(one.code, one.pin, a).viewer);
+  const g = store.companyPin(globex).pin;
+  assert.ok(store.linkJoin(two.code, two.pin, g).viewer);
+  assert.equal(store.claimOf(one.code).company, "Acme");
+  assert.equal(store.claimOf(two.code).company, "Globex");
+  assert.deepEqual(store.linkJoin(two.code, two.pin, a), {error: "access-pin"});
+});
+
+test("wrong PINs lock, then block, a URL; claims can be restored after a restart", () => {
   let now = 12_000_000;
   const store = createMsfwrStore(() => now);
-  store.standing(key("q"), "PC", "111111");
-  const link = store.linkCreate(key("q"), "PC", 4);
-  assert.equal(store.companyLinks("111111").length, 1);
-  store.standing(key("q"), "PC", "222222");
-  assert.equal(store.companyLinks("111111").length, 0, "moving the PC to another RA ID moves its link");
-  assert.equal(store.companyLinks("222222").length, 1);
-  now += 60_000; // the PC stops polling and goes offline
-  const [offline] = store.companyLinks("222222");
-  assert.equal(offline.online, false);
-  assert.equal(offline.id, pcId(link.code));
+  store.standing(key("p"), "FRONT-DESK");
+  const link = store.linkCreate(key("p"), "FRONT-DESK", 24);
+  const good = store.companyPin(testCompany).pin;
+  const bad = good === "0000" ? "0001" : "0000";
+  for (let i = 0; i < accessPinTries; i++) assert.deepEqual(store.linkJoin(link.code, link.pin, bad), {error: "access-pin"});
+  assert.deepEqual(store.linkJoin(link.code, link.pin, good), {error: "locked"});
+  for (let i = 0; i < accessPinLimit; i++) { now += 15 * 60_000 + 1; store.linkJoin(link.code, link.pin, bad); }
+  store.standing(key("p"), "FRONT-DESK");
+  assert.deepEqual(store.linkJoin(link.code, link.pin, store.companyPin(testCompany).pin), {error: "blocked"});
+  assert.equal(store.linkInfo(link.code).blocked, true);
+
+  const restarted = createMsfwrStore(() => now);
+  restarted.restoreClaims([{code: link.code, claim: {accountId: "a1", company: "Acme", raId: "135790", pin: "4321", at: now}}]);
+  restarted.standing(key("p"), "FRONT-DESK");
+  restarted.linkRestore({id: link.id, key: key("p"), pin: link.pin, name: "FRONT-DESK", createdAt: link.createdAt, expiresAt: link.expiresAt});
+  assert.ok(restarted.linkJoin(link.code, link.pin, "4321").viewer, "the restored claim's PIN opens it");
 });

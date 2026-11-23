@@ -138,59 +138,63 @@ test("a PC pointed at the company's RA ID: Initiate reaches only that company, w
   assert.equal((await acme("POST", "/msfwr/end", undefined, viewer)).status, 204);
 });
 
-test("remote access URL: create from the PC, open with the access code and the company's Access PIN, clear it", async () => {
+test("remote access URL: a company's PIN authors it, only that company sees it, and the admin console records it", async () => {
   const pc = client();
-  const reg = await pc("POST", "/msfwr/standing", { key: pcKey("r"), name: "HOME-LAPTOP", ra: "RA-424242" });
+  const reg = await pc("POST", "/msfwr/standing", { key: pcKey("r"), name: "HOME-LAPTOP" });
   const created = await pc("POST", "/msfwr/link/create", { key: pcKey("r"), name: "HOME-LAPTOP", ttlHours: 24 });
   assert.equal(created.status, 201, JSON.stringify(created.json));
   const link = created.json;
   assert.match(link.pin, /^\d{6}$/);
-  assert.equal(link.accessPin, undefined, "the PC is not given the Access PIN");
 
-  // Only the company behind the PC's RA ID sees the Access PIN.
-  const acme = client();
-  await acme("POST", "/auth/login", { username: "acme", password: "acme-pass-123" });
-  const links = (await acme("GET", "/msfwr/inbox")).json.links;
-  assert.equal(links.length, 1);
-  assert.deepEqual([links[0].name, links[0].expiresAt], ["HOME-LAPTOP", link.expiresAt]);
-  const accessPin = links[0].accessPin;
-  assert.match(accessPin, /^\d{4}$/);
-  assert.ok(!JSON.stringify(links).includes(link.code), "the company view does not carry the URL");
-  const rival = client();
-  await rival("POST", "/auth/login", { username: "rival", password: "rival-pass-123" });
-  assert.deepEqual((await rival("GET", "/msfwr/inbox")).json.links, []);
   const admin = client();
   await admin("POST", "/auth/login", { username: "root", password: "admin-pass-123" });
-  assert.equal((await admin("GET", "/admin/overview")).json.links[0].accessPin, accessPin, "relay admins see it too");
+  let record = (await admin("GET", "/admin/overview")).json.links.find((l) => l.code === link.code);
+  assert.deepEqual([record.pcName, record.status, record.claim], ["HOME-LAPTOP", "active", undefined], "the URL is recorded on creation");
+
+  const acme = client();
+  await acme("POST", "/auth/login", { username: "acme", password: "acme-pass-123" });
+  const before = (await acme("GET", "/msfwr/inbox")).json;
+  const accessPin = before.accessPin.pin;
+  assert.match(accessPin, /^\d{4}$/);
+  assert.ok(before.accessPin.expiresAt - before.accessPin.issuedAt <= 3 * 60_000);
+  assert.deepEqual(before.links, []);
+  const rival = client();
+  await rival("POST", "/auth/login", { username: "rival", password: "rival-pass-123" });
+  const rivalPin = (await rival("GET", "/msfwr/inbox")).json.accessPin.pin;
+  assert.notEqual(rivalPin, accessPin);
 
   const visitor = client();
   const info = await visitor("GET", `/msfwr/link/info?code=${link.code}`);
-  assert.deepEqual([info.status, info.json.name, info.json.online, info.json.accessPinRequired], [200, "HOME-LAPTOP", true, true]);
-  const wrong = link.pin === "000000" ? "000001" : "000000";
-  assert.equal((await visitor("POST", "/msfwr/link/join", { code: link.code, pin: wrong, accessPin })).status, 403);
+  assert.deepEqual([info.status, info.json.accessPinRequired, info.json.claimed], [200, true, false]);
   const urlOnly = await visitor("POST", "/msfwr/link/join", { code: link.code, pin: link.pin });
   assert.equal(urlOnly.status, 403, "the URL and its access code alone do not connect");
-  assert.match(urlOnly.json.error, /Access PIN/);
-  const badPin = accessPin === "0000" ? "0001" : "0000";
-  assert.equal((await visitor("POST", "/msfwr/link/join", { code: link.code, pin: link.pin, accessPin: badPin })).status, 403);
   const joined = await visitor("POST", "/msfwr/link/join", { code: link.code, pin: link.pin, accessPin });
-  assert.equal(joined.status, 200);
+  assert.equal(joined.status, 200, JSON.stringify(joined.json));
   assert.equal((await pc("POST", "/msfwr/tick", undefined, { authorization: `Bearer ${reg.json.token}` })).json.state, "live");
   const other = client();
+  assert.equal((await other("POST", "/msfwr/link/join", { code: link.code, pin: link.pin, accessPin: rivalPin })).status, 403, "a second company cannot author the same URL");
   const both = await other("POST", "/msfwr/link/join", { code: link.code, pin: link.pin, accessPin });
-  assert.equal(both.status, 200, "a second person can connect through the same URL");
-  assert.equal((await other("GET", `/msfwr/link/info?code=${link.code}`)).json.viewers, 2);
+  assert.equal(both.status, 200, "the authoring PIN keeps working for the URL");
   await visitor("POST", "/msfwr/end", undefined, { authorization: `Bearer ${joined.json.token}` });
-  assert.equal((await pc("POST", "/msfwr/tick", undefined, { authorization: `Bearer ${reg.json.token}` })).json.state, "live", "still live for the other person");
   await other("POST", "/msfwr/end", undefined, { authorization: `Bearer ${both.json.token}` });
 
-  const status = await pc("GET", `/msfwr/link/status?id=${link.id}&key=${pcKey("r")}`);
-  assert.equal(status.json.link.sessions, 2);
-  assert.equal(status.json.link.accessPin, undefined);
+  const after = (await acme("GET", "/msfwr/inbox")).json;
+  assert.notEqual(after.accessPin.pin, accessPin, "the company gets a new PIN for its next URL");
+  assert.equal(after.links.length, 1);
+  assert.deepEqual([after.links[0].code, after.links[0].claim.pin, after.links[0].claim.company], [link.code, accessPin, "Acme Ltd"]);
+  assert.deepEqual((await rival("GET", "/msfwr/inbox")).json.links, [], "other companies do not see it");
+  for (let i = 0; i < 20 && !(await acme("GET", "/msfwr/inbox")).json.links[0].sessions.length; i++) await new Promise((r) => setTimeout(r, 50));
+  assert.equal((await acme("GET", "/msfwr/inbox")).json.links[0].sessions.length, 1, "the session is recorded against the URL");
+  record = (await admin("GET", "/admin/overview")).json.links.find((l) => l.code === link.code);
+  assert.deepEqual([record.claim.company, record.claim.pin, record.claim.raId], ["Acme Ltd", accessPin, "424242"]);
+  const history = (await admin("GET", "/billing/sessions")).json.sessions;
+  const acmeId = (await admin("GET", "/admin/users")).json.users.find((u) => u.username === "acme").id;
+  assert.ok(history.some((h) => h.mode === "link" && h.operator === "Acme Ltd" && h.accountId === acmeId), "the session history credits the authoring company");
+
   assert.equal((await pc("POST", "/msfwr/link/revoke", { id: link.id, key: pcKey("r") })).status, 204);
   assert.equal((await visitor("GET", `/msfwr/link/info?code=${link.code}`)).status, 404);
-  assert.deepEqual((await acme("GET", "/msfwr/inbox")).json.links, [], "a cleared URL leaves the company's list");
-  // The PC re-sending a cleared link does not bring it back unless it has the pin (a restore).
+  record = (await admin("GET", "/admin/overview")).json.links.find((l) => l.code === link.code);
+  assert.equal(record.status, "cleared");
   assert.equal((await pc("POST", "/msfwr/link/register", { id: link.id, key: pcKey("r") })).status, 410);
 });
 
@@ -201,7 +205,9 @@ test("accounts and Access PINs survive a relay restart", async () => {
   const link = (await pc("POST", "/msfwr/link/create", { key: pcKey("s"), name: "SHOP-PC", ttlHours: 24 })).json;
   const before = client();
   await before("POST", "/auth/login", { username: "acme", password: "acme-pass-123" });
-  const pinBefore = (await before("GET", "/msfwr/inbox")).json.links[0].accessPin;
+  const pinBefore = (await before("GET", "/msfwr/inbox")).json.accessPin.pin;
+  assert.equal((await client()("POST", "/msfwr/link/join", { code: link.code, pin: link.pin, accessPin: pinBefore })).status, 200);
+  await new Promise((r) => setTimeout(r, 200));
   server.kill();
   await new Promise((r) => server.once("exit", r));
   server = spawn(process.execPath, [path.join(here, "..", "dist", "index.mjs")], {
@@ -218,7 +224,11 @@ test("accounts and Access PINs survive a relay restart", async () => {
   await pc("POST", "/msfwr/standing", { key: pcKey("s"), name: "SHOP-PC", ra: "RA-424242" });
   const restored = await pc("POST", "/msfwr/link/register", { id: link.id, key: pcKey("s"), pin: link.pin, name: "SHOP-PC", createdAt: link.createdAt, expiresAt: link.expiresAt });
   assert.equal(restored.status, 201);
-  assert.equal((await acme("GET", "/msfwr/inbox")).json.links[0].accessPin, pinBefore, "the Access PIN is the same after a restart");
+  assert.equal((await acme("GET", "/msfwr/inbox")).json.links.find((l) => l.code === link.code).claim.pin, pinBefore, "the URL record survives a restart");
+  const rivalNow = client();
+  await rivalNow("POST", "/auth/login", { username: "rival", password: "rival-pass-123" });
+  const rivalPin = (await rivalNow("GET", "/msfwr/inbox")).json.accessPin.pin;
+  assert.equal((await client()("POST", "/msfwr/link/join", { code: link.code, pin: link.pin, accessPin: rivalPin })).status, 403, "the claim survives too");
 });
 
 test("a new relay has a default admin with PIN 121212 that must be changed at first sign-in", async () => {

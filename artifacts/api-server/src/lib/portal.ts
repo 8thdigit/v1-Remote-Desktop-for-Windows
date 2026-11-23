@@ -9,6 +9,7 @@ import {
   type Billing, type Entitlement, type SubStatus,
 } from "./billing";
 import { createMsfwrStore, type EndedSession, type Session } from "./msfwr";
+import { createLinkLog, fileLinkLogBackend, postgresLinkLogBackend, type LinkLog } from "./linklog";
 import { logger } from "./logger";
 
 // Shared relay state: the session store, the portal accounts, the billing
@@ -20,7 +21,9 @@ import { logger } from "./logger";
 // PC's RA ID, which is mapped to a company account here.
 export const store = createMsfwrStore(Date.now, {
   onLive(session: Session) {
-    const ra = session.ra;
+    // A session counts against the company that opened it: the signed-in
+    // company, or the company whose PIN authored the remote access URL.
+    const ra = session.operator?.raId ?? session.ra;
     if (!ra) return;
     void (async () => {
       try {
@@ -32,7 +35,14 @@ export const store = createMsfwrStore(Date.now, {
   onEnd(ended: EndedSession) {
     void (async () => {
       try {
-        const account = ended.raId ? (await accountsReady()).findRa(ended.raId) : undefined;
+        const accounts = await accountsReady();
+        const account = (ended.operatorId ? accounts.get(ended.operatorId) : undefined)
+          ?? (ended.raId ? accounts.findRa(ended.raId) : undefined);
+        if (ended.link) {
+          await (await linkLogReady()).session(ended.link, {
+            startedAt: ended.startedAt, endedAt: ended.endedAt, durationMs: ended.durationMs, viewers: ended.viewers,
+          });
+        }
         await (await billingReady()).recordSession({
           accountId: account?.id ?? null,
           raId: ended.raId,
@@ -46,6 +56,16 @@ export const store = createMsfwrStore(Date.now, {
         });
       } catch (err) { logger.warn({ err }, "Could not record session history"); }
     })();
+  },
+  // The remote access URL register: creation, the authoring company, clearing.
+  onLinkCreated(link) {
+    void linkLogReady().then((log) => log.created(link)).catch((err) => logger.warn({ err }, "Could not record a new remote access URL"));
+  },
+  onLinkClaimed(code, claim) {
+    void linkLogReady().then((log) => log.claimed(code, claim)).catch((err) => logger.warn({ err }, "Could not record a URL claim"));
+  },
+  onLinkRevoked(code, at) {
+    void linkLogReady().then((log) => log.revoked(code, at)).catch((err) => logger.warn({ err }, "Could not record a cleared URL"));
   },
 });
 setInterval(store.sweep, 5000).unref();
@@ -69,9 +89,6 @@ async function open(): Promise<Accounts> {
   }
   const accounts = await createAccounts(backend, { secret: process.env["SESSION_SECRET"] });
   logger.info({ storage: accounts.backend, users: accounts.list().length }, "Login accounts loaded");
-  // Remote access link Access PINs come from the same persistent secret, so
-  // a company's PINs stay the same after a relay restart.
-  store.setPinSecret(accounts.derive("link-access-pin"));
   if (accounts.empty) {
     const username = (process.env["ADMIN_USERNAME"] || "admin").toLowerCase();
     const password = process.env["ADMIN_PASSWORD"];
@@ -114,6 +131,49 @@ export function billingReady() {
     throw err;
   });
   return openingBilling;
+}
+
+// The remote access URL register shares the accounts' storage location. Claims
+// of URLs that are still valid are handed back to the session store, so a
+// URL stays tied to the company that authored it across relay restarts.
+async function openLinkLog(): Promise<LinkLog> {
+  const url = process.env["DATABASE_URL"];
+  const backend = url
+    ? await postgresLinkLogBackend(url)
+    : fileLinkLogBackend(process.env["MSFWR_DATA_DIR"] || path.resolve(process.cwd(), ".data"));
+  const log = await createLinkLog(backend);
+  store.restoreClaims(log.activeClaims(Date.now()));
+  return log;
+}
+
+let openingLinkLog: Promise<LinkLog> | undefined;
+export function linkLogReady() {
+  openingLinkLog ??= openLinkLog().catch((err) => {
+    openingLinkLog = undefined;
+    throw err;
+  });
+  return openingLinkLog;
+}
+
+// The URL register as the consoles show it: the stored record plus the URL's
+// live state. accountId limits it to the URLs one company authored.
+export async function linkRegister(filter: { accountId?: string } = {}) {
+  const log = await linkLogReady();
+  const list = log.list(filter);
+  const states = store.linkStates(list.map((r) => r.code));
+  const now = Date.now();
+  return list.map((r) => {
+    const live = states.get(r.code);
+    const status = r.revokedAt ? "cleared" as const : r.expiresAt <= now || !live ? "expired" as const : "active" as const;
+    return {
+      ...r,
+      status,
+      online: live?.online ?? false,
+      viewers: live?.viewers ?? 0,
+      locked: live?.locked ?? false,
+      blocked: live?.blocked ?? false,
+    };
+  });
 }
 
 // Tests and local runs can point billing at another backend.

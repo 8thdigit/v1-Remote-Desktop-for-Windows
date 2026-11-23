@@ -1,6 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-import { accountsReady } from "./lib/portal";
+import { accountsReady, linkLogReady } from "./lib/portal";
 
 const rawPort = process.env["PORT"];
 
@@ -25,4 +25,5 @@ app.listen(port, (err) => {
   logger.info({ port }, "Server listening");
   // Load the login accounts now so the default admin exists from the start.
   accountsReady().catch((err) => logger.error({ err }, "Could not load login accounts"));
+  linkLogReady().catch((err) => logger.error({ err }, "Could not load the remote access URL register"));
 });

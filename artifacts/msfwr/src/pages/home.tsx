@@ -4,7 +4,7 @@ import {
 } from '@workspace/api-client-react';
 import { Link } from 'wouter';
 import { ArrowRight, Bell, BellOff, BellRing, Building2, Check, Clock, Copy, Download, Eye, EyeOff, History, Laptop, Monitor, Pencil, Plus, RefreshCw, ShieldCheck, Star, Trash2, UserRound, Volume2, VolumeX, X } from 'lucide-react';
-import { AccessPinList } from '@/components/access-pins';
+import { CompanyPinCard, LinkRecordList } from '@/components/access-pins';
 import { LogoMark, Wordmark } from '@/components/logo';
 import LiveSession from '@/LiveSession';
 import { RaBadge, UserMenu } from '@/components/user-menu';
@@ -604,6 +604,7 @@ function CompanyPanel({ inbox, raId, company, now, busy, savedPcs, refreshing, o
           <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> {refreshing ? 'Refreshing…' : 'Refresh'}
         </button>
       </div>
+      {inbox?.accessPin && <CompanyPinCard pin={inbox.accessPin} />}
       {!inbox ? <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p> : inbox.pcs.length === 0 && savedOffline.length === 0 ? (
         <EmptyState icon={Laptop} title="No PCs online for your RA ID"
           body={`On a PC with WINRSS.net, open the WINRSS.net window, type ${raLabel(raId)} in the RA ID box and select Save. The PC appears here while it is on and signed in.`} />
@@ -648,12 +649,11 @@ function CompanyPanel({ inbox, raId, company, now, busy, savedPcs, refreshing, o
       )}
       {(inbox?.links?.length ?? 0) > 0 && (
         <div className="mt-5" data-testid="section-access-pins">
-          <h3 className="flex items-center gap-1.5 text-sm font-bold"><ShieldCheck className="h-4 w-4" /> Remote access URLs and Access PINs</h3>
+          <h3 className="flex items-center gap-1.5 text-sm font-bold"><ShieldCheck className="h-4 w-4" /> Remote access URLs your company authorized</h3>
           <p className="mt-1 text-xs text-muted-foreground">
-            Anyone who opens one of these PCs' remote access URLs must also enter its 4-digit Access PIN. Share the PIN separately from the URL
-            (for example by phone), only with people you trust. Each PIN works for as long as its URL.
+            Each URL below was opened with one of your PINs, so its sessions are yours. Only your company can open it, with the PIN shown, until it expires.
           </p>
-          <div className="mt-1"><AccessPinList links={inbox!.links!} /></div>
+          <div className="mt-1"><LinkRecordList records={inbox!.links!} /></div>
         </div>
       )}
       {savedPcs.length > 0 && (

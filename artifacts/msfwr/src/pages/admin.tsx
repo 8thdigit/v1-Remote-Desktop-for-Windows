@@ -13,7 +13,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { AccessPinList } from '@/components/access-pins';
+import { LinkRecordList } from '@/components/access-pins';
 import { Brand, RaBadge, UserMenu } from '@/components/user-menu';
 import { errorText, raLabel, useAuth } from '@/lib/auth';
 import { relativeTime } from '@/lib/unattended';
@@ -168,13 +168,10 @@ export default function Admin() {
           {tab === 'pcs' && (
             <div className="mt-4">
               <Panel title="Remote access URLs" icon={KeyRound} action={<Refresh onClick={reload} />}>
-                {(overview.data?.links?.length ?? 0) === 0 ? <Empty text="No PC has an active remote access URL right now." /> : (
-                  <AccessPinList links={overview.data!.links!} detail={(l) => {
-                    const owner = l.ra ? byRa.get(l.ra) : undefined;
-                    return l.ra ? `${owner ? owner.displayName : 'Unknown company'} (${raLabel(l.ra)})` : 'No RA ID set';
-                  }} />
+                {(overview.data?.links?.length ?? 0) === 0 ? <Empty text="No PC has created a remote access URL yet." /> : (
+                  <LinkRecordList records={overview.data!.links!} showCompany companyName={(ra) => byRa.get(ra)?.displayName} />
                 )}
-                <p className="mt-3 text-xs text-muted-foreground">Opening a URL needs its Access PIN. Companies see the PINs for their own PCs on their home page and share them separately from the URL.</p>
+                <p className="mt-3 text-xs text-muted-foreground">Every URL a PC creates is recorded here. Opening one needs a company's Access PIN; the first company PIN used authorizes the URL for that company, and only that PIN opens it until it expires.</p>
               </Panel>
             </div>
           )}

@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import type { MsfwrInput } from "@workspace/api-zod";
 
 const inviteTTL = 3 * 60_000;
@@ -15,11 +15,15 @@ export const linkTries = 8;
 // People who can be connected through one PC's remote access URL at once.
 export const linkViewers = 10;
 const lockMs = 15 * 60_000;
-// Every remote access link also has a four-digit Access PIN that only the
-// company behind the PC's RA ID (and relay admins) can see. Wrong PINs lock the
-// link for lockMs after accessPinTries, and after accessPinLimit wrong PINs in
-// all the link stops working until the PC creates a new one. That caps a guess
-// at 20 in 10,000 over the link's whole life.
+// Opening a remote access link also needs a four-digit Access PIN issued by a
+// company. Each signed-in company sees its own current PIN, which changes
+// every companyPinTTL until it is used. The first company PIN entered on a
+// link authors (claims) that link for that company: from then on only that
+// same PIN opens it, until the link expires, and no other company can claim
+// it. Wrong PINs lock the link for lockMs after accessPinTries, and after
+// accessPinLimit wrong PINs in all the link stops working until the PC creates
+// a new one.
+export const companyPinTTL = 3 * 60_000;
 export const accessPinTries = 5;
 export const accessPinLimit = 20;
 const maxRecords = 400;
@@ -59,6 +63,8 @@ export type Operator = { id: string; name: string; raId: string };
 // caller from the RA ID.
 export type EndedSession = {
   raId: string;
+  // The link code, for sessions opened through a remote access URL.
+  link?: string;
   pcName: string;
   mode: "attended" | "unattended" | "link";
   operator: string;
@@ -76,7 +82,16 @@ export type EndedSession = {
 export type StoreHooks = {
   onLive?: (session: Session) => void;
   onEnd?: (ended: EndedSession) => void;
+  // Remote access URL lifecycle, for the persistent URL register.
+  onLinkCreated?: (link: {code: string; name: string; ra?: string; createdAt: number; expiresAt: number; ttlHours: number}) => void;
+  onLinkClaimed?: (code: string, claim: LinkClaim) => void;
+  onLinkRevoked?: (code: string, at: number) => void;
 };
+
+// The company that authored (claimed) a remote access URL with its PIN.
+export type LinkClaim = {accountId: string; company: string; raId: string; pin: string; at: number};
+// A signed-in company, as far as PIN issuing is concerned.
+export type CompanyRef = {id: string; name: string; raId: string};
 
 export type Session = {
   // Internal id, used by the admin console; never the access code.
@@ -94,6 +109,7 @@ export type Session = {
   ra?: string;
   // Set when the viewer came in through a shared remote access link.
   via?: "link";
+  linkCode?: string;
   // The PC name an unattended host reports.
   name?: string;
   // Set while the host's Initiate request is open.
@@ -165,25 +181,25 @@ function samePin(a: string, b: string) {
 }
 
 // What the client app gets back about a link: everything except the PC's key.
-// The Access PIN is never included: the PC user does not get it, only the
-// company does.
+// What the PC gets back: never its key, its lock state or anything about
+// the company PIN that authored it.
 function publicLink(link: Link) {
   const {key: _key, failures: _f, lockedUntil: _l, ra: _ra, pinFailures: _pf, pinFailuresTotal: _pt, ...rest} = link;
   return rest;
 }
 
-// A link's Access PIN: four digits derived from a relay secret and the link,
-// so it is the same after a relay restart (the PC restores its link) but
-// nobody without the secret can work it out, the PC included.
-export function accessPinFor(secret: string, link: {key: string; id: string}) {
-  const digest = createHmac("sha256", secret).update("msfwr-access-pin:" + link.key + ":" + link.id).digest();
-  return String(digest.readUIntBE(0, 6) % 10_000).padStart(4, "0");
-}
-
 export function createMsfwrStore(clock = Date.now, hooks: StoreHooks = {}) {
-  // Replaced with a persistent secret by the portal once accounts load, so
-  // Access PINs survive restarts. A random one keeps tests and bare runs safe.
-  let pinSecret = randomBytes(32).toString("base64url");
+  // Each company's current, unused PIN.
+  const companyPins = new Map<string, {pin: string; issuedAt: number; expiresAt: number; company: CompanyRef}>();
+  // Which company authored each link (by link code). Kept apart from links so
+  // the portal can restore claims after a relay restart, before the PC
+  // re-sends its link.
+  const claims = new Map<string, LinkClaim>();
+  const activePins = () => {
+    const now = clock();
+    for (const [id, p] of companyPins) if (p.expiresAt <= now) companyPins.delete(id);
+    return companyPins;
+  };
   const codes = new Map<string, Session>();
   const peers = new Map<string, { session: Session; role: "host" | "viewer" }>();
   // Unattended sessions by access code, including live ones (which are no
@@ -211,6 +227,7 @@ export function createMsfwrStore(clock = Date.now, hooks: StoreHooks = {}) {
       hooks.onEnd({
         raId: s.ra ?? "",
         pcName: s.name || s.call?.name || "",
+        link: s.linkCode,
         mode: s.via === "link" ? "link" : s.preapproved ? "unattended" : "attended",
         operator: s.operator?.name ?? "",
         operatorId: s.operator?.id,
@@ -313,24 +330,54 @@ export function createMsfwrStore(clock = Date.now, hooks: StoreHooks = {}) {
     const s = standings.get(standingCode(link.key));
     return s && !expired(s) ? s : undefined;
   };
-  const accessPin = (link: Link) => accessPinFor(pinSecret, link);
-  const linkRa = (link: Link) => linkHost(link)?.ra ?? link.ra;
   const blocked = (link: Link) => link.pinFailuresTotal >= accessPinLimit;
-  // What the company (and the admin console) sees about a link: never its
-  // code or URL, only the PC, its Access PIN and its state.
-  const companyLink = (link: Link) => {
+  // The company whose current PIN this is, if any. Current PINs are unique.
+  const pinOwner = (pin: string) => {
+    for (const p of activePins().values()) if (samePin(pin, p.pin)) return p.company;
+    return undefined;
+  };
+  const linkStatusOf = (link: Link) => {
     const s = linkHost(link);
+    const shared = !!s && s.state === "live" && s.via === "link";
     return {
-      id: pcId(link.code), name: link.name || s?.name || "", accessPin: accessPin(link),
-      createdAt: link.createdAt, expiresAt: link.expiresAt, sessions: link.sessions, online: !!s,
-      locked: link.lockedUntil > clock(), blocked: blocked(link), ra: linkRa(link),
+      online: !!s, viewers: shared ? s.viewers.size : 0, locked: link.lockedUntil > clock(),
+      blocked: blocked(link), sessions: link.sessions, active: true,
     };
   };
 
   const store = {
     sweep,
     end,
-    setPinSecret(secret: string) { if (secret) pinSecret = secret; },
+    // The company's current PIN, issued on first ask and replaced once it is
+    // used or companyPinTTL passes.
+    companyPin(company: CompanyRef) {
+      const pins = activePins();
+      const current = pins.get(company.id);
+      if (current) { current.company = company; return {pin: current.pin, issuedAt: current.issuedAt, expiresAt: current.expiresAt}; }
+      const taken = new Set([...pins.values()].map((p) => p.pin));
+      let pin: string;
+      do { pin = String(randomInt(0, 10_000)).padStart(4, "0"); } while (taken.has(pin));
+      const now = clock();
+      const issued = {pin, issuedAt: now, expiresAt: now + companyPinTTL, company};
+      pins.set(company.id, issued);
+      return {pin, issuedAt: now, expiresAt: issued.expiresAt};
+    },
+    // Drops a company's current PIN (account disabled or removed).
+    dropCompanyPin(accountId: string) { companyPins.delete(accountId); },
+    // Claims recorded before a restart.
+    restoreClaims(list: {code: string; claim: LinkClaim}[]) {
+      for (const {code, claim} of list) if (!claims.has(code)) claims.set(code, claim);
+    },
+    claimOf(code: string) { return claims.get(code.toUpperCase()); },
+    // Live state of the given link codes, for the URL register views.
+    linkStates(codes: string[]) {
+      const out = new Map<string, ReturnType<typeof linkStatusOf>>();
+      for (const code of codes) {
+        const link = findLink(code);
+        if (link) out.set(code, linkStatusOf(link));
+      }
+      return out;
+    },
     invite() {
       sweep();
       if (peers.size >= 96) return;
@@ -477,6 +524,7 @@ export function createMsfwrStore(clock = Date.now, hooks: StoreHooks = {}) {
         ra: standings.get(standingCode(key))?.ra, pinFailures: 0, pinFailuresTotal: 0,
       };
       links.set(link.code, link);
+      try { hooks.onLinkCreated?.({code: link.code, name: link.name, ra: link.ra, createdAt: link.createdAt, expiresAt: link.expiresAt, ttlHours: link.ttlHours}); } catch { /* best-effort */ }
       return publicLink(link);
     },
     // The PC re-sends its saved link each time it registers, so a link
@@ -510,6 +558,7 @@ export function createMsfwrStore(clock = Date.now, hooks: StoreHooks = {}) {
       const link = linkFor(id, key);
       if (!link) return false;
       links.delete(link.code);
+      try { hooks.onLinkRevoked?.(link.code, clock()); } catch { /* best-effort */ }
       return true;
     },
     // What the link page shows before the access code is entered.
@@ -523,16 +572,20 @@ export function createMsfwrStore(clock = Date.now, hooks: StoreHooks = {}) {
         code: link.code, name: link.name || s?.name || "", online: !!s,
         busy: !!s && s.state !== "waiting" && !(shared && s.viewers.size < linkViewers),
         viewers: shared ? s.viewers.size : 0, expiresAt: link.expiresAt,
-        accessPinRequired: true, blocked: blocked(link),
+        accessPinRequired: true, blocked: blocked(link), claimed: claims.has(link.code),
       };
     },
-    // Active links of PCs that point to this RA ID, with their Access PINs,
-    // for the company's own view.
-    companyLinks(raId: string) {
-      sweep();
-      return [...links.values()].filter((l) => linkRa(l) === raId).map(companyLink)
-        .map(({ra: _ra, ...rest}) => rest)
-        .sort((a, b) => b.createdAt - a.createdAt);
+    // The company a PIN would author (or has authored) this link for, without
+    // changing anything, so the route can check that company's subscription
+    // before connecting.
+    linkAuthor(code: string, pin: string | undefined) {
+      const link = findLink(code);
+      const given = String(pin ?? "").replace(/\D/g, "");
+      if (!link || given.length !== 4) return undefined;
+      const claim = claims.get(link.code);
+      if (claim) return samePin(given, claim.pin) ? {accountId: claim.accountId, raId: claim.raId} : undefined;
+      const owner = pinOwner(given);
+      return owner ? {accountId: owner.id, raId: owner.raId} : undefined;
     },
     // The RA ID of the PC behind a link code, so the route can enforce that
     // company's subscription before opening a session. Undefined when the
@@ -542,8 +595,9 @@ export function createMsfwrStore(clock = Date.now, hooks: StoreHooks = {}) {
       if (!link) return undefined;
       return linkHost(link)?.ra;
     },
-    // Opens a session through a link once its access code and its Access PIN
-    // (from the company) both match.
+    // Opens a session through a link once its access code and a company's
+    // Access PIN both match. The first company PIN used authors the link for
+    // that company; afterwards only the same PIN opens it.
     linkJoin(code: string, pin: string, accessPinValue?: string) {
       const link = findLink(code);
       if (!link) return {error: "missing" as const};
@@ -558,7 +612,9 @@ export function createMsfwrStore(clock = Date.now, hooks: StoreHooks = {}) {
       link.failures = 0;
       const given = String(accessPinValue ?? "").replace(/\D/g, "");
       if (!given) return {error: "access-pin-required" as const};
-      if (!samePin(given, accessPin(link))) {
+      let claim = claims.get(link.code);
+      const owner = claim ? undefined : given.length === 4 ? pinOwner(given) : undefined;
+      if (claim ? !samePin(given, claim.pin) : !owner) {
         link.pinFailures += 1;
         link.pinFailuresTotal += 1;
         if (blocked(link)) return {error: "blocked" as const};
@@ -568,17 +624,29 @@ export function createMsfwrStore(clock = Date.now, hooks: StoreHooks = {}) {
       link.pinFailures = 0;
       const s = linkHost(link);
       if (!s) return {error: "offline" as const};
+      const busy = s.state === "live" && s.via === "link" ? s.viewers.size >= linkViewers : s.state !== "waiting";
+      if (busy) return {error: s.state === "live" && s.via === "link" ? "full" as const : "busy" as const};
+      // A company PIN authors the link now, and is used up: the company is
+      // shown a new PIN for its next URL.
+      let claimed = false;
+      if (!claim && owner) {
+        claim = {accountId: owner.id, company: owner.name, raId: owner.raId, pin: given, at: now};
+        claims.set(link.code, claim);
+        companyPins.delete(owner.id);
+        claimed = true;
+        try { hooks.onLinkClaimed?.(link.code, claim); } catch { /* best-effort */ }
+      }
+      const operator = {id: claim!.accountId, name: claim!.company, raId: claim!.raId};
       // Others already connected through the URL: join them in the same session.
       if (s.state === "live" && s.via === "link") {
-        if (s.viewers.size >= linkViewers) return {error: "full" as const};
         link.sessions += 1;
-        return {viewer: {token: addViewer(s), verification: "", preapproved: true}, name: s.name ?? link.name};
+        return {viewer: {token: addViewer(s), verification: "", preapproved: true}, name: s.name ?? link.name, claim: claim!, claimed};
       }
-      if (s.state !== "waiting") return {error: "busy" as const};
-      const viewer = store.join(s.code, undefined, "link");
+      const viewer = store.join(s.code, operator, "link");
       if (!viewer) return {error: "offline" as const};
+      s.linkCode = link.code;
       link.sessions += 1;
-      return {viewer, name: s.name ?? link.name};
+      return {viewer, name: s.name ?? link.name, claim: claim!, claimed};
     },
 
     authenticate(header: string | undefined, role?: "host" | "viewer") {
@@ -646,7 +714,7 @@ export function createMsfwrStore(clock = Date.now, hooks: StoreHooks = {}) {
         live: list.filter((s) => s.state !== "waiting").map(view),
         pcs: [...standings.values()].filter((s) => !expired(s)).map(view),
         requests: records.slice(0, 100).map(publicRecord),
-        links: [...links.values()].map(companyLink).sort((a, b) => b.createdAt - a.createdAt).slice(0, 200),
+        links: [...links.values()].map((l) => ({code: l.code, ...linkStatusOf(l)})),
       };
     },
     endById(id: string) {
