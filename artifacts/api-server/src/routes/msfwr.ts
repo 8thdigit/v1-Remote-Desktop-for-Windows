@@ -207,7 +207,7 @@ router.post("/link/join", async (req, res) => {
     const gate = await connectGateForRa(author.raId);
     if (!gate.ok) { res.status(402).json({error: gate.message, subStatus: gate.status, reason: gate.reason}); return; }
   }
-  const result = store.linkJoin(body.data.code, body.data.pin, body.data.accessPin);
+  const result = store.linkJoin(body.data.code, body.data.pin, body.data.accessPin, {ip: req.ip, agent: req.get("user-agent")});
   if (!result.viewer) {
     const answers = {
       missing: [404, "This remote access URL expired or was cleared on the PC."],

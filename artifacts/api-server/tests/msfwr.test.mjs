@@ -373,10 +373,11 @@ test("company PINs are unique, change every three minutes until used, and author
   // The URL and access code alone are not enough.
   assert.deepEqual(store.linkJoin(link.code, link.pin), {error: "access-pin-required"});
   assert.deepEqual(store.linkAuthor(link.code, second.pin), {accountId: "a1", raId: "135790"});
-  const joined = store.linkJoin(link.code, link.pin, second.pin);
+  const joined = store.linkJoin(link.code, link.pin, second.pin, {ip: "203.0.113.9", agent: "Mozilla/5.0 (Windows NT 10.0) Chrome/130"});
   assert.ok(joined.viewer);
   assert.equal(joined.claimed, true);
-  assert.deepEqual([joined.claim.company, joined.claim.pin], ["Acme", second.pin]);
+  assert.deepEqual([joined.claim.company, joined.claim.pin, joined.claim.clientIp], ["Acme", second.pin, "203.0.113.9"]);
+  assert.match(joined.claim.clientAgent, /Chrome/);
   assert.equal(store.claimOf(link.code).accountId, "a1");
   assert.equal(store.linkInfo(link.code).claimed, true);
   assert.notEqual(store.companyPin(acme).pin, second.pin, "a used PIN is replaced at once for the next URL");

@@ -4,7 +4,7 @@ import {
 } from '@workspace/api-client-react';
 import { Link } from 'wouter';
 import { ArrowRight, Bell, BellOff, BellRing, Building2, Check, Clock, Copy, Download, Eye, EyeOff, History, Laptop, Monitor, Pencil, Plus, RefreshCw, ShieldCheck, Star, Trash2, UserRound, Volume2, VolumeX, X } from 'lucide-react';
-import { CompanyPinCard, LinkRecordList } from '@/components/access-pins';
+import { AcceptedUrlTable, CompanyPinCard } from '@/components/access-pins';
 import { LogoMark, Wordmark } from '@/components/logo';
 import LiveSession from '@/LiveSession';
 import { RaBadge, UserMenu } from '@/components/user-menu';
@@ -605,6 +605,15 @@ function CompanyPanel({ inbox, raId, company, now, busy, savedPcs, refreshing, o
         </button>
       </div>
       {inbox?.accessPin && <CompanyPinCard pin={inbox.accessPin} />}
+      {inbox && (
+        <div className="mt-4" data-testid="section-access-pins">
+          <h3 className="flex items-center gap-1.5 text-sm font-bold"><ShieldCheck className="h-4 w-4" /> URLs accepted with your PIN</h3>
+          <p className="mb-2 mt-0.5 text-xs text-muted-foreground">
+            Every remote access URL opened with one of your company's PINs. Its sessions are yours, and only the PIN shown opens it until it expires.
+          </p>
+          <AcceptedUrlTable records={inbox.links ?? []} />
+        </div>
+      )}
       {!inbox ? <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p> : inbox.pcs.length === 0 && savedOffline.length === 0 ? (
         <EmptyState icon={Laptop} title="No PCs online for your RA ID"
           body={`On a PC with WINRSS.net, open the WINRSS.net window, type ${raLabel(raId)} in the RA ID box and select Save. The PC appears here while it is on and signed in.`} />
@@ -646,15 +655,6 @@ function CompanyPanel({ inbox, raId, company, now, busy, savedPcs, refreshing, o
             </li>
           ))}
         </ul>
-      )}
-      {(inbox?.links?.length ?? 0) > 0 && (
-        <div className="mt-5" data-testid="section-access-pins">
-          <h3 className="flex items-center gap-1.5 text-sm font-bold"><ShieldCheck className="h-4 w-4" /> Remote access URLs your company authorized</h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Each URL below was opened with one of your PINs, so its sessions are yours. Only your company can open it, with the PIN shown, until it expires.
-          </p>
-          <div className="mt-1"><LinkRecordList records={inbox!.links!} /></div>
-        </div>
       )}
       {savedPcs.length > 0 && (
         <p className="mt-3 text-xs text-muted-foreground">Saved PCs stay on this list even when they are offline, so you can find and reconnect to them quickly. Saved in this browser only.</p>

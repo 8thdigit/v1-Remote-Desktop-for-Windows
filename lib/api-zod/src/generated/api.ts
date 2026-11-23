@@ -312,7 +312,9 @@ export const GetMsfwrInboxResponse = zod.object({
   "company": zod.string(),
   "raId": zod.string(),
   "pin": zod.string(),
-  "at": zod.number()
+  "at": zod.number(),
+  "clientIp": zod.string().optional().describe('Address of the browser that entered the PIN'),
+  "clientAgent": zod.string().optional().describe('Browser that entered the PIN')
 }).optional(),
   "sessions": zod.array(zod.object({
   "startedAt": zod.number(),
@@ -563,7 +565,9 @@ export const GetAdminOverviewResponse = zod.object({
   "company": zod.string(),
   "raId": zod.string(),
   "pin": zod.string(),
-  "at": zod.number()
+  "at": zod.number(),
+  "clientIp": zod.string().optional().describe('Address of the browser that entered the PIN'),
+  "clientAgent": zod.string().optional().describe('Browser that entered the PIN')
 }).optional(),
   "sessions": zod.array(zod.object({
   "startedAt": zod.number(),

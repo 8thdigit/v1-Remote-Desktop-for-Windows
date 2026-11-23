@@ -89,7 +89,8 @@ export type StoreHooks = {
 };
 
 // The company that authored (claimed) a remote access URL with its PIN.
-export type LinkClaim = {accountId: string; company: string; raId: string; pin: string; at: number};
+// clientIp and clientAgent describe the browser that entered the PIN.
+export type LinkClaim = {accountId: string; company: string; raId: string; pin: string; at: number; clientIp?: string; clientAgent?: string};
 // A signed-in company, as far as PIN issuing is concerned.
 export type CompanyRef = {id: string; name: string; raId: string};
 
@@ -598,7 +599,7 @@ export function createMsfwrStore(clock = Date.now, hooks: StoreHooks = {}) {
     // Opens a session through a link once its access code and a company's
     // Access PIN both match. The first company PIN used authors the link for
     // that company; afterwards only the same PIN opens it.
-    linkJoin(code: string, pin: string, accessPinValue?: string) {
+    linkJoin(code: string, pin: string, accessPinValue?: string, client: {ip?: string; agent?: string} = {}) {
       const link = findLink(code);
       if (!link) return {error: "missing" as const};
       const now = clock();
@@ -630,7 +631,11 @@ export function createMsfwrStore(clock = Date.now, hooks: StoreHooks = {}) {
       // shown a new PIN for its next URL.
       let claimed = false;
       if (!claim && owner) {
-        claim = {accountId: owner.id, company: owner.name, raId: owner.raId, pin: given, at: now};
+        claim = {
+          accountId: owner.id, company: owner.name, raId: owner.raId, pin: given, at: now,
+          clientIp: client.ip ? String(client.ip).slice(0, 64) : undefined,
+          clientAgent: client.agent ? String(client.agent).replace(/[\u0000-\u001f]/g, " ").slice(0, 200) : undefined,
+        };
         claims.set(link.code, claim);
         companyPins.delete(owner.id);
         claimed = true;

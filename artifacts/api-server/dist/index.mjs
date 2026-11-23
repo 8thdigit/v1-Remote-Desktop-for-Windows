@@ -40499,7 +40499,9 @@ var GetMsfwrInboxResponse = object({
       "company": string2(),
       "raId": string2(),
       "pin": string2(),
-      "at": number2()
+      "at": number2(),
+      "clientIp": string2().optional().describe("Address of the browser that entered the PIN"),
+      "clientAgent": string2().optional().describe("Browser that entered the PIN")
     }).optional(),
     "sessions": array(object({
       "startedAt": number2(),
@@ -40688,7 +40690,9 @@ var GetAdminOverviewResponse = object({
       "company": string2(),
       "raId": string2(),
       "pin": string2(),
-      "at": number2()
+      "at": number2(),
+      "clientIp": string2().optional().describe("Address of the browser that entered the PIN"),
+      "clientAgent": string2().optional().describe("Browser that entered the PIN")
     }).optional(),
     "sessions": array(object({
       "startedAt": number2(),
@@ -41273,7 +41277,7 @@ function createMsfwrStore(clock = Date.now, hooks = {}) {
     // Opens a session through a link once its access code and a company's
     // Access PIN both match. The first company PIN used authors the link for
     // that company; afterwards only the same PIN opens it.
-    linkJoin(code, pin, accessPinValue) {
+    linkJoin(code, pin, accessPinValue, client = {}) {
       const link = findLink(code);
       if (!link) return { error: "missing" };
       const now = clock();
@@ -41309,7 +41313,15 @@ function createMsfwrStore(clock = Date.now, hooks = {}) {
       if (busy) return { error: s.state === "live" && s.via === "link" ? "full" : "busy" };
       let claimed = false;
       if (!claim2 && owner) {
-        claim2 = { accountId: owner.id, company: owner.name, raId: owner.raId, pin: given, at: now };
+        claim2 = {
+          accountId: owner.id,
+          company: owner.name,
+          raId: owner.raId,
+          pin: given,
+          at: now,
+          clientIp: client.ip ? String(client.ip).slice(0, 64) : void 0,
+          clientAgent: client.agent ? String(client.agent).replace(/[\u0000-\u001f]/g, " ").slice(0, 200) : void 0
+        };
         claims.set(link.code, claim2);
         companyPins.delete(owner.id);
         claimed = true;
@@ -42911,7 +42923,7 @@ router2.post("/link/join", async (req, res) => {
       return;
     }
   }
-  const result = store.linkJoin(body.data.code, body.data.pin, body.data.accessPin);
+  const result = store.linkJoin(body.data.code, body.data.pin, body.data.accessPin, { ip: req.ip, agent: req.get("user-agent") });
   if (!result.viewer) {
     const answers = {
       missing: [404, "This remote access URL expired or was cleared on the PC."],
