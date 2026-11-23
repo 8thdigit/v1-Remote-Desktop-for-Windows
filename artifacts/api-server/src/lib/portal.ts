@@ -8,6 +8,7 @@ import {
   createBilling, fileBillingBackend, postgresBillingBackend, BillingError,
   type Billing, type Entitlement, type SubStatus,
 } from "./billing";
+import { createSite, fileSiteBackend, postgresSiteBackend, SiteError, type Site } from "./site";
 import { createMsfwrStore, type EndedSession, type Session } from "./msfwr";
 import { createLinkLog, fileLinkLogBackend, postgresLinkLogBackend, type LinkLog } from "./linklog";
 import { logger } from "./logger";
@@ -176,6 +177,29 @@ export async function linkRegister(filter: { accountId?: string } = {}) {
   });
 }
 
+// Site settings and access requests share the accounts' storage location.
+async function openSite(): Promise<Site> {
+  const url = process.env["DATABASE_URL"];
+  const backend = url
+    ? await postgresSiteBackend(url)
+    : fileSiteBackend(process.env["MSFWR_DATA_DIR"] || path.resolve(process.cwd(), ".data"));
+  const { init, api } = createSite(backend);
+  await init;
+  return api;
+}
+
+let openingSite: Promise<Site> | undefined;
+export function siteReady() {
+  openingSite ??= openSite().catch((err) => {
+    openingSite = undefined;
+    throw err;
+  });
+  return openingSite;
+}
+
+// Tests and local runs can point the site settings at another backend.
+export function useSite(ready: Promise<Site>) { openingSite = ready; }
+
 // Tests and local runs can point billing at another backend.
 export function useBilling(ready: Promise<Billing>) { openingBilling = ready; }
 
@@ -323,7 +347,7 @@ export function requireUser(role?: "admin", options: { allowPasswordChange?: boo
 }
 
 export function sendError(res: Response, err: unknown) {
-  if (err instanceof AccountError || err instanceof BillingError) { res.status(err.status).json({ error: err.message }); return; }
+  if (err instanceof AccountError || err instanceof BillingError || err instanceof SiteError) { res.status(err.status).json({ error: err.message }); return; }
   logger.error({ err }, "Portal request failed");
   res.status(500).json({ error: "Something went wrong on the relay. Try again." });
 }

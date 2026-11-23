@@ -436,6 +436,10 @@ export function createBilling(backend: BillingBackend, options: { secret?: strin
     },
 
     // --- Subscriptions ---
+    // Every subscription with its effective status, for the dashboard.
+    listSubscriptions(now = clock()) {
+      return subscriptions.map((sub) => ({ ...sub, status: effectiveStatus(sub, now) }));
+    },
     getSubscription(accountId: string) {
       const sub = subByAccount(accountId);
       return sub ? { ...sub } : undefined;

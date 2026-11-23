@@ -31,6 +31,9 @@ app.use(
   }),
 );
 app.use(cors());
+// Site settings carry uploaded images (logo, favicon, share image) as data
+// URLs, so that one admin route takes larger bodies than the rest.
+app.use("/api/admin/site", express.json({ limit: "3mb" }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
