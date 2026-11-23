@@ -1013,11 +1013,17 @@ function DownloadView({ installer, relay }: { installer: string; relay: string }
   // Label the button with the release it downloads. The link itself always
   // follows releases/latest, so the button works even if this lookup fails.
   const [release, setRelease] = useState('');
+  const [published, setPublished] = useState<Date | null>(null);
   useEffect(() => {
     const ctrl = new AbortController();
     fetch('https://api.github.com/repos/mailbhrp-1/Remote-Desktop-for-Windows/releases/latest', { signal: ctrl.signal })
       .then((r) => (r.ok ? r.json() : null))
-      .then((r) => { if (r && typeof r.tag_name === 'string' && /^v?[0-9][0-9A-Za-z.+-]{0,31}$/.test(r.tag_name)) setRelease(r.tag_name); })
+      .then((r) => {
+        if (!r) return;
+        if (typeof r.tag_name === 'string' && /^v?[0-9][0-9A-Za-z.+-]{0,31}$/.test(r.tag_name)) setRelease(r.tag_name);
+        const at = typeof r.published_at === 'string' ? new Date(r.published_at) : null;
+        if (at && !Number.isNaN(at.getTime())) setPublished(at);
+      })
       .catch(() => {});
     return () => ctrl.abort();
   }, []);
@@ -1032,6 +1038,9 @@ function DownloadView({ installer, relay }: { installer: string; relay: string }
           <span className="flex items-center gap-2"><Download className="h-4 w-4" /> Download for Windows</span>
           <span data-testid="text-installer-version" className="font-mono text-[11px] opacity-70">{release ? `${release} · x64 .exe` : 'x64 .exe'}</span>
         </a>
+        {published && <p data-testid="text-installer-updated" className="mt-2 text-right font-mono text-[11px] text-muted-foreground">
+          Last updated {published.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+        </p>}
         <p className="mt-6 font-mono text-[11px] uppercase tracking-widest text-muted-foreground">Relay URL — paste into the app</p>
         <div className="mt-2 flex items-stretch overflow-hidden rounded-xl border bg-muted">
           <code data-testid="text-relay" className="min-w-0 flex-1 truncate px-3 py-2.5 font-mono text-sm">{relay || 'Open WINRSS.net over HTTPS'}</code>
