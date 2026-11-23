@@ -69,6 +69,9 @@ async function open(): Promise<Accounts> {
   }
   const accounts = await createAccounts(backend, { secret: process.env["SESSION_SECRET"] });
   logger.info({ storage: accounts.backend, users: accounts.list().length }, "Login accounts loaded");
+  // Remote access link Access PINs come from the same persistent secret, so
+  // a company's PINs stay the same after a relay restart.
+  store.setPinSecret(accounts.derive("link-access-pin"));
   if (accounts.empty) {
     const username = (process.env["ADMIN_USERNAME"] || "admin").toLowerCase();
     const password = process.env["ADMIN_PASSWORD"];

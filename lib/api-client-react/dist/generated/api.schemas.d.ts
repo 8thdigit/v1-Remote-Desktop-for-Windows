@@ -173,13 +173,27 @@ export interface MsfwrLinkInfo {
     name: string;
     online: boolean;
     busy: boolean;
+    /**
+       * People connected through this URL right now
+       * @minimum 0
+       */
+    viewers?: number;
     expiresAt: number;
+    /** Viewers must also enter the 4-digit Access PIN the company sees */
+    accessPinRequired?: boolean;
+    /** Too many wrong Access PINs; the link no longer works */
+    blocked?: boolean;
 }
 export interface MsfwrLinkJoin {
     /** @pattern ^L[0-9A-F]{11}$ */
     code: string;
     /** @maxLength 12 */
     pin: string;
+    /**
+       * The 4-digit Access PIN from the company that manages the PC
+       * @maxLength 12
+       */
+    accessPin?: string;
 }
 export type MsfwrRequestStatus = typeof MsfwrRequestStatus[keyof typeof MsfwrRequestStatus];
 export declare const MsfwrRequestStatus: {
@@ -207,11 +221,30 @@ export interface MsfwrRaPc {
     name: string;
     state: MsfwrRaPcState;
 }
+export interface MsfwrRaLink {
+    id: string;
+    name: string;
+    /** @pattern ^[0-9]{4}$ */
+    accessPin: string;
+    createdAt: number;
+    expiresAt: number;
+    /** @minimum 0 */
+    sessions: number;
+    online: boolean;
+    /** Locked for 15 minutes after wrong codes or PINs */
+    locked: boolean;
+    /** Too many wrong Access PINs; the PC must create a new URL */
+    blocked: boolean;
+    /** Admin console only; the RA ID the PC points to */
+    ra?: string;
+}
 export interface MsfwrInbox {
     raId: string;
     company: string;
     requests: MsfwrRequest[];
     pcs: MsfwrRaPc[];
+    /** Active remote access URLs of PCs pointed to this RA ID, with their Access PINs */
+    links?: MsfwrRaLink[];
 }
 export interface MsfwrAccept {
     /** @maxLength 64 */
@@ -235,6 +268,7 @@ export interface Account {
     disabled: boolean;
     createdAt: number;
     lastLoginAt?: number;
+    mustChangePassword?: boolean;
 }
 export interface AccountList {
     users: Account[];
@@ -274,18 +308,7 @@ export interface AccountUpdate {
     raId?: string;
 }
 export interface AuthStatus {
-    setupRequired: boolean;
     user?: Account;
-}
-export interface AuthSetup {
-    /** @maxLength 32 */
-    setupCode: string;
-    /** @maxLength 64 */
-    username: string;
-    /** @maxLength 80 */
-    displayName?: string;
-    /** @maxLength 200 */
-    password: string;
 }
 export interface AuthLogin {
     /** @maxLength 64 */
@@ -318,6 +341,8 @@ export interface AdminSession {
     state: AdminSessionState;
     ra?: string;
     operator?: string;
+    /** @minimum 0 */
+    viewers?: number;
     createdAt: number;
     liveAt?: number;
 }
@@ -333,11 +358,15 @@ export interface AdminOverview {
     requests: MsfwrRequest[];
     activity: AdminOverviewActivityItem[];
     storage: string;
+    /** Active remote access URLs on this relay with their Access PINs */
+    links?: MsfwrRaLink[];
 }
 export interface MsfwrLinkStatus {
     link: MsfwrLink;
     online: boolean;
     busy: boolean;
+    /** @minimum 0 */
+    viewers?: number;
 }
 export interface MsfwrViewer {
     token: string;

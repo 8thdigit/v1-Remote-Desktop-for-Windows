@@ -210,6 +210,10 @@ export interface MsfwrLinkInfo {
      */
   viewers?: number;
   expiresAt: number;
+  /** Viewers must also enter the 4-digit Access PIN the company sees */
+  accessPinRequired?: boolean;
+  /** Too many wrong Access PINs; the link no longer works */
+  blocked?: boolean;
 }
 
 export interface MsfwrLinkJoin {
@@ -217,6 +221,11 @@ export interface MsfwrLinkJoin {
   code: string;
   /** @maxLength 12 */
   pin: string;
+  /**
+     * The 4-digit Access PIN from the company that manages the PC
+     * @maxLength 12
+     */
+  accessPin?: string;
 }
 
 export type MsfwrRequestStatus = typeof MsfwrRequestStatus[keyof typeof MsfwrRequestStatus];
@@ -253,11 +262,31 @@ export interface MsfwrRaPc {
   state: MsfwrRaPcState;
 }
 
+export interface MsfwrRaLink {
+  id: string;
+  name: string;
+  /** @pattern ^[0-9]{4}$ */
+  accessPin: string;
+  createdAt: number;
+  expiresAt: number;
+  /** @minimum 0 */
+  sessions: number;
+  online: boolean;
+  /** Locked for 15 minutes after wrong codes or PINs */
+  locked: boolean;
+  /** Too many wrong Access PINs; the PC must create a new URL */
+  blocked: boolean;
+  /** Admin console only; the RA ID the PC points to */
+  ra?: string;
+}
+
 export interface MsfwrInbox {
   raId: string;
   company: string;
   requests: MsfwrRequest[];
   pcs: MsfwrRaPc[];
+  /** Active remote access URLs of PCs pointed to this RA ID, with their Access PINs */
+  links?: MsfwrRaLink[];
 }
 
 export interface MsfwrAccept {
@@ -398,6 +427,8 @@ export interface AdminOverview {
   requests: MsfwrRequest[];
   activity: AdminOverviewActivityItem[];
   storage: string;
+  /** Active remote access URLs on this relay with their Access PINs */
+  links?: MsfwrRaLink[];
 }
 
 export interface MsfwrLinkStatus {

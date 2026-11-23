@@ -186,15 +186,19 @@ export declare const GetMsfwrLinkInfoResponse: zod.ZodObject<{
     busy: zod.ZodBoolean;
     viewers: zod.ZodOptional<zod.ZodInt>;
     expiresAt: zod.ZodNumber;
+    accessPinRequired: zod.ZodOptional<zod.ZodBoolean>;
+    blocked: zod.ZodOptional<zod.ZodBoolean>;
 }, zod.z.core.$strip>;
 /**
  * Open a session through a shared remote access URL. The viewer gives the link's access code; the PC connects without a prompt.
  */
 export declare const joinMsfwrLinkBodyCodeRegExp: RegExp;
 export declare const joinMsfwrLinkBodyPinMax = 12;
+export declare const joinMsfwrLinkBodyAccessPinMax = 12;
 export declare const JoinMsfwrLinkBody: zod.ZodObject<{
     code: zod.ZodString;
     pin: zod.ZodString;
+    accessPin: zod.ZodOptional<zod.ZodString>;
 }, zod.z.core.$strip>;
 export declare const JoinMsfwrLinkResponse: zod.ZodObject<{
     token: zod.ZodString;
@@ -204,6 +208,8 @@ export declare const JoinMsfwrLinkResponse: zod.ZodObject<{
 /**
  * For the signed-in company: Initiate requests sent to its RA ID and the PCs whose remote access points to its RA ID.
  */
+export declare const getMsfwrInboxResponseLinksItemAccessPinRegExp: RegExp;
+export declare const getMsfwrInboxResponseLinksItemSessionsMin = 0;
 export declare const GetMsfwrInboxResponse: zod.ZodObject<{
     raId: zod.ZodString;
     company: zod.ZodString;
@@ -229,6 +235,18 @@ export declare const GetMsfwrInboxResponse: zod.ZodObject<{
             busy: "busy";
         }>;
     }, zod.z.core.$strip>>;
+    links: zod.ZodOptional<zod.ZodArray<zod.ZodObject<{
+        id: zod.ZodString;
+        name: zod.ZodString;
+        accessPin: zod.ZodString;
+        createdAt: zod.ZodNumber;
+        expiresAt: zod.ZodNumber;
+        sessions: zod.ZodInt;
+        online: zod.ZodBoolean;
+        locked: zod.ZodBoolean;
+        blocked: zod.ZodBoolean;
+        ra: zod.ZodOptional<zod.ZodString>;
+    }, zod.z.core.$strip>>>;
 }, zod.z.core.$strip>;
 export declare const acceptMsfwrRequestBodyIdMax = 64;
 export declare const AcceptMsfwrRequestBody: zod.ZodObject<{
@@ -375,6 +393,8 @@ export declare const DeleteUserParams: zod.ZodObject<{
 export declare const DeleteUserResponse: zod.ZodVoid;
 export declare const getAdminOverviewResponseLiveItemViewersMin = 0;
 export declare const getAdminOverviewResponsePcsItemViewersMin = 0;
+export declare const getAdminOverviewResponseLinksItemAccessPinRegExp: RegExp;
+export declare const getAdminOverviewResponseLinksItemSessionsMin = 0;
 export declare const GetAdminOverviewResponse: zod.ZodObject<{
     live: zod.ZodArray<zod.ZodObject<{
         id: zod.ZodString;
@@ -435,6 +455,18 @@ export declare const GetAdminOverviewResponse: zod.ZodObject<{
         text: zod.ZodString;
     }, zod.z.core.$strip>>;
     storage: zod.ZodString;
+    links: zod.ZodOptional<zod.ZodArray<zod.ZodObject<{
+        id: zod.ZodString;
+        name: zod.ZodString;
+        accessPin: zod.ZodString;
+        createdAt: zod.ZodNumber;
+        expiresAt: zod.ZodNumber;
+        sessions: zod.ZodInt;
+        online: zod.ZodBoolean;
+        locked: zod.ZodBoolean;
+        blocked: zod.ZodBoolean;
+        ra: zod.ZodOptional<zod.ZodString>;
+    }, zod.z.core.$strip>>>;
 }, zod.z.core.$strip>;
 export declare const joinMsfwrBodyCodeRegExp: RegExp;
 export declare const JoinMsfwrBody: zod.ZodObject<{

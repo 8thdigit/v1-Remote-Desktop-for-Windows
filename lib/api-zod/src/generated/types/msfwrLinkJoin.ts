@@ -11,4 +11,9 @@ export interface MsfwrLinkJoin {
   code: string;
   /** @maxLength 12 */
   pin: string;
+  /**
+     * The 4-digit Access PIN from the company that manages the PC
+     * @maxLength 12
+     */
+  accessPin?: string;
 }

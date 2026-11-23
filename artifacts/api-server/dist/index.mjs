@@ -40444,19 +40444,25 @@ var GetMsfwrLinkInfoResponse = object({
   "online": boolean2(),
   "busy": boolean2(),
   "viewers": int().min(getMsfwrLinkInfoResponseViewersMin).optional().describe("People connected through this URL right now"),
-  "expiresAt": number2()
+  "expiresAt": number2(),
+  "accessPinRequired": boolean2().optional().describe("Viewers must also enter the 4-digit Access PIN the company sees"),
+  "blocked": boolean2().optional().describe("Too many wrong Access PINs; the link no longer works")
 });
 var joinMsfwrLinkBodyCodeRegExp = new RegExp("^L[0-9A-F]{11}$");
 var joinMsfwrLinkBodyPinMax = 12;
+var joinMsfwrLinkBodyAccessPinMax = 12;
 var JoinMsfwrLinkBody = object({
   "code": string2().regex(joinMsfwrLinkBodyCodeRegExp),
-  "pin": string2().max(joinMsfwrLinkBodyPinMax)
+  "pin": string2().max(joinMsfwrLinkBodyPinMax),
+  "accessPin": string2().max(joinMsfwrLinkBodyAccessPinMax).optional().describe("The 4-digit Access PIN from the company that manages the PC")
 });
 var JoinMsfwrLinkResponse = object({
   "token": string2(),
   "verification": string2(),
   "preapproved": boolean2()
 });
+var getMsfwrInboxResponseLinksItemAccessPinRegExp = new RegExp("^[0-9]{4}$");
+var getMsfwrInboxResponseLinksItemSessionsMin = 0;
 var GetMsfwrInboxResponse = object({
   "raId": string2(),
   "company": string2(),
@@ -40474,7 +40480,19 @@ var GetMsfwrInboxResponse = object({
     "id": string2(),
     "name": string2(),
     "state": _enum(["online", "busy"])
-  }))
+  })),
+  "links": array(object({
+    "id": string2(),
+    "name": string2(),
+    "accessPin": string2().regex(getMsfwrInboxResponseLinksItemAccessPinRegExp),
+    "createdAt": number2(),
+    "expiresAt": number2(),
+    "sessions": int().min(getMsfwrInboxResponseLinksItemSessionsMin),
+    "online": boolean2(),
+    "locked": boolean2().describe("Locked for 15 minutes after wrong codes or PINs"),
+    "blocked": boolean2().describe("Too many wrong Access PINs; the PC must create a new URL"),
+    "ra": string2().optional().describe("Admin console only; the RA ID the PC points to")
+  })).optional().describe("Active remote access URLs of PCs pointed to this RA ID, with their Access PINs")
 });
 var acceptMsfwrRequestBodyIdMax = 64;
 var AcceptMsfwrRequestBody = object({
@@ -40597,6 +40615,8 @@ var DeleteUserParams = object({
 var DeleteUserResponse = _void2();
 var getAdminOverviewResponseLiveItemViewersMin = 0;
 var getAdminOverviewResponsePcsItemViewersMin = 0;
+var getAdminOverviewResponseLinksItemAccessPinRegExp = new RegExp("^[0-9]{4}$");
+var getAdminOverviewResponseLinksItemSessionsMin = 0;
 var GetAdminOverviewResponse = object({
   "live": array(object({
     "id": string2(),
@@ -40636,7 +40656,19 @@ var GetAdminOverviewResponse = object({
     "actor": string2().optional(),
     "text": string2()
   })),
-  "storage": string2()
+  "storage": string2(),
+  "links": array(object({
+    "id": string2(),
+    "name": string2(),
+    "accessPin": string2().regex(getAdminOverviewResponseLinksItemAccessPinRegExp),
+    "createdAt": number2(),
+    "expiresAt": number2(),
+    "sessions": int().min(getAdminOverviewResponseLinksItemSessionsMin),
+    "online": boolean2(),
+    "locked": boolean2().describe("Locked for 15 minutes after wrong codes or PINs"),
+    "blocked": boolean2().describe("Too many wrong Access PINs; the PC must create a new URL"),
+    "ra": string2().optional().describe("Admin console only; the RA ID the PC points to")
+  })).optional().describe("Active remote access URLs on this relay with their Access PINs")
 });
 var joinMsfwrBodyCodeRegExp = new RegExp("^[A-F0-9]{12}$");
 var JoinMsfwrBody = object({
@@ -40708,7 +40740,7 @@ var health_default = router;
 var import_express2 = __toESM(require_express2(), 1);
 
 // src/lib/msfwr.ts
-import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 var inviteTTL = 3 * 6e4;
 var sessionTTL = 30 * 6e4;
 var peerTTL = 2e4;
@@ -40718,6 +40750,8 @@ var linkTTLs = [1, 2, 4, 5, 8, 12, 24, 48, 72, 120];
 var linkTries = 8;
 var linkViewers = 10;
 var lockMs = 15 * 6e4;
+var accessPinTries = 5;
+var accessPinLimit = 20;
 var maxRecords = 400;
 function standingCode(key) {
   return createHash("sha256").update("msfwr-standing:" + key).digest("hex").slice(0, 12).toUpperCase();
@@ -40742,10 +40776,15 @@ function samePin(a, b) {
   return x.length === y.length && timingSafeEqual(x, y);
 }
 function publicLink(link) {
-  const { key: _key, failures: _f, lockedUntil: _l, ...rest } = link;
+  const { key: _key, failures: _f, lockedUntil: _l, ra: _ra, pinFailures: _pf, pinFailuresTotal: _pt, ...rest } = link;
   return rest;
 }
+function accessPinFor(secret, link) {
+  const digest = createHmac("sha256", secret).update("msfwr-access-pin:" + link.key + ":" + link.id).digest();
+  return String(digest.readUIntBE(0, 6) % 1e4).padStart(4, "0");
+}
 function createMsfwrStore(clock = Date.now, hooks = {}) {
+  let pinSecret = randomBytes(32).toString("base64url");
   const codes = /* @__PURE__ */ new Map();
   const peers = /* @__PURE__ */ new Map();
   const standings = /* @__PURE__ */ new Map();
@@ -40885,9 +40924,30 @@ function createMsfwrStore(clock = Date.now, hooks = {}) {
     const s = standings.get(standingCode(link.key));
     return s && !expired(s) ? s : void 0;
   };
+  const accessPin = (link) => accessPinFor(pinSecret, link);
+  const linkRa = (link) => linkHost(link)?.ra ?? link.ra;
+  const blocked = (link) => link.pinFailuresTotal >= accessPinLimit;
+  const companyLink = (link) => {
+    const s = linkHost(link);
+    return {
+      id: pcId(link.code),
+      name: link.name || s?.name || "",
+      accessPin: accessPin(link),
+      createdAt: link.createdAt,
+      expiresAt: link.expiresAt,
+      sessions: link.sessions,
+      online: !!s,
+      locked: link.lockedUntil > clock(),
+      blocked: blocked(link),
+      ra: linkRa(link)
+    };
+  };
   const store2 = {
     sweep,
     end,
+    setPinSecret(secret) {
+      if (secret) pinSecret = secret;
+    },
     invite() {
       sweep();
       if (peers.size >= 96) return;
@@ -40919,6 +40979,7 @@ function createMsfwrStore(clock = Date.now, hooks = {}) {
       session.ra = ra;
       codes.set(code, session);
       standings.set(code, session);
+      for (const link of links.values()) if (link.key === key) link.ra = ra;
       peers.set(session.host, { session, role: "host" });
       return { code, token: session.host };
     },
@@ -41039,7 +41100,10 @@ function createMsfwrStore(clock = Date.now, hooks = {}) {
         ttlHours: hours,
         sessions: 0,
         failures: 0,
-        lockedUntil: 0
+        lockedUntil: 0,
+        ra: standings.get(standingCode(key))?.ra,
+        pinFailures: 0,
+        pinFailuresTotal: 0
       };
       links.set(link.code, link);
       return publicLink(link);
@@ -41067,7 +41131,10 @@ function createMsfwrStore(clock = Date.now, hooks = {}) {
         ttlHours: Math.max(1, Math.round((expiresAt - createdAt) / 36e5)),
         sessions: 0,
         failures: 0,
-        lockedUntil: 0
+        lockedUntil: 0,
+        ra: standings.get(standingCode(input.key))?.ra,
+        pinFailures: 0,
+        pinFailuresTotal: 0
       };
       links.set(link.code, link);
       return publicLink(link);
@@ -41097,8 +41164,16 @@ function createMsfwrStore(clock = Date.now, hooks = {}) {
         online: !!s,
         busy: !!s && s.state !== "waiting" && !(shared && s.viewers.size < linkViewers),
         viewers: shared ? s.viewers.size : 0,
-        expiresAt: link.expiresAt
+        expiresAt: link.expiresAt,
+        accessPinRequired: true,
+        blocked: blocked(link)
       };
+    },
+    // Active links of PCs that point to this RA ID, with their Access PINs,
+    // for the company's own view.
+    companyLinks(raId) {
+      sweep();
+      return [...links.values()].filter((l) => linkRa(l) === raId).map(companyLink).map(({ ra: _ra, ...rest }) => rest).sort((a, b) => b.createdAt - a.createdAt);
     },
     // The RA ID of the PC behind a link code, so the route can enforce that
     // company's subscription before opening a session. Undefined when the
@@ -41108,11 +41183,13 @@ function createMsfwrStore(clock = Date.now, hooks = {}) {
       if (!link) return void 0;
       return linkHost(link)?.ra;
     },
-    // Opens a session through a link once the access code matches.
-    linkJoin(code, pin) {
+    // Opens a session through a link once its access code and its Access PIN
+    // (from the company) both match.
+    linkJoin(code, pin, accessPinValue) {
       const link = findLink(code);
       if (!link) return { error: "missing" };
       const now = clock();
+      if (blocked(link)) return { error: "blocked" };
       if (link.lockedUntil > now) return { error: "locked" };
       if (!samePin(String(pin ?? "").replace(/\D/g, ""), link.pin)) {
         link.failures += 1;
@@ -41123,6 +41200,19 @@ function createMsfwrStore(clock = Date.now, hooks = {}) {
         return { error: "pin" };
       }
       link.failures = 0;
+      const given = String(accessPinValue ?? "").replace(/\D/g, "");
+      if (!given) return { error: "access-pin-required" };
+      if (!samePin(given, accessPin(link))) {
+        link.pinFailures += 1;
+        link.pinFailuresTotal += 1;
+        if (blocked(link)) return { error: "blocked" };
+        if (link.pinFailures >= accessPinTries) {
+          link.lockedUntil = now + lockMs;
+          link.pinFailures = 0;
+        }
+        return { error: "access-pin" };
+      }
+      link.pinFailures = 0;
       const s = linkHost(link);
       if (!s) return { error: "offline" };
       if (s.state === "live" && s.via === "link") {
@@ -41200,7 +41290,8 @@ function createMsfwrStore(clock = Date.now, hooks = {}) {
       return {
         live: list.filter((s) => s.state !== "waiting").map(view),
         pcs: [...standings.values()].filter((s) => !expired(s)).map(view),
-        requests: records.slice(0, 100).map(publicRecord)
+        requests: records.slice(0, 100).map(publicRecord),
+        links: [...links.values()].map(companyLink).sort((a, b) => b.createdAt - a.createdAt).slice(0, 200)
       };
     },
     endById(id) {
@@ -41224,7 +41315,7 @@ function createMsfwrStore(clock = Date.now, hooks = {}) {
 import path3 from "node:path";
 
 // src/lib/accounts.ts
-import { createHmac, randomBytes as randomBytes2, randomInt as randomInt2, scrypt as scryptCb, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
+import { createHmac as createHmac2, randomBytes as randomBytes2, randomInt as randomInt2, scrypt as scryptCb, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -41324,10 +41415,15 @@ async function createAccounts(backend, options = {}) {
     return id;
   }
   const roleError = "Choose the admin or company role.";
-  const sign = (body) => createHmac("sha256", secret).update(body).digest("base64url");
+  const sign = (body) => createHmac2("sha256", secret).update(body).digest("base64url");
   const activeAdmins = () => users.filter((u) => u.role === "admin" && !u.disabled);
   return {
     backend: backend.describe,
+    // A key for one purpose, derived from the persistent secret, so other
+    // parts of the relay get stable secrets without seeing this one.
+    derive(purpose) {
+      return createHmac2("sha256", secret).update("msfwr-derive:" + purpose).digest("base64url");
+    },
     get empty() {
       return users.length === 0;
     },
@@ -41489,7 +41585,7 @@ function createActivityLog(limit = 300, clock = Date.now) {
 }
 
 // src/lib/billing.ts
-import { createHmac as createHmac2, randomBytes as randomBytes3, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
+import { createHmac as createHmac3, randomBytes as randomBytes3, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
 import { mkdir as mkdir2, readFile as readFile2, rename as rename2, writeFile as writeFile2 } from "node:fs/promises";
 import path2 from "node:path";
 var INTERVALS = ["monthly", "quarterly", "annual"];
@@ -41661,7 +41757,7 @@ function createBilling(backend, options = {}) {
       requireLicense: !!sub.requireLicense
     };
   }
-  const sign = (body) => createHmac2("sha256", secret()).update(body).digest("base64url");
+  const sign = (body) => createHmac3("sha256", secret()).update(body).digest("base64url");
   function issueLicense(accountId, raId) {
     const sub = subByAccount(accountId);
     const version2 = sub?.licenseVersion ?? 1;
@@ -42073,6 +42169,7 @@ async function open2() {
   }
   const accounts = await createAccounts(backend, { secret: process.env["SESSION_SECRET"] });
   logger.info({ storage: accounts.backend, users: accounts.list().length }, "Login accounts loaded");
+  store.setPinSecret(accounts.derive("link-access-pin"));
   if (accounts.empty) {
     const username = (process.env["ADMIN_USERNAME"] || "admin").toLowerCase();
     const password = process.env["ADMIN_PASSWORD"];
@@ -42394,7 +42491,7 @@ router2.post("/call", async (req, res) => {
 });
 router2.get("/inbox", requireUser(), (req, res) => {
   const user = req.account;
-  res.json(GetMsfwrInboxResponse.parse({ raId: user.raId, company: user.displayName, ...store.inbox(user.raId) }));
+  res.json(GetMsfwrInboxResponse.parse({ raId: user.raId, company: user.displayName, ...store.inbox(user.raId), links: store.companyLinks(user.raId) }));
 });
 router2.post("/accept", requireUser(), async (req, res) => {
   if (tooManyJoins()) {
@@ -42539,6 +42636,12 @@ router2.post("/link/join", async (req, res) => {
     res.status(400).json({ error: "Enter the access code that came with the link." });
     return;
   }
+  try {
+    await accountsReady();
+  } catch {
+    res.status(503).json({ error: "The relay is starting. Try again in a moment." });
+    return;
+  }
   const ra = store.linkHostRa(body.data.code);
   if (ra) {
     const gate = await connectGateForRa(ra);
@@ -42547,12 +42650,15 @@ router2.post("/link/join", async (req, res) => {
       return;
     }
   }
-  const result = store.linkJoin(body.data.code, body.data.pin);
+  const result = store.linkJoin(body.data.code, body.data.pin, body.data.accessPin);
   if (!result.viewer) {
     const answers = {
       missing: [404, "This remote access URL expired or was cleared on the PC."],
       locked: [429, "Too many wrong access codes. This link is locked for 15 minutes."],
       pin: [403, "That access code is not correct."],
+      "access-pin-required": [403, "Enter the 4-digit Access PIN. Ask the company that manages this PC for it."],
+      "access-pin": [403, "That Access PIN is not correct. Ask the company that manages this PC for the current PIN."],
+      blocked: [423, "Too many wrong Access PINs. This URL no longer works. Ask the person at the PC to create a new one."],
       offline: [409, "The PC is offline or locked right now. Try again when it is on and signed in."],
       busy: [409, "Someone is already connected to this PC. Try again when that session ends."],
       full: [409, "Too many people are connected to this PC through its URL. Try again later."]

@@ -1,15 +1,17 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { getMsfwrLinkInfo, joinMsfwrLink, type MsfwrLinkInfo } from '@workspace/api-client-react';
-import { ArrowRight, Clock, KeyRound, Laptop, ShieldCheck } from 'lucide-react';
+import { ArrowRight, Clock, KeyRound, Laptop, LockKeyhole, ShieldCheck } from 'lucide-react';
 import { LogoMark, Wordmark } from '@/components/logo';
 import LiveSession from '@/LiveSession';
 import { errorText, statusOf } from '@/lib/auth';
 
 // The page a remote access URL opens (https://…/r/L0123456789A#123456).
-// Whoever has the URL and its six-digit access code connects to the PC that
+// Whoever has the URL and its six-digit access code, and also the four-digit
+// Access PIN from the company that manages the PC, connects to the PC that
 // created it. The PC shares the URL with the code after the #, which browsers
-// never send to a server, so one click connects. Several people can be
-// connected through the same URL at once. No sign-in is needed.
+// never send to a server; the Access PIN is never part of the URL, so knowing
+// the URL alone is not enough. Several people can be connected through the
+// same URL at once. No sign-in is needed.
 
 // The access code carried in the URL after the #, if any.
 function codeFromHash() {
@@ -21,7 +23,10 @@ export default function LinkPage({ code }: { code: string }) {
   const [info, setInfo] = useState<MsfwrLinkInfo | null>(null);
   const [missing, setMissing] = useState<string | null>(null);
   const [pin, setPin] = useState(codeFromHash);
-  const autoTried = useRef(false);
+  const [accessPin, setAccessPin] = useState('');
+  // The access code field is only shown when the URL did not carry it, or
+  // when the one it carried was wrong.
+  const [showCode, setShowCode] = useState(() => !codeFromHash());
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [session, setSession] = useState<{ token: string } | null>(null);
@@ -53,15 +58,18 @@ export default function LinkPage({ code }: { code: string }) {
     document.title = session ? 'WINRSS.net — Connected session' : `${info?.name || 'Remote access'} — WINRSS.net`;
   }, [info?.name, session]);
 
-  async function join(value: string) {
+  async function join() {
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
-      const viewer = await joinMsfwrLink({ code: upper, pin: value.replace(/\D/g, '') });
+      const viewer = await joinMsfwrLink({ code: upper, pin: pin.replace(/\D/g, ''), accessPin: accessPin.replace(/\D/g, '') });
       setSession({ token: viewer.token });
     } catch (reason) {
-      setError(errorText(reason, 'Could not connect. Try again.'));
+      const message = errorText(reason, 'Could not connect. Try again.');
+      setError(message);
+      if (/access code/i.test(message)) setShowCode(true);
+      setAccessPin('');
     } finally {
       setBusy(false);
     }
@@ -69,18 +77,8 @@ export default function LinkPage({ code }: { code: string }) {
 
   function connect(e: FormEvent) {
     e.preventDefault();
-    void join(pin);
+    void join();
   }
-
-  // Opening a URL that carries the access code connects straight away once
-  // the PC is known to be reachable.
-  useEffect(() => {
-    if (autoTried.current || session || !info || pin.length !== 6) return;
-    if (!info.online || info.busy) return;
-    autoTried.current = true;
-    void join(pin);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [info, session]);
 
   if (session) {
     return <LiveSession token={session.token} verification="" preapproved onLeave={(message) => { setSession(null); setNotice(message ?? 'Session ended.'); }} />;
@@ -125,18 +123,35 @@ export default function LinkPage({ code }: { code: string }) {
                 <Clock className="h-3.5 w-3.5" /> Link valid until {expires.toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
               </p>
             )}
-            <label htmlFor="link-pin" className="mt-6 block">
-              <span className="mb-1.5 block text-xs font-semibold text-muted-foreground">Access code (6 digits, shown next to the URL on the PC)</span>
+            {info?.blocked && (
+              <p role="alert" className="mt-4 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                Too many wrong Access PINs were entered, so this URL no longer works. Ask the person at the PC to create a new one.
+              </p>
+            )}
+            {showCode && (
+              <label htmlFor="link-pin" className="mt-6 block">
+                <span className="mb-1.5 block text-xs font-semibold text-muted-foreground">Access code (6 digits, shown next to the URL on the PC)</span>
+                <span className="flex items-center gap-2 rounded-xl border bg-background px-3 focus-within:ring-2 focus-within:ring-primary/40">
+                  <KeyRound className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <input id="link-pin" value={pin} onChange={(e) => { setPin(e.target.value.replace(/\D/g, '').slice(0, 6)); setError(null); }}
+                    inputMode="numeric" autoComplete="off" placeholder="123456" required data-testid="input-link-pin"
+                    className="min-w-0 flex-1 bg-transparent py-2.5 font-mono text-lg tracking-[0.3em] outline-none" />
+                </span>
+              </label>
+            )}
+            <label htmlFor="link-access-pin" className="mt-6 block">
+              <span className="mb-1.5 block text-xs font-semibold text-muted-foreground">Access PIN (4 digits, from the company that manages this PC)</span>
               <span className="flex items-center gap-2 rounded-xl border bg-background px-3 focus-within:ring-2 focus-within:ring-primary/40">
-                <KeyRound className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <input id="link-pin" value={pin} onChange={(e) => { setPin(e.target.value.replace(/\D/g, '').slice(0, 6)); setError(null); }}
-                  inputMode="numeric" autoComplete="one-time-code" placeholder="123456" required autoFocus data-testid="input-link-pin"
-                  className="min-w-0 flex-1 bg-transparent py-2.5 font-mono text-lg tracking-[0.3em] outline-none" />
+                <LockKeyhole className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <input id="link-access-pin" value={accessPin} onChange={(e) => { setAccessPin(e.target.value.replace(/\D/g, '').slice(0, 4)); setError(null); }}
+                  type="password" inputMode="numeric" autoComplete="one-time-code" placeholder="••••" required autoFocus data-testid="input-link-access-pin"
+                  className="min-w-0 flex-1 bg-transparent py-2.5 font-mono text-lg tracking-[0.5em] outline-none" />
               </span>
+              <span className="mt-1.5 block text-xs text-muted-foreground">The URL alone does not connect. The company shares this PIN with you separately.</span>
             </label>
             {error && <p role="alert" data-testid="text-link-error" className="mt-4 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
             {notice && <p className="mt-4 rounded-lg bg-accent/60 px-3 py-2 text-sm">{notice}</p>}
-            <button type="submit" disabled={busy || pin.length !== 6 || !info} data-testid="button-link-connect"
+            <button type="submit" disabled={busy || pin.length !== 6 || accessPin.length !== 4 || !info || info.blocked} data-testid="button-link-connect"
               className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 font-bold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-40">
               {busy ? <span className="dl-pulse">Connecting</span> : <>{info?.viewers ? 'Join' : 'Connect'} <ArrowRight className="h-4 w-4" /></>}
             </button>

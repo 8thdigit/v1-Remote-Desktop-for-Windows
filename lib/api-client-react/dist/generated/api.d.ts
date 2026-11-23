@@ -1,5 +1,5 @@
 import type { DataTag, DefinedInitialDataOptions, DefinedUseQueryResult, QueryClient, QueryKey, UndefinedInitialDataOptions, UseMutationOptions, UseMutationResult, UseQueryOptions, UseQueryResult } from '@tanstack/react-query';
-import type { Account, AccountCreate, AccountList, AccountUpdate, AdminOverview, AuthLogin, AuthSetup, AuthStatus, GetMsfwrFrameParams, GetMsfwrLinkInfoParams, GetMsfwrLinkStatusParams, HealthStatus, MsfwrAccept, MsfwrCall, MsfwrCallList, MsfwrCallQuery, MsfwrCode, MsfwrConnectPc, MsfwrInbox, MsfwrInput, MsfwrInvite, MsfwrLink, MsfwrLinkCreate, MsfwrLinkInfo, MsfwrLinkJoin, MsfwrLinkRegister, MsfwrLinkStatus, MsfwrStandingKey, MsfwrTick, MsfwrViewer, PasswordChange } from './api.schemas';
+import type { Account, AccountCreate, AccountList, AccountUpdate, AdminOverview, AuthLogin, AuthStatus, GetMsfwrFrameParams, GetMsfwrLinkInfoParams, GetMsfwrLinkStatusParams, HealthStatus, MsfwrAccept, MsfwrCall, MsfwrCallList, MsfwrCallQuery, MsfwrCode, MsfwrConnectPc, MsfwrInbox, MsfwrInput, MsfwrInvite, MsfwrLink, MsfwrLinkCreate, MsfwrLinkInfo, MsfwrLinkJoin, MsfwrLinkRegister, MsfwrLinkStatus, MsfwrStandingKey, MsfwrTick, MsfwrViewer, PasswordChange } from './api.schemas';
 import { customFetch } from '../custom-fetch';
 import type { ErrorType, BodyType } from '../custom-fetch';
 type AwaitedInput<T> = PromiseLike<T> | T;
@@ -353,23 +353,6 @@ export declare function useGetAuthStatus<TData = Awaited<ReturnType<typeof getAu
 }, queryClient?: QueryClient): UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;
 };
-export declare const getSetupAdminUrl: () => string;
-export declare const setupAdmin: (authSetup: AuthSetup, options?: Parameters<typeof customFetch>[1]) => Promise<Account>;
-export declare const getSetupAdminMutationKey: () => readonly ["setupAdmin"];
-export declare const getSetupAdminMutationOptions: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
-    mutation?: UseMutationOptions<Awaited<ReturnType<typeof setupAdmin>>, TError, SetupAdminMutationVariables, TContext>;
-    request?: SecondParameter<typeof customFetch>;
-}) => UseMutationOptions<Awaited<ReturnType<typeof setupAdmin>>, TError, SetupAdminMutationVariables, TContext>;
-export type SetupAdminMutationResult = NonNullable<Awaited<ReturnType<typeof setupAdmin>>>;
-export type SetupAdminMutationBody = BodyType<AuthSetup>;
-export type SetupAdminMutationError = ErrorType<unknown>;
-export type SetupAdminMutationVariables = {
-    data: BodyType<AuthSetup>;
-};
-export declare const useSetupAdmin: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
-    mutation?: UseMutationOptions<Awaited<ReturnType<typeof setupAdmin>>, TError, SetupAdminMutationVariables, TContext>;
-    request?: SecondParameter<typeof customFetch>;
-}, queryClient?: QueryClient) => UseMutationResult<Awaited<ReturnType<typeof setupAdmin>>, TError, SetupAdminMutationVariables, TContext>;
 export declare const getLoginUrl: () => string;
 export declare const login: (authLogin: AuthLogin, options?: Parameters<typeof customFetch>[1]) => Promise<Account>;
 export declare const getLoginMutationKey: () => readonly ["login"];

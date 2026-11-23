@@ -4,6 +4,7 @@ import {
 } from '@workspace/api-client-react';
 import { Link } from 'wouter';
 import { ArrowRight, Bell, BellOff, BellRing, Building2, Check, Clock, Copy, Download, Eye, EyeOff, History, Laptop, Monitor, Pencil, Plus, RefreshCw, ShieldCheck, Star, Trash2, UserRound, Volume2, VolumeX, X } from 'lucide-react';
+import { AccessPinList } from '@/components/access-pins';
 import { LogoMark, Wordmark } from '@/components/logo';
 import LiveSession from '@/LiveSession';
 import { RaBadge, UserMenu } from '@/components/user-menu';
@@ -644,6 +645,16 @@ function CompanyPanel({ inbox, raId, company, now, busy, savedPcs, refreshing, o
             </li>
           ))}
         </ul>
+      )}
+      {(inbox?.links?.length ?? 0) > 0 && (
+        <div className="mt-5" data-testid="section-access-pins">
+          <h3 className="flex items-center gap-1.5 text-sm font-bold"><ShieldCheck className="h-4 w-4" /> Remote access URLs and Access PINs</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Anyone who opens one of these PCs' remote access URLs must also enter its 4-digit Access PIN. Share the PIN separately from the URL
+            (for example by phone), only with people you trust. Each PIN works for as long as its URL.
+          </p>
+          <div className="mt-1"><AccessPinList links={inbox!.links!} /></div>
+        </div>
       )}
       {savedPcs.length > 0 && (
         <p className="mt-3 text-xs text-muted-foreground">Saved PCs stay on this list even when they are offline, so you can find and reconnect to them quickly. Saved in this browser only.</p>

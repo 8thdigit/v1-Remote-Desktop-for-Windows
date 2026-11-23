@@ -104,7 +104,7 @@ router.post("/call", async (req, res) => {
 // --- Signed-in companies: requests and PCs for their RA ID ---
 router.get("/inbox", requireUser(), (req, res) => {
   const user = req.account!;
-  res.json(GetMsfwrInboxResponse.parse({raId: user.raId, company: user.displayName, ...store.inbox(user.raId)}));
+  res.json(GetMsfwrInboxResponse.parse({raId: user.raId, company: user.displayName, ...store.inbox(user.raId), links: store.companyLinks(user.raId)}));
 });
 router.post("/accept", requireUser(), async (req, res) => {
   if (tooManyJoins()) { res.status(429).json({error: "Too many attempts. Try again in a minute."}); return; }
@@ -189,6 +189,8 @@ router.post("/link/join", async (req, res) => {
   if (tooManyLinkJoins()) { res.status(429).json({error: "Too many attempts. Try again in a minute."}); return; }
   const body = JoinMsfwrLinkBody.safeParse({...req.body, code: String(req.body?.code ?? "").toUpperCase()});
   if (!body.success) { res.status(400).json({error: "Enter the access code that came with the link."}); return; }
+  // Access PINs come from the accounts' persistent secret; make sure it is loaded.
+  try { await accountsReady(); } catch { res.status(503).json({error: "The relay is starting. Try again in a moment."}); return; }
   // Enforce the PC's company subscription before opening a session through the
   // link, so an inactive or over-quota company's shared URLs stop working too.
   const ra = store.linkHostRa(body.data.code);
@@ -196,12 +198,15 @@ router.post("/link/join", async (req, res) => {
     const gate = await connectGateForRa(ra);
     if (!gate.ok) { res.status(402).json({error: gate.message, subStatus: gate.status, reason: gate.reason}); return; }
   }
-  const result = store.linkJoin(body.data.code, body.data.pin);
+  const result = store.linkJoin(body.data.code, body.data.pin, body.data.accessPin);
   if (!result.viewer) {
     const answers = {
       missing: [404, "This remote access URL expired or was cleared on the PC."],
       locked: [429, "Too many wrong access codes. This link is locked for 15 minutes."],
       pin: [403, "That access code is not correct."],
+      "access-pin-required": [403, "Enter the 4-digit Access PIN. Ask the company that manages this PC for it."],
+      "access-pin": [403, "That Access PIN is not correct. Ask the company that manages this PC for the current PIN."],
+      blocked: [423, "Too many wrong Access PINs. This URL no longer works. Ask the person at the PC to create a new one."],
       offline: [409, "The PC is offline or locked right now. Try again when it is on and signed in."],
       busy: [409, "Someone is already connected to this PC. Try again when that session ends."],
       full: [409, "Too many people are connected to this PC through its URL. Try again later."],

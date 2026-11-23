@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createMsfwrStore, standingCode } from "../src/lib/msfwr.ts";
+import { accessPinLimit, accessPinTries, createMsfwrStore, pcId, standingCode } from "../src/lib/msfwr.ts";
 
 const bearer = (token) => `Bearer ${token}`;
+// A link's Access PIN, as the admin console sees it.
+const apin = (store, link) => store.overview().links.find((l) => l.id === pcId(link.code)).accessPin;
 
 test("the invite is one-time and viewer and host capabilities cannot be swapped", () => {
   const store = createMsfwrStore();
@@ -214,11 +216,11 @@ test("a remote access link needs its access code, connects to the PC that made i
   assert.deepEqual([info.name, info.online, info.busy], ["LAPTOP", true, false]);
   const wrong = link.pin === "000000" ? "000001" : "000000";
   assert.deepEqual(store.linkJoin(link.code, wrong), {error: "pin"});
-  const ok = store.linkJoin(link.code, link.pin);
+  const ok = store.linkJoin(link.code, link.pin, apin(store, link));
   assert.equal(ok.viewer.preapproved, true);
   const s = store.authenticate(bearer(host.token), "host");
   assert.equal(store.tick(s).state, "live");
-  const second = store.linkJoin(link.code, link.pin);
+  const second = store.linkJoin(link.code, link.pin, apin(store, link));
   assert.ok(second.viewer, "a second person joins the same session through the URL");
   assert.equal(store.linkInfo(link.code).viewers, 2);
   assert.equal(store.linkStatus(link.id, key("e")).link.sessions, 2);
@@ -233,7 +235,7 @@ test("a remote access link needs its access code, connects to the PC that made i
   assert.equal(store.linkRevoke(link.id, key("f")), false, "only the PC's key can clear it");
   assert.equal(store.linkRevoke(link.id, key("e")), true);
   assert.equal(store.linkInfo(link.code), undefined);
-  assert.deepEqual(store.linkJoin(link.code, link.pin), {error: "missing"});
+  assert.deepEqual(store.linkJoin(link.code, link.pin, "0000"), {error: "missing"});
 });
 
 test("linkHostRa returns the RA ID of the PC behind a link, for subscription gating", () => {
@@ -253,10 +255,10 @@ test("a link locks after repeated wrong access codes and expires on time", () =>
   const link = store.linkCreate(key("g"), "PC", 1);
   const wrong = link.pin === "000000" ? "000001" : "000000";
   for (let i = 0; i < 8; i++) store.linkJoin(link.code, wrong);
-  assert.deepEqual(store.linkJoin(link.code, link.pin), {error: "locked"});
+  assert.deepEqual(store.linkJoin(link.code, link.pin, apin(store, link)), {error: "locked"});
   now += 15 * 60_000 + 1;
   store.standing(key("g"), "PC");
-  assert.ok(store.linkJoin(link.code, link.pin).viewer);
+  assert.ok(store.linkJoin(link.code, link.pin, apin(store, link)).viewer);
   now += 60 * 60_000;
   assert.equal(store.linkInfo(link.code), undefined);
 });
@@ -280,23 +282,23 @@ test("up to ten people share one URL session; a company session is not joinable 
   const store = createMsfwrStore(() => now);
   store.standing(key("m"), "OFFICE");
   const link = store.linkCreate(key("m"), "OFFICE", 2);
-  for (let i = 0; i < 10; i++) assert.ok(store.linkJoin(link.code, link.pin).viewer);
-  assert.deepEqual(store.linkJoin(link.code, link.pin), {error: "full"});
+  for (let i = 0; i < 10; i++) assert.ok(store.linkJoin(link.code, link.pin, apin(store, link)).viewer);
+  assert.deepEqual(store.linkJoin(link.code, link.pin, apin(store, link)), {error: "full"});
   assert.equal(store.linkInfo(link.code).busy, true);
 
   const host = store.standing(key("n"), "DESK", "424242");
   const link2 = store.linkCreate(key("n"), "DESK", 2);
   assert.ok(store.connectPc(store.inbox("424242").pcs[0].id, {id: "u1", name: "Acme", raId: "424242"}));
   assert.ok(store.authenticate(bearer(host.token), "host"));
-  assert.deepEqual(store.linkJoin(link2.code, link2.pin), {error: "busy"});
+  assert.deepEqual(store.linkJoin(link2.code, link2.pin, apin(store, link2)), {error: "busy"});
 
   // Viewers that stop polling drop out; the session ends when none are left.
   const s3 = store.standing(key("o"), "KIOSK");
   const link3 = store.linkCreate(key("o"), "KIOSK", 2);
-  const a = store.linkJoin(link3.code, link3.pin).viewer;
+  const a = store.linkJoin(link3.code, link3.pin, apin(store, link3)).viewer;
   now += 10_000;
   assert.ok(store.authenticate(bearer(s3.token), "host"));
-  const b = store.linkJoin(link3.code, link3.pin).viewer;
+  const b = store.linkJoin(link3.code, link3.pin, apin(store, link3)).viewer;
   now += 15_000;
   assert.ok(store.authenticate(bearer(s3.token), "host"));
   assert.ok(store.authenticate(bearer(b.token), "viewer"));
@@ -342,4 +344,68 @@ test("a waiting registration that never goes live is not recorded", () => {
   store.sweep();
   assert.equal(live.length, 0);
   assert.equal(ended.length, 0, "a session that never went live is not in history");
+});
+
+test("a link also needs the company's Access PIN; only the company sees it, and wrong PINs lock then block the link", () => {
+  let now = 11_000_000;
+  const store = createMsfwrStore(() => now);
+  store.setPinSecret("secret-one");
+  store.standing(key("p"), "FRONT-DESK", "135790");
+  const link = store.linkCreate(key("p"), "FRONT-DESK", 24);
+  assert.equal(link.accessPin, undefined, "the PC that creates the URL is not given the Access PIN");
+  assert.equal(store.linkStatus(link.id, key("p")).link.accessPin, undefined);
+  const [mine] = store.companyLinks("135790");
+  assert.match(mine.accessPin, /^\d{4}$/);
+  assert.deepEqual([mine.name, mine.online, mine.locked, mine.blocked], ["FRONT-DESK", true, false, false]);
+  assert.equal(mine.expiresAt, link.expiresAt, "the PIN is valid for as long as the URL");
+  assert.equal(mine.code, undefined, "the company view never carries the link's code");
+  assert.deepEqual(store.companyLinks("246802"), [], "another company sees nothing");
+  assert.equal(store.linkInfo(link.code).accessPinRequired, true);
+
+  // The URL with its access code alone is not enough.
+  assert.deepEqual(store.linkJoin(link.code, link.pin), {error: "access-pin-required"});
+  const wrong = mine.accessPin === "0000" ? "0001" : "0000";
+  for (let i = 0; i < accessPinTries - 1; i++) assert.deepEqual(store.linkJoin(link.code, link.pin, wrong), {error: "access-pin"});
+  assert.deepEqual(store.linkJoin(link.code, link.pin, wrong), {error: "access-pin"});
+  assert.deepEqual(store.linkJoin(link.code, link.pin, mine.accessPin), {error: "locked"}, "five wrong PINs lock the link");
+  assert.equal(store.companyLinks("135790")[0].locked, true);
+  now += 15 * 60_000 + 1;
+  store.standing(key("p"), "FRONT-DESK", "135790");
+  assert.ok(store.linkJoin(link.code, link.pin, mine.accessPin).viewer, "the right PIN connects");
+
+  // The PIN survives a relay restart (same secret) but differs per link.
+  const restarted = createMsfwrStore(() => now);
+  restarted.setPinSecret("secret-one");
+  restarted.standing(key("p"), "FRONT-DESK", "135790");
+  restarted.linkRestore({id: link.id, key: key("p"), pin: link.pin, name: "FRONT-DESK", createdAt: link.createdAt, expiresAt: link.expiresAt});
+  assert.equal(restarted.companyLinks("135790")[0].accessPin, mine.accessPin);
+  const other = restarted.linkCreate(key("p"), "FRONT-DESK", 24);
+  assert.equal(restarted.companyLinks("135790").length, 2);
+
+  // Too many wrong PINs in all and the URL stops working for good.
+  const otherPin = apin(restarted, other);
+  const bad = otherPin === "0000" ? "0001" : "0000";
+  for (let i = 0; i < accessPinLimit; i++) {
+    restarted.linkJoin(other.code, other.pin, bad);
+    now += 15 * 60_000 + 1;
+    restarted.standing(key("p"), "FRONT-DESK", "135790");
+  }
+  assert.deepEqual(restarted.linkJoin(other.code, other.pin, otherPin), {error: "blocked"});
+  assert.equal(restarted.linkInfo(other.code).blocked, true);
+  assert.equal(restarted.companyLinks("135790").find((l) => l.id === pcId(other.code)).blocked, true);
+});
+
+test("a link's company follows the PC's RA ID and is kept while the PC is offline", () => {
+  let now = 12_000_000;
+  const store = createMsfwrStore(() => now);
+  store.standing(key("q"), "PC", "111111");
+  const link = store.linkCreate(key("q"), "PC", 4);
+  assert.equal(store.companyLinks("111111").length, 1);
+  store.standing(key("q"), "PC", "222222");
+  assert.equal(store.companyLinks("111111").length, 0, "moving the PC to another RA ID moves its link");
+  assert.equal(store.companyLinks("222222").length, 1);
+  now += 60_000; // the PC stops polling and goes offline
+  const [offline] = store.companyLinks("222222");
+  assert.equal(offline.online, false);
+  assert.equal(offline.id, pcId(link.code));
 });
