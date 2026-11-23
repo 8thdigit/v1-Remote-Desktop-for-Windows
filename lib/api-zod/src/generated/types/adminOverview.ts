@@ -7,6 +7,7 @@
  */
 import type { AdminOverviewActivityItem } from './adminOverviewActivityItem';
 import type { AdminSession } from './adminSession';
+import type { MsfwrRaLink } from './msfwrRaLink';
 import type { MsfwrRequest } from './msfwrRequest';
 
 export interface AdminOverview {
@@ -15,4 +16,6 @@ export interface AdminOverview {
   requests: MsfwrRequest[];
   activity: AdminOverviewActivityItem[];
   storage: string;
+  /** Active remote access URLs on this relay with their Access PINs */
+  links?: MsfwrRaLink[];
 }

@@ -45,6 +45,7 @@ export * from './msfwrLinkInfo';
 export * from './msfwrLinkJoin';
 export * from './msfwrLinkRegister';
 export * from './msfwrLinkStatus';
+export * from './msfwrRaLink';
 export * from './msfwrRaPc';
 export * from './msfwrRaPcState';
 export * from './msfwrRequest';

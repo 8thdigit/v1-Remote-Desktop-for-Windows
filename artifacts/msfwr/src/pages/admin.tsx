@@ -5,7 +5,7 @@ import {
   type Account, type AdminOverview, type MsfwrRequest,
 } from '@workspace/api-client-react';
 import {
-  Activity, ArrowLeft, Building2, Check, Copy, Database, Laptop, MonitorPlay, MoreHorizontal, Plus, RefreshCw, Search, ShieldCheck,
+  Activity, ArrowLeft, Building2, Check, Copy, Database, KeyRound, Laptop, MonitorPlay, MoreHorizontal, Plus, RefreshCw, Search, ShieldCheck,
   Users, X,
 } from 'lucide-react';
 import { Link } from 'wouter';
@@ -13,6 +13,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AccessPinList } from '@/components/access-pins';
 import { Brand, RaBadge, UserMenu } from '@/components/user-menu';
 import { errorText, raLabel, useAuth } from '@/lib/auth';
 import { relativeTime } from '@/lib/unattended';
@@ -163,6 +164,19 @@ export default function Admin() {
               )}
               <p className="mt-3 text-xs text-muted-foreground">A PC re-registers every two minutes, so "online for" restarts then.</p>
             </Panel>
+          )}
+          {tab === 'pcs' && (
+            <div className="mt-4">
+              <Panel title="Remote access URLs" icon={KeyRound} action={<Refresh onClick={reload} />}>
+                {(overview.data?.links?.length ?? 0) === 0 ? <Empty text="No PC has an active remote access URL right now." /> : (
+                  <AccessPinList links={overview.data!.links!} detail={(l) => {
+                    const owner = l.ra ? byRa.get(l.ra) : undefined;
+                    return l.ra ? `${owner ? owner.displayName : 'Unknown company'} (${raLabel(l.ra)})` : 'No RA ID set';
+                  }} />
+                )}
+                <p className="mt-3 text-xs text-muted-foreground">Opening a URL needs its Access PIN. Companies see the PINs for their own PCs on their home page and share them separately from the URL.</p>
+              </Panel>
+            </div>
           )}
           {tab === 'sessions' && (
             <Panel title="Live sessions" icon={MonitorPlay} action={<Refresh onClick={reload} />}>

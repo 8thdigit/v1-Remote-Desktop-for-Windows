@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import type { MsfwrInput } from "@workspace/api-zod";
 
 const inviteTTL = 3 * 60_000;
@@ -15,6 +15,13 @@ export const linkTries = 8;
 // People who can be connected through one PC's remote access URL at once.
 export const linkViewers = 10;
 const lockMs = 15 * 60_000;
+// Every remote access link also has a four-digit Access PIN that only the
+// company behind the PC's RA ID (and relay admins) can see. Wrong PINs lock the
+// link for lockMs after accessPinTries, and after accessPinLimit wrong PINs in
+// all the link stops working until the PC creates a new one. That caps a guess
+// at 20 in 10,000 over the link's whole life.
+export const accessPinTries = 5;
+export const accessPinLimit = 20;
 const maxRecords = 400;
 
 // Unattended (pre-approved) hosts keep a long random key on the PC. The
@@ -138,6 +145,12 @@ export type Link = {
   sessions: number;
   failures: number;
   lockedUntil: number;
+  // The RA ID of the PC when it last registered, so its company can see the
+  // link (and its Access PIN) while the PC is offline.
+  ra?: string;
+  // Wrong Access PINs since the last lock, and in all.
+  pinFailures: number;
+  pinFailuresTotal: number;
 };
 
 // PC names are display text only: keep letters, digits, space, dot, dash, underscore.
@@ -152,12 +165,25 @@ function samePin(a: string, b: string) {
 }
 
 // What the client app gets back about a link: everything except the PC's key.
+// The Access PIN is never included: the PC user does not get it, only the
+// company does.
 function publicLink(link: Link) {
-  const {key: _key, failures: _f, lockedUntil: _l, ...rest} = link;
+  const {key: _key, failures: _f, lockedUntil: _l, ra: _ra, pinFailures: _pf, pinFailuresTotal: _pt, ...rest} = link;
   return rest;
 }
 
+// A link's Access PIN: four digits derived from a relay secret and the link,
+// so it is the same after a relay restart (the PC restores its link) but
+// nobody without the secret can work it out, the PC included.
+export function accessPinFor(secret: string, link: {key: string; id: string}) {
+  const digest = createHmac("sha256", secret).update("msfwr-access-pin:" + link.key + ":" + link.id).digest();
+  return String(digest.readUIntBE(0, 6) % 10_000).padStart(4, "0");
+}
+
 export function createMsfwrStore(clock = Date.now, hooks: StoreHooks = {}) {
+  // Replaced with a persistent secret by the portal once accounts load, so
+  // Access PINs survive restarts. A random one keeps tests and bare runs safe.
+  let pinSecret = randomBytes(32).toString("base64url");
   const codes = new Map<string, Session>();
   const peers = new Map<string, { session: Session; role: "host" | "viewer" }>();
   // Unattended sessions by access code, including live ones (which are no
@@ -287,10 +313,24 @@ export function createMsfwrStore(clock = Date.now, hooks: StoreHooks = {}) {
     const s = standings.get(standingCode(link.key));
     return s && !expired(s) ? s : undefined;
   };
+  const accessPin = (link: Link) => accessPinFor(pinSecret, link);
+  const linkRa = (link: Link) => linkHost(link)?.ra ?? link.ra;
+  const blocked = (link: Link) => link.pinFailuresTotal >= accessPinLimit;
+  // What the company (and the admin console) sees about a link: never its
+  // code or URL, only the PC, its Access PIN and its state.
+  const companyLink = (link: Link) => {
+    const s = linkHost(link);
+    return {
+      id: pcId(link.code), name: link.name || s?.name || "", accessPin: accessPin(link),
+      createdAt: link.createdAt, expiresAt: link.expiresAt, sessions: link.sessions, online: !!s,
+      locked: link.lockedUntil > clock(), blocked: blocked(link), ra: linkRa(link),
+    };
+  };
 
   const store = {
     sweep,
     end,
+    setPinSecret(secret: string) { if (secret) pinSecret = secret; },
     invite() {
       sweep();
       if (peers.size >= 96) return;
@@ -320,6 +360,7 @@ export function createMsfwrStore(clock = Date.now, hooks: StoreHooks = {}) {
       session.ra = ra;
       codes.set(code, session);
       standings.set(code, session);
+      for (const link of links.values()) if (link.key === key) link.ra = ra;
       peers.set(session.host, {session, role: "host"});
       return {code, token: session.host};
     },
@@ -433,6 +474,7 @@ export function createMsfwrStore(clock = Date.now, hooks: StoreHooks = {}) {
       const link: Link = {
         id, key, code: linkCode(key, id), pin: String(randomInt(0, 1_000_000)).padStart(6, "0"), name: cleanName(name),
         createdAt: now, expiresAt: now + hours * 3_600_000, ttlHours: hours, sessions: 0, failures: 0, lockedUntil: 0,
+        ra: standings.get(standingCode(key))?.ra, pinFailures: 0, pinFailuresTotal: 0,
       };
       links.set(link.code, link);
       return publicLink(link);
@@ -452,6 +494,7 @@ export function createMsfwrStore(clock = Date.now, hooks: StoreHooks = {}) {
       const link: Link = {
         id: input.id, key: input.key, code: linkCode(input.key, input.id), pin: input.pin, name: cleanName(input.name ?? ""),
         createdAt, expiresAt, ttlHours: Math.max(1, Math.round((expiresAt - createdAt) / 3_600_000)), sessions: 0, failures: 0, lockedUntil: 0,
+        ra: standings.get(standingCode(input.key))?.ra, pinFailures: 0, pinFailuresTotal: 0,
       };
       links.set(link.code, link);
       return publicLink(link);
@@ -480,7 +523,16 @@ export function createMsfwrStore(clock = Date.now, hooks: StoreHooks = {}) {
         code: link.code, name: link.name || s?.name || "", online: !!s,
         busy: !!s && s.state !== "waiting" && !(shared && s.viewers.size < linkViewers),
         viewers: shared ? s.viewers.size : 0, expiresAt: link.expiresAt,
+        accessPinRequired: true, blocked: blocked(link),
       };
+    },
+    // Active links of PCs that point to this RA ID, with their Access PINs,
+    // for the company's own view.
+    companyLinks(raId: string) {
+      sweep();
+      return [...links.values()].filter((l) => linkRa(l) === raId).map(companyLink)
+        .map(({ra: _ra, ...rest}) => rest)
+        .sort((a, b) => b.createdAt - a.createdAt);
     },
     // The RA ID of the PC behind a link code, so the route can enforce that
     // company's subscription before opening a session. Undefined when the
@@ -490,11 +542,13 @@ export function createMsfwrStore(clock = Date.now, hooks: StoreHooks = {}) {
       if (!link) return undefined;
       return linkHost(link)?.ra;
     },
-    // Opens a session through a link once the access code matches.
-    linkJoin(code: string, pin: string) {
+    // Opens a session through a link once its access code and its Access PIN
+    // (from the company) both match.
+    linkJoin(code: string, pin: string, accessPinValue?: string) {
       const link = findLink(code);
       if (!link) return {error: "missing" as const};
       const now = clock();
+      if (blocked(link)) return {error: "blocked" as const};
       if (link.lockedUntil > now) return {error: "locked" as const};
       if (!samePin(String(pin ?? "").replace(/\D/g, ""), link.pin)) {
         link.failures += 1;
@@ -502,6 +556,16 @@ export function createMsfwrStore(clock = Date.now, hooks: StoreHooks = {}) {
         return {error: "pin" as const};
       }
       link.failures = 0;
+      const given = String(accessPinValue ?? "").replace(/\D/g, "");
+      if (!given) return {error: "access-pin-required" as const};
+      if (!samePin(given, accessPin(link))) {
+        link.pinFailures += 1;
+        link.pinFailuresTotal += 1;
+        if (blocked(link)) return {error: "blocked" as const};
+        if (link.pinFailures >= accessPinTries) { link.lockedUntil = now + lockMs; link.pinFailures = 0; }
+        return {error: "access-pin" as const};
+      }
+      link.pinFailures = 0;
       const s = linkHost(link);
       if (!s) return {error: "offline" as const};
       // Others already connected through the URL: join them in the same session.
@@ -582,6 +646,7 @@ export function createMsfwrStore(clock = Date.now, hooks: StoreHooks = {}) {
         live: list.filter((s) => s.state !== "waiting").map(view),
         pcs: [...standings.values()].filter((s) => !expired(s)).map(view),
         requests: records.slice(0, 100).map(publicRecord),
+        links: [...links.values()].map(companyLink).sort((a, b) => b.createdAt - a.createdAt).slice(0, 200),
       };
     },
     endById(id: string) {

@@ -240,7 +240,9 @@ export const GetMsfwrLinkInfoResponse = zod.object({
   "online": zod.boolean(),
   "busy": zod.boolean(),
   "viewers": zod.int().min(getMsfwrLinkInfoResponseViewersMin).optional().describe('People connected through this URL right now'),
-  "expiresAt": zod.number()
+  "expiresAt": zod.number(),
+  "accessPinRequired": zod.boolean().optional().describe('Viewers must also enter the 4-digit Access PIN the company sees'),
+  "blocked": zod.boolean().optional().describe('Too many wrong Access PINs; the link no longer works')
 })
 
 
@@ -250,11 +252,14 @@ export const GetMsfwrLinkInfoResponse = zod.object({
 export const joinMsfwrLinkBodyCodeRegExp = new RegExp('^L[0-9A-F]{11}$');
 export const joinMsfwrLinkBodyPinMax = 12;
 
+export const joinMsfwrLinkBodyAccessPinMax = 12;
+
 
 
 export const JoinMsfwrLinkBody = zod.object({
   "code": zod.string().regex(joinMsfwrLinkBodyCodeRegExp),
-  "pin": zod.string().max(joinMsfwrLinkBodyPinMax)
+  "pin": zod.string().max(joinMsfwrLinkBodyPinMax),
+  "accessPin": zod.string().max(joinMsfwrLinkBodyAccessPinMax).optional().describe('The 4-digit Access PIN from the company that manages the PC')
 })
 
 export const JoinMsfwrLinkResponse = zod.object({
@@ -267,6 +272,11 @@ export const JoinMsfwrLinkResponse = zod.object({
 /**
  * For the signed-in company: Initiate requests sent to its RA ID and the PCs whose remote access points to its RA ID.
  */
+export const getMsfwrInboxResponseLinksItemAccessPinRegExp = new RegExp('^[0-9]{4}$');
+export const getMsfwrInboxResponseLinksItemSessionsMin = 0;
+
+
+
 export const GetMsfwrInboxResponse = zod.object({
   "raId": zod.string(),
   "company": zod.string(),
@@ -284,7 +294,19 @@ export const GetMsfwrInboxResponse = zod.object({
   "id": zod.string(),
   "name": zod.string(),
   "state": zod.enum(['online', 'busy'])
-}))
+})),
+  "links": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "accessPin": zod.string().regex(getMsfwrInboxResponseLinksItemAccessPinRegExp),
+  "createdAt": zod.number(),
+  "expiresAt": zod.number(),
+  "sessions": zod.int().min(getMsfwrInboxResponseLinksItemSessionsMin),
+  "online": zod.boolean(),
+  "locked": zod.boolean().describe('Locked for 15 minutes after wrong codes or PINs'),
+  "blocked": zod.boolean().describe('Too many wrong Access PINs; the PC must create a new URL'),
+  "ra": zod.string().optional().describe('Admin console only; the RA ID the PC points to')
+})).optional().describe('Active remote access URLs of PCs pointed to this RA ID, with their Access PINs')
 })
 
 
@@ -467,6 +489,9 @@ export const getAdminOverviewResponseLiveItemViewersMin = 0;
 
 export const getAdminOverviewResponsePcsItemViewersMin = 0;
 
+export const getAdminOverviewResponseLinksItemAccessPinRegExp = new RegExp('^[0-9]{4}$');
+export const getAdminOverviewResponseLinksItemSessionsMin = 0;
+
 
 
 export const GetAdminOverviewResponse = zod.object({
@@ -508,7 +533,19 @@ export const GetAdminOverviewResponse = zod.object({
   "actor": zod.string().optional(),
   "text": zod.string()
 })),
-  "storage": zod.string()
+  "storage": zod.string(),
+  "links": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "accessPin": zod.string().regex(getAdminOverviewResponseLinksItemAccessPinRegExp),
+  "createdAt": zod.number(),
+  "expiresAt": zod.number(),
+  "sessions": zod.int().min(getAdminOverviewResponseLinksItemSessionsMin),
+  "online": zod.boolean(),
+  "locked": zod.boolean().describe('Locked for 15 minutes after wrong codes or PINs'),
+  "blocked": zod.boolean().describe('Too many wrong Access PINs; the PC must create a new URL'),
+  "ra": zod.string().optional().describe('Admin console only; the RA ID the PC points to')
+})).optional().describe('Active remote access URLs on this relay with their Access PINs')
 })
 
 

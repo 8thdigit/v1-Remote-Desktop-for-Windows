@@ -482,12 +482,15 @@ components:
         busy: {type: boolean}
         viewers: {type: integer, minimum: 0, description: People connected through this URL right now}
         expiresAt: {type: number}
+        accessPinRequired: {type: boolean, description: Viewers must also enter the 4-digit Access PIN the company sees}
+        blocked: {type: boolean, description: Too many wrong Access PINs; the link no longer works}
     MsfwrLinkJoin:
       type: object
       required: [code, pin]
       properties:
         code: {type: string, pattern: '^L[0-9A-F]{11}$'}
         pin: {type: string, maxLength: 12}
+        accessPin: {type: string, maxLength: 12, description: The 4-digit Access PIN from the company that manages the PC}
     MsfwrRequest:
       type: object
       required: [id, name, at, until, status]
@@ -519,6 +522,24 @@ components:
         pcs:
           type: array
           items: {$ref: "#/components/schemas/MsfwrRaPc"}
+        links:
+          type: array
+          description: Active remote access URLs of PCs pointed to this RA ID, with their Access PINs
+          items: {$ref: "#/components/schemas/MsfwrRaLink"}
+    MsfwrRaLink:
+      type: object
+      required: [id, name, accessPin, createdAt, expiresAt, sessions, online, locked, blocked]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        accessPin: {type: string, pattern: '^[0-9]{4}$'}
+        createdAt: {type: number}
+        expiresAt: {type: number}
+        sessions: {type: integer, minimum: 0}
+        online: {type: boolean}
+        locked: {type: boolean, description: Locked for 15 minutes after wrong codes or PINs}
+        blocked: {type: boolean, description: Too many wrong Access PINs; the PC must create a new URL}
+        ra: {type: string, description: Admin console only; the RA ID the PC points to}
     MsfwrAccept:
       type: object
       required: [id]
@@ -619,6 +640,10 @@ components:
               actor: {type: string}
               text: {type: string}
         storage: {type: string}
+        links:
+          type: array
+          description: Active remote access URLs on this relay with their Access PINs
+          items: {$ref: "#/components/schemas/MsfwrRaLink"}
     MsfwrLinkStatus:
       type: object
       required: [link, online, busy]

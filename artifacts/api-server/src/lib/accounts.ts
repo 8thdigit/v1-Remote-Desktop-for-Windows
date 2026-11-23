@@ -169,6 +169,9 @@ export async function createAccounts(backend: Backend, options: { secret?: strin
 
   return {
     backend: backend.describe,
+    // A key for one purpose, derived from the persistent secret, so other
+    // parts of the relay get stable secrets without seeing this one.
+    derive(purpose: string) { return createHmac("sha256", secret).update("msfwr-derive:" + purpose).digest("base64url"); },
     get empty() { return users.length === 0; },
     list() { return users.map(publicAccount); },
     get(id: string) { const u = byId(id); return u && publicAccount(u); },

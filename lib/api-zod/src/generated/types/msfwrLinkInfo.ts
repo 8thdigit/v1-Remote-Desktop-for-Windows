@@ -17,4 +17,8 @@ export interface MsfwrLinkInfo {
      */
   viewers?: number;
   expiresAt: number;
+  /** Viewers must also enter the 4-digit Access PIN the company sees */
+  accessPinRequired?: boolean;
+  /** Too many wrong Access PINs; the link no longer works */
+  blocked?: boolean;
 }
