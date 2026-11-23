@@ -36,7 +36,7 @@ An installable Windows host and browser viewer for attended remote support over 
 
 ## Architecture decisions
 
-- Keep the host and viewer on the same HTTPS relay origin. Binary frame polling avoids a second protocol or a separate ingress port.
+- Keep the host and viewer on the same HTTPS relay origin. Binary frame long-polling avoids a second protocol or a separate ingress port: the host uploads a keyframe plus changed regions (`application/x-msfwr-frames`), viewers long-poll `/frame?v=2` and compose them on a canvas, and the host long-polls `/events` for input so it is applied one round trip after it is sent.
 - Keep screen frames, input queues and session tokens in bounded process memory, not durable storage. Use a trusted TLS-terminating relay; this is not end-to-end encryption.
 
 ## Product

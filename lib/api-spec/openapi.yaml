@@ -334,6 +334,7 @@ paths:
     post:
       operationId: sendMsfwrInput
       security: [{sessionToken: []}]
+      description: One input action, or (on relays whose frame replies carry X-Msfwr-Batch) a JSON array of up to 32.
       requestBody:
         required: true
         content:
@@ -351,11 +352,30 @@ paths:
     post:
       operationId: tickMsfwr
       security: [{sessionToken: []}]
-      description: Host heartbeat; optional raw JPEG body when the approved screen changes.
+      description: >-
+        Host heartbeat; optional screen update once approved. image/jpeg is a whole-screen keyframe.
+        application/x-msfwr-frames is a list of updates, each a kind byte (0 keyframe, 1 patch), x and y (uint16),
+        a uint32 length and a JPEG, big-endian. With X-Msfwr-Events 1 the host reads input from /msfwr/events,
+        so the reply leaves it out. The reply's patches flag says the relay takes patches; key asks for a keyframe.
       requestBody:
         content:
           image/jpeg:
             schema: {type: string, format: binary}
+          application/x-msfwr-frames:
+            schema: {type: string, format: binary}
+      responses:
+        "200":
+          description: Host status and pending input
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MsfwrTick"}
+  /msfwr/events:
+    get:
+      operationId: getMsfwrEvents
+      security: [{sessionToken: []}]
+      description: The host's input channel. Waits up to wait ms (at most 8000) for viewer input.
+      parameters:
+        - {in: query, name: wait, schema: {type: integer, minimum: 0, maximum: 8000}}
       responses:
         "200":
           description: Host status and pending input
@@ -366,8 +386,14 @@ paths:
     get:
       operationId: getMsfwrFrame
       security: [{sessionToken: []}]
+      description: >-
+        Without v, the latest keyframe as a JPEG. With v=2, waits up to wait ms (at most 8000) for an update newer
+        than after, and answers application/x-msfwr-frames: for each update the viewer is missing, a uint32
+        sequence, a kind byte (0 keyframe, 1 patch), x and y (uint16), a uint32 length and a JPEG, big-endian.
       parameters:
         - {in: query, name: after, schema: {type: integer, minimum: 0}}
+        - {in: query, name: v, schema: {type: integer, minimum: 2, maximum: 2}}
+        - {in: query, name: wait, schema: {type: integer, minimum: 0, maximum: 8000}}
       responses:
         "200":
           description: New JPEG frame; X-Msfwr-Frame is its sequence number.

@@ -607,6 +607,9 @@ export const JoinMsfwrResponse = zod.object({
 export const EndMsfwrResponse = zod.void()
 
 
+/**
+ * One input action, or (on relays whose frame replies carry X-Msfwr-Batch) a JSON array of up to 32.
+ */
 export const sendMsfwrInputBodyXMin = 0;
 export const sendMsfwrInputBodyXMax = 1;
 
@@ -639,7 +642,7 @@ export const ApproveMsfwrResponse = zod.void()
 
 
 /**
- * Host heartbeat; optional raw JPEG body when the approved screen changes.
+ * Host heartbeat; optional screen update once approved. image/jpeg is a whole-screen keyframe. application/x-msfwr-frames is a list of updates, each a kind byte (0 keyframe, 1 patch), x and y (uint16), a uint32 length and a JPEG, big-endian. With X-Msfwr-Events 1 the host reads input from /msfwr/events, so the reply leaves it out. The reply's patches flag says the relay takes patches; key asks for a keyframe.
  */
 export const tickMsfwrResponseInputItemXMin = 0;
 export const tickMsfwrResponseInputItemXMax = 1;
@@ -671,12 +674,65 @@ export const TickMsfwrResponse = zod.object({
 })
 
 
+/**
+ * The host's input channel. Waits up to wait ms (at most 8000) for viewer input.
+ */
+export const getMsfwrEventsQueryWaitMin = 0;
+export const getMsfwrEventsQueryWaitMax = 8000;
+
+
+
+export const GetMsfwrEventsQueryParams = zod.object({
+  "wait": zod.coerce.number().int().min(getMsfwrEventsQueryWaitMin).max(getMsfwrEventsQueryWaitMax).optional()
+})
+
+export const getMsfwrEventsResponseInputItemXMin = 0;
+export const getMsfwrEventsResponseInputItemXMax = 1;
+
+export const getMsfwrEventsResponseInputItemYMin = 0;
+export const getMsfwrEventsResponseInputItemYMax = 1;
+
+export const getMsfwrEventsResponseInputItemButtonMin = 0;
+export const getMsfwrEventsResponseInputItemButtonMax = 2;
+
+export const getMsfwrEventsResponseInputItemKeyMax = 24;
+
+
+
+export const GetMsfwrEventsResponse = zod.object({
+  "state": zod.enum(['waiting', 'pending', 'live']),
+  "verification": zod.string().optional(),
+  "input": zod.array(zod.object({
+  "kind": zod.enum(['key', 'wheel', 'down', 'up', 'move', 'release']),
+  "x": zod.number().min(getMsfwrEventsResponseInputItemXMin).max(getMsfwrEventsResponseInputItemXMax).optional(),
+  "y": zod.number().min(getMsfwrEventsResponseInputItemYMin).max(getMsfwrEventsResponseInputItemYMax).optional(),
+  "button": zod.int().min(getMsfwrEventsResponseInputItemButtonMin).max(getMsfwrEventsResponseInputItemButtonMax).optional(),
+  "delta": zod.union([zod.literal(-1),zod.literal(1)]).optional(),
+  "key": zod.string().max(getMsfwrEventsResponseInputItemKeyMax).optional(),
+  "ctrl": zod.boolean().optional(),
+  "shift": zod.boolean().optional(),
+  "alt": zod.boolean().optional()
+}))
+})
+
+
+/**
+ * Without v, the latest keyframe as a JPEG. With v=2, waits up to wait ms (at most 8000) for an update newer than after, and answers application/x-msfwr-frames: for each update the viewer is missing, a uint32 sequence, a kind byte (0 keyframe, 1 patch), x and y (uint16), a uint32 length and a JPEG, big-endian.
+ */
 export const getMsfwrFrameQueryAfterMin = 0;
+
+export const getMsfwrFrameQueryVMin = 2;
+export const getMsfwrFrameQueryVMax = 2;
+
+export const getMsfwrFrameQueryWaitMin = 0;
+export const getMsfwrFrameQueryWaitMax = 8000;
 
 
 
 export const GetMsfwrFrameQueryParams = zod.object({
-  "after": zod.coerce.number().int().min(getMsfwrFrameQueryAfterMin).optional()
+  "after": zod.coerce.number().int().min(getMsfwrFrameQueryAfterMin).optional(),
+  "v": zod.coerce.number().int().min(getMsfwrFrameQueryVMin).max(getMsfwrFrameQueryVMax).optional(),
+  "wait": zod.coerce.number().int().min(getMsfwrFrameQueryWaitMin).max(getMsfwrFrameQueryWaitMax).optional()
 })
 
 export const GetMsfwrFrameResponse = zod.unknown()

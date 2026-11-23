@@ -93,56 +93,123 @@ func fitted(w, h int) (int, int) {
 	return w, h
 }
 
-func snapshot() (*image.RGBA, int, int, error) {
+// capturer grabs the primary screen, scaled to fit 1280×800, into a DIB it
+// keeps between frames. It keeps the last frame it reported, so it can tell
+// which regions changed and convert only those.
+type capturer struct {
+	src, dst, bitmap, old uintptr
+	pixel                 *byte
+	w, h, dw, dh          int
+	prev                  []byte      // BGRA of the last frame reported
+	img                   *image.RGBA // RGBA of the last frame reported
+}
+
+func newCapturer() *capturer { return &capturer{} }
+
+func (c *capturer) close() {
+	if c.dst != 0 {
+		if c.old != 0 {
+			selectObject.Call(c.dst, c.old)
+		}
+		deleteDC.Call(c.dst)
+	}
+	if c.bitmap != 0 {
+		deleteObject.Call(c.bitmap)
+	}
+	if c.src != 0 {
+		releaseDC.Call(0, c.src)
+	}
+	*c = capturer{}
+}
+
+func (c *capturer) setup(w, h int) error {
+	fail := errors.New("could not capture the primary screen")
+	c.close()
+	c.w, c.h = w, h
+	c.dw, c.dh = fitted(w, h)
+	c.src, _, _ = getDC.Call(0)
+	if c.src == 0 {
+		return fail
+	}
+	c.dst, _, _ = createDC.Call(c.src)
+	if c.dst == 0 {
+		c.close()
+		return fail
+	}
+	info := dibInfo{Size: 40, Width: int32(c.dw), Height: -int32(c.dh), Planes: 1, Bits: 32}
+	c.bitmap, _, _ = createDIB.Call(c.dst, uintptr(unsafe.Pointer(&info)), 0, uintptr(unsafe.Pointer(&c.pixel)), 0, 0)
+	if c.bitmap == 0 || c.pixel == nil {
+		c.close()
+		return fail
+	}
+	c.old, _, _ = selectObject.Call(c.dst, c.bitmap)
+	if c.old == 0 || c.old == ^uintptr(0) {
+		c.old = 0
+		c.close()
+		return fail
+	}
+	stretchMode.Call(c.dst, 3)
+	return nil
+}
+
+// grab captures the screen. It returns the frame (shared with the
+// capturer, valid until the next grab), the real screen size, and the
+// regions that changed since the last grab: nil when nothing changed, and
+// the whole frame on the first grab or after the screen size changed.
+func (c *capturer) grab() (*image.RGBA, int, int, []image.Rectangle, error) {
 	fail := errors.New("could not capture the primary screen")
 	w, h := metric(0), metric(1)
 	if w <= 0 || h <= 0 || w > 32768 || h > 32768 {
-		return nil, 0, 0, fail
+		return nil, 0, 0, nil, fail
 	}
-	dw, dh := fitted(w, h)
-	src, _, _ := getDC.Call(0)
-	if src == 0 {
-		return nil, 0, 0, fail
+	fresh := false
+	if c.bitmap == 0 || w != c.w || h != c.h {
+		if err := c.setup(w, h); err != nil {
+			return nil, 0, 0, nil, err
+		}
+		fresh = true
 	}
-	defer releaseDC.Call(0, src)
-	dst, _, _ := createDC.Call(src)
-	if dst == 0 {
-		return nil, 0, 0, fail
-	}
-	defer deleteDC.Call(dst)
-	info := dibInfo{Size: 40, Width: int32(dw), Height: -int32(dh), Planes: 1, Bits: 32}
-	var pixel *byte
-	bitmap, _, _ := createDIB.Call(dst, uintptr(unsafe.Pointer(&info)), 0, uintptr(unsafe.Pointer(&pixel)), 0, 0)
-	if bitmap == 0 || pixel == nil {
-		return nil, 0, 0, fail
-	}
-	defer deleteObject.Call(bitmap)
-	old, _, _ := selectObject.Call(dst, bitmap)
-	if old == 0 || old == ^uintptr(0) {
-		return nil, 0, 0, fail
-	}
-	defer selectObject.Call(dst, old)
-	stretchMode.Call(dst, 3)
-	ret, _, _ := stretch.Call(dst, 0, 0, uintptr(dw), uintptr(dh), src, 0, 0, uintptr(w), uintptr(h), 0x40cc0020)
+	ret, _, _ := stretch.Call(c.dst, 0, 0, uintptr(c.dw), uintptr(c.dh), c.src, 0, 0, uintptr(w), uintptr(h), 0x40cc0020)
 	if ret == 0 {
-		return nil, 0, 0, fail
+		return nil, 0, 0, nil, fail
 	}
 	gdi.NewProc("GdiFlush").Call()
-	bgra := unsafe.Slice(pixel, dw*dh*4)
-	img := image.NewRGBA(image.Rect(0, 0, dw, dh))
-	for i := 0; i < len(bgra); i += 4 {
-		img.Pix[i], img.Pix[i+1], img.Pix[i+2], img.Pix[i+3] = bgra[i+2], bgra[i+1], bgra[i], 255
+	bgra := unsafe.Slice(c.pixel, c.dw*c.dh*4)
+	full := image.Rect(0, 0, c.dw, c.dh)
+	var rects []image.Rectangle
+	if fresh || c.img == nil {
+		c.prev = make([]byte, len(bgra))
+		c.img = image.NewRGBA(full)
+		rects = []image.Rectangle{full}
+	} else {
+		rects = dirtyRects(c.prev, bgra, c.dw, c.dh)
 	}
-	return img, w, h, nil
+	stride := c.dw * 4
+	for _, r := range rects {
+		for y := r.Min.Y; y < r.Max.Y; y++ {
+			from, to := y*stride+r.Min.X*4, y*stride+r.Max.X*4
+			copy(c.prev[from:to], bgra[from:to])
+			src, dst := bgra[from:to], c.img.Pix[from:to]
+			for i := 0; i < len(src); i += 4 {
+				dst[i], dst[i+1], dst[i+2], dst[i+3] = src[i+2], src[i+1], src[i], 255
+			}
+		}
+	}
+	return c.img, w, h, rects, nil
 }
 
-func encodeJPEG(img image.Image) ([]byte, error) {
-	for _, quality := range []int{58, 40, 25} {
+// encodeJPEG encodes img (or a region of it) at quality, lowering quality
+// until it fits what the relay accepts.
+func encodeJPEG(img image.Image, quality int) ([]byte, error) {
+	for _, q := range []int{quality, 40, 25} {
+		if q > quality {
+			continue
+		}
 		var buf bytes.Buffer
-		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: quality}); err != nil {
+		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: q}); err != nil {
 			return nil, err
 		}
-		if buf.Len() <= 768*1024 {
+		if buf.Len() <= 700*1024 {
 			return buf.Bytes(), nil
 		}
 	}

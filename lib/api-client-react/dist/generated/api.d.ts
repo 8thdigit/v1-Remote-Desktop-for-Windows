@@ -1,5 +1,5 @@
 import type { DataTag, DefinedInitialDataOptions, DefinedUseQueryResult, QueryClient, QueryKey, UndefinedInitialDataOptions, UseMutationOptions, UseMutationResult, UseQueryOptions, UseQueryResult } from '@tanstack/react-query';
-import type { Account, AccountCreate, AccountList, AccountUpdate, AdminOverview, AuthLogin, AuthStatus, GetMsfwrFrameParams, GetMsfwrLinkInfoParams, GetMsfwrLinkStatusParams, HealthStatus, MsfwrAccept, MsfwrCall, MsfwrCallList, MsfwrCallQuery, MsfwrCode, MsfwrConnectPc, MsfwrInbox, MsfwrInput, MsfwrInvite, MsfwrLink, MsfwrLinkCreate, MsfwrLinkInfo, MsfwrLinkJoin, MsfwrLinkRegister, MsfwrLinkStatus, MsfwrStandingKey, MsfwrTick, MsfwrViewer, PasswordChange } from './api.schemas';
+import type { Account, AccountCreate, AccountList, AccountUpdate, AdminOverview, AuthLogin, AuthStatus, GetMsfwrEventsParams, GetMsfwrFrameParams, GetMsfwrLinkInfoParams, GetMsfwrLinkStatusParams, HealthStatus, MsfwrAccept, MsfwrCall, MsfwrCallList, MsfwrCallQuery, MsfwrCode, MsfwrConnectPc, MsfwrInbox, MsfwrInput, MsfwrInvite, MsfwrLink, MsfwrLinkCreate, MsfwrLinkInfo, MsfwrLinkJoin, MsfwrLinkRegister, MsfwrLinkStatus, MsfwrStandingKey, MsfwrTick, MsfwrViewer, PasswordChange } from './api.schemas';
 import { customFetch } from '../custom-fetch';
 import type { ErrorType, BodyType } from '../custom-fetch';
 type AwaitedInput<T> = PromiseLike<T> | T;
@@ -540,6 +540,9 @@ export declare const useEndMsfwr: <TError = ErrorType<unknown>, TContext = unkno
     request?: SecondParameter<typeof customFetch>;
 }, queryClient?: QueryClient) => UseMutationResult<Awaited<ReturnType<typeof endMsfwr>>, TError, void, TContext>;
 export declare const getSendMsfwrInputUrl: () => string;
+/**
+ * One input action, or (on relays whose frame replies carry X-Msfwr-Batch) a JSON array of up to 32.
+ */
 export declare const sendMsfwrInput: (msfwrInput: MsfwrInput, options?: Parameters<typeof customFetch>[1]) => Promise<void>;
 export declare const getSendMsfwrInputMutationKey: () => readonly ["sendMsfwrInput"];
 export declare const getSendMsfwrInputMutationOptions: <TError = ErrorType<unknown>, TContext = unknown>(options?: {
@@ -571,7 +574,7 @@ export declare const useApproveMsfwr: <TError = ErrorType<unknown>, TContext = u
 }, queryClient?: QueryClient) => UseMutationResult<Awaited<ReturnType<typeof approveMsfwr>>, TError, void, TContext>;
 export declare const getTickMsfwrUrl: () => string;
 /**
- * Host heartbeat; optional raw JPEG body when the approved screen changes.
+ * Host heartbeat; optional screen update once approved. image/jpeg is a whole-screen keyframe. application/x-msfwr-frames is a list of updates, each a kind byte (0 keyframe, 1 patch), x and y (uint16), a uint32 length and a JPEG, big-endian. With X-Msfwr-Events 1 the host reads input from /msfwr/events, so the reply leaves it out. The reply's patches flag says the relay takes patches; key asks for a keyframe.
  */
 export declare const tickMsfwr: (tickMsfwrBody?: Blob, options?: Parameters<typeof customFetch>[1]) => Promise<MsfwrTick>;
 export declare const getTickMsfwrMutationKey: () => readonly ["tickMsfwr"];
@@ -589,7 +592,42 @@ export declare const useTickMsfwr: <TError = ErrorType<unknown>, TContext = unkn
     mutation?: UseMutationOptions<Awaited<ReturnType<typeof tickMsfwr>>, TError, TickMsfwrMutationVariables, TContext>;
     request?: SecondParameter<typeof customFetch>;
 }, queryClient?: QueryClient) => UseMutationResult<Awaited<ReturnType<typeof tickMsfwr>>, TError, TickMsfwrMutationVariables, TContext>;
+export declare const getGetMsfwrEventsUrl: (params?: GetMsfwrEventsParams) => string;
+/**
+ * The host's input channel. Waits up to wait ms (at most 8000) for viewer input.
+ */
+export declare const getMsfwrEvents: (params?: GetMsfwrEventsParams, options?: Parameters<typeof customFetch>[1]) => Promise<MsfwrTick>;
+export declare const getGetMsfwrEventsQueryKey: (params?: GetMsfwrEventsParams) => readonly ["/api/msfwr/events", ...GetMsfwrEventsParams[]];
+export declare const getGetMsfwrEventsQueryOptions: <TData = Awaited<ReturnType<typeof getMsfwrEvents>>, TError = ErrorType<unknown>>(params?: GetMsfwrEventsParams, options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMsfwrEvents>>, TError, TData>>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseQueryOptions<Awaited<ReturnType<typeof getMsfwrEvents>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+};
+export type GetMsfwrEventsQueryResult = NonNullable<Awaited<ReturnType<typeof getMsfwrEvents>>>;
+export type GetMsfwrEventsQueryError = ErrorType<unknown>;
+export declare function useGetMsfwrEvents<TData = Awaited<ReturnType<typeof getMsfwrEvents>>, TError = ErrorType<unknown>>(params: undefined | GetMsfwrEventsParams, options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMsfwrEvents>>, TError, TData>> & Pick<DefinedInitialDataOptions<Awaited<ReturnType<typeof getMsfwrEvents>>, TError, Awaited<ReturnType<typeof getMsfwrEvents>>>, 'initialData'>;
+    request?: SecondParameter<typeof customFetch>;
+}, queryClient?: QueryClient): DefinedUseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+};
+export declare function useGetMsfwrEvents<TData = Awaited<ReturnType<typeof getMsfwrEvents>>, TError = ErrorType<unknown>>(params?: GetMsfwrEventsParams, options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMsfwrEvents>>, TError, TData>> & Pick<UndefinedInitialDataOptions<Awaited<ReturnType<typeof getMsfwrEvents>>, TError, Awaited<ReturnType<typeof getMsfwrEvents>>>, 'initialData'>;
+    request?: SecondParameter<typeof customFetch>;
+}, queryClient?: QueryClient): UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+};
+export declare function useGetMsfwrEvents<TData = Awaited<ReturnType<typeof getMsfwrEvents>>, TError = ErrorType<unknown>>(params?: GetMsfwrEventsParams, options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMsfwrEvents>>, TError, TData>>;
+    request?: SecondParameter<typeof customFetch>;
+}, queryClient?: QueryClient): UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+};
 export declare const getGetMsfwrFrameUrl: (params?: GetMsfwrFrameParams) => string;
+/**
+ * Without v, the latest keyframe as a JPEG. With v=2, waits up to wait ms (at most 8000) for an update newer than after, and answers application/x-msfwr-frames: for each update the viewer is missing, a uint32 sequence, a kind byte (0 keyframe, 1 patch), x and y (uint16), a uint32 length and a JPEG, big-endian.
+ */
 export declare const getMsfwrFrame: (params?: GetMsfwrFrameParams, options?: Parameters<typeof customFetch>[1]) => Promise<Blob | void>;
 export declare const getGetMsfwrFrameQueryKey: (params?: GetMsfwrFrameParams) => readonly ["/api/msfwr/frame", ...GetMsfwrFrameParams[]];
 export declare const getGetMsfwrFrameQueryOptions: <TData = Awaited<ReturnType<typeof getMsfwrFrame>>, TError = ErrorType<unknown>>(params?: GetMsfwrFrameParams, options?: {

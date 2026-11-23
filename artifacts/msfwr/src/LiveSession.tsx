@@ -1,28 +1,63 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type WheelEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type WheelEvent } from 'react';
 import { ArrowLeft, Laptop, Maximize2, Minimize2, MousePointer2, ShieldCheck } from 'lucide-react';
 import { LogoMark, Wordmark } from '@/components/logo';
 import { BuddyPanel, useBuddyConfig } from '@/components/buddy-panel';
-import { endMsfwr, getGetMsfwrFrameUrl, sendMsfwrInput, type MsfwrInput } from '@workspace/api-client-react';
+import { endMsfwr, getGetMsfwrFrameUrl, getSendMsfwrInputUrl, sendMsfwrInput, type MsfwrInput } from '@workspace/api-client-react';
 
 type Props = { token: string; verification: string; preapproved?: boolean; onLeave: (message?: string) => void };
 const keys = /^(Backspace|Tab|Enter|PageUp|PageDown|End|Home|Arrow(Left|Up|Right|Down)|Insert|Delete|F([1-9]|1[01]))$/;
 const clamp = (n: number) => Math.max(0, Math.min(1, n));
 
-function position(e: PointerEvent<HTMLImageElement> | WheelEvent<HTMLImageElement>) {
+// One screen update from the relay: a keyframe (the whole screen) or a patch
+// (the JPEG of a region at x, y). See encodeFrames in the relay.
+type Update = { sequence: number; key: boolean; x: number; y: number; jpeg: Blob };
+function parseUpdates(buffer: ArrayBuffer): Update[] {
+  const view = new DataView(buffer);
+  const out: Update[] = [];
+  let at = 0;
+  while (at < buffer.byteLength) {
+    if (buffer.byteLength - at < 13) throw new Error('Invalid frame');
+    const length = view.getUint32(at + 9);
+    if (length > buffer.byteLength - at - 13) throw new Error('Invalid frame');
+    out.push({
+      sequence: view.getUint32(at), key: view.getUint8(at + 4) === 0,
+      x: view.getUint16(at + 5), y: view.getUint16(at + 7),
+      jpeg: new Blob([buffer.slice(at + 13, at + 13 + length)], { type: 'image/jpeg' }),
+    });
+    at += 13 + length;
+  }
+  return out;
+}
+
+function position(e: PointerEvent<HTMLCanvasElement> | WheelEvent<HTMLCanvasElement>) {
   const r = e.currentTarget.getBoundingClientRect();
   return { x: clamp((e.clientX - r.left) / r.width), y: clamp((e.clientY - r.top) / r.height) };
 }
 
 export default function LiveSession({ token, verification, preapproved = false, onLeave }: Props) {
   const [state, setState] = useState<'pending' | 'live'>(preapproved ? 'live' : 'pending');
-  const [frame, setFrame] = useState<string>();
+  const [frame, setFrame] = useState(false);
   const [control, setControl] = useState(false);
   const leaveRef = useRef(onLeave);
   const stopRef = useRef(false);
   const stream = useRef<AbortController | null>(null);
   const input = useRef<MsfwrInput[]>([]);
   const sending = useRef(false);
-  const surface = useRef<HTMLImageElement>(null);
+  // The relay takes several input actions in one request (it says so on
+  // its frame replies).
+  const batching = useRef(false);
+  const surface = useRef<HTMLCanvasElement | null>(null);
+  // The screen is composed here (keyframe, then patches) and copied to the
+  // visible canvas, which can mount after the first frame arrives.
+  const screen = useRef<HTMLCanvasElement | null>(null);
+  const showScreen = useCallback((el: HTMLCanvasElement | null) => {
+    surface.current = el;
+    const from = screen.current;
+    if (!el || !from) return;
+    el.width = from.width;
+    el.height = from.height;
+    el.getContext('2d')?.drawImage(from, 0, 0);
+  }, []);
   const stage = useRef<HTMLDivElement>(null);
   // Full screen uses the browser's own full-screen mode where it exists, and
   // otherwise (iPhone Safari) fills the window.
@@ -49,6 +84,12 @@ export default function LiveSession({ token, verification, preapproved = false, 
   const pressed = useRef<number | null>(null);
   const headers = { Authorization: `Bearer ${token}` };
   const buddy = useBuddyConfig(token, state === 'live');
+  // The AI Buddy reads still images of the screen. The screen is composed on
+  // a canvas, so it gets a JPEG snapshot of it, at most once a second, and
+  // only while it is on.
+  const [snapshot, setSnapshot] = useState<string>();
+  const wantSnapshot = useRef(false);
+  wantSnapshot.current = !!buddy;
   leaveRef.current = onLeave;
 
   function finish(message?: string, remoteAlreadyClosed = false) {
@@ -65,17 +106,53 @@ export default function LiveSession({ token, verification, preapproved = false, 
   useEffect(() => {
     const controller = new AbortController();
     stream.current = controller;
-    let timer = 0;
     let sequence = 0;
-    let preview: string | undefined;
-    // The generated URL helper supplies the endpoint. Use raw fetch so the
-    // frame protocol keeps JPEGs out of React Query and preserves headers.
+    let snapAt = 0;
+    let snapTimer = 0;
+    let snapUrl: string | undefined;
+    const buffer = document.createElement('canvas');
+    screen.current = buffer;
+    const paint = buffer.getContext('2d');
+    // Draws decoded updates in order on the buffer and the visible canvas.
+    function draw(updates: { key: boolean; x: number; y: number; image: ImageBitmap }[]) {
+      const shown = surface.current;
+      const visible = shown?.getContext('2d');
+      for (const { key, x, y, image } of updates) {
+        if (key && (buffer.width !== image.width || buffer.height !== image.height)) {
+          buffer.width = image.width;
+          buffer.height = image.height;
+          if (shown) { shown.width = image.width; shown.height = image.height; }
+        }
+        paint?.drawImage(image, x, y);
+        visible?.drawImage(image, x, y);
+        image.close();
+      }
+    }
+    // Takes a snapshot for the AI Buddy now, or when a second has passed
+    // since the last one, so the settled screen is always captured.
+    function snap() {
+      if (!wantSnapshot.current || snapTimer) return;
+      snapTimer = window.setTimeout(() => {
+        snapTimer = 0;
+        snapAt = Date.now();
+        buffer.toBlob((blob) => {
+          if (!blob || controller.signal.aborted) return;
+          if (snapUrl) URL.revokeObjectURL(snapUrl);
+          snapUrl = URL.createObjectURL(blob);
+          setSnapshot(snapUrl);
+        }, 'image/jpeg', 0.9);
+      }, Math.max(0, 1000 - (Date.now() - snapAt)));
+    }
+    // Frames are long-polled: the relay answers as soon as the screen
+    // changes, and the next request goes out at once. A relay without
+    // long polling answers at once; those are paced at 150 ms.
     async function poll() {
-      try {
-        const res = await fetch(getGetMsfwrFrameUrl({ after: sequence }), {
+      while (!controller.signal.aborted) {
+        const asked = Date.now();
+        const res = await fetch(getGetMsfwrFrameUrl({ after: sequence, v: 2, wait: 4000 }), {
           headers: { Authorization: `Bearer ${token}` }, cache: 'no-store',
           credentials: 'omit', redirect: 'error',
-          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(6500)]),
+          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12000)]),
         });
         if (controller.signal.aborted) return;
         if (res.status === 410) {
@@ -85,33 +162,45 @@ export default function LiveSession({ token, verification, preapproved = false, 
         if (!res.ok) throw new Error('Frame request failed');
         const current = res.headers.get('X-Msfwr-State');
         if (current !== 'live' && current !== 'pending') throw new Error('Invalid relay response');
+        const held = res.headers.get('X-Msfwr-Batch') === '1';
+        batching.current = held;
         setState(current);
         if (res.status === 200) {
           const nextSequence = Number(res.headers.get('X-Msfwr-Frame'));
+          const type = res.headers.get('content-type')?.split(';')[0];
           if (!Number.isSafeInteger(nextSequence) || nextSequence <= sequence ||
-              res.headers.get('content-type')?.split(';')[0] !== 'image/jpeg') throw new Error('Invalid frame');
-          const blob = await res.blob();
-          if (controller.signal.aborted) return;
-          if (preview) URL.revokeObjectURL(preview);
-          preview = URL.createObjectURL(blob);
-          setFrame(preview);
+              (type !== 'image/jpeg' && type !== 'application/x-msfwr-frames')) throw new Error('Invalid frame');
+          const updates = type === 'image/jpeg'
+            ? [{ sequence: nextSequence, key: true, x: 0, y: 0, jpeg: await res.blob() }]
+            : parseUpdates(await res.arrayBuffer());
+          if (!updates.length || (!updates[0].key && !sequence)) throw new Error('Invalid frame');
+          // Decode off the main thread, all at once, then draw in order.
+          const images = await Promise.all(updates.map(async (u) => ({ ...u, image: await createImageBitmap(u.jpeg) })));
+          if (controller.signal.aborted) { images.forEach((u) => u.image.close()); return; }
+          draw(images);
+          setFrame(true);
+          snap();
           sequence = nextSequence;
         }
-        timer = window.setTimeout(poll, current === 'live' ? 150 : 650);
-      } catch {
-        if (!controller.signal.aborted) finishRef.current('The connection to the relay was lost. Start a new session to reconnect.');
+        if (!held || current !== 'live') {
+          const pause = (current === 'live' ? 150 : 650) - (Date.now() - asked);
+          if (pause > 0) await new Promise((resolve) => setTimeout(resolve, pause));
+        }
       }
     }
     function pageExit() {
       controller.abort();
       void endMsfwr({ headers: { Authorization: `Bearer ${token}` }, keepalive: true }).catch(() => {});
     }
-    void poll();
+    poll().catch(() => {
+      if (!controller.signal.aborted) finishRef.current('The connection to the relay was lost. Start a new session to reconnect.');
+    });
     window.addEventListener('pagehide', pageExit);
     return () => {
       controller.abort();
-      clearTimeout(timer);
-      if (preview) URL.revokeObjectURL(preview);
+      screen.current = null;
+      clearTimeout(snapTimer);
+      if (snapUrl) URL.revokeObjectURL(snapUrl);
       window.removeEventListener('pagehide', pageExit);
     };
   }, [token]);
@@ -132,11 +221,19 @@ export default function LiveSession({ token, verification, preapproved = false, 
     if (sending.current) return;
     sending.current = true;
     try {
+      // Everything queued while a request was out goes in the next one.
       while (!signal.aborted && queue.length) {
-        await sendMsfwrInput(queue.shift()!, {
-          headers, signal: AbortSignal.any([signal, AbortSignal.timeout(3000)]),
-          redirect: 'error', credentials: 'omit',
-        });
+        const options = { headers, signal: AbortSignal.any([signal, AbortSignal.timeout(3000)]), redirect: 'error' as const, credentials: 'omit' as const };
+        if (batching.current && queue.length > 1) {
+          const items = queue.splice(0, 32);
+          const res = await fetch(getSendMsfwrInputUrl(), {
+            ...options, method: 'POST', cache: 'no-store',
+            headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(items),
+          });
+          if (!res.ok) throw new Error('Input request failed');
+        } else {
+          await sendMsfwrInput(queue.shift()!, options);
+        }
       }
     } catch {
       if (!signal.aborted) finish('Remote input was interrupted. The session was stopped.');
@@ -149,7 +246,7 @@ export default function LiveSession({ token, verification, preapproved = false, 
     pressed.current = null;
     if (control) void dispatch({ kind: 'release' });
   }
-  function key(e: KeyboardEvent<HTMLImageElement>) {
+  function key(e: KeyboardEvent<HTMLCanvasElement>) {
     if (!control || e.nativeEvent.isComposing) return;
     if (e.key === 'Escape') { e.preventDefault(); release(); setControl(false); return; }
     if (e.key === 'Tab' && e.shiftKey) return;
@@ -224,10 +321,10 @@ export default function LiveSession({ token, verification, preapproved = false, 
               </div>
             )}
             {frame ? (
-              <img
-                ref={surface}
-                src={frame}
-                alt="Live view of the host's primary Windows screen"
+              <canvas
+                ref={showScreen}
+                role="img"
+                aria-label="Live view of the host's primary Windows screen"
                 tabIndex={0}
                 draggable={false}
                 className={`block ${full ? 'max-h-[100dvh] max-w-[100vw] object-contain' : 'max-h-[72dvh] max-w-full rounded-sm outline-offset-4'} ${control ? 'touch-none cursor-default' : ''}`}
@@ -243,7 +340,7 @@ export default function LiveSession({ token, verification, preapproved = false, 
                   void dispatch({ kind: 'down', button: e.button, ...position(e) });
                 }}
                 onPointerMove={(e) => {
-                  if (!control || Date.now() - lastMove.current < 90) return;
+                  if (!control || Date.now() - lastMove.current < 30) return;
                   lastMove.current = Date.now();
                   void dispatch({ kind: 'move', ...position(e) });
                 }}
@@ -256,7 +353,7 @@ export default function LiveSession({ token, verification, preapproved = false, 
                 onPointerCancel={release}
                 onLostPointerCapture={() => { if (pressed.current !== null) release(); }}
                 onWheel={(e) => {
-                  if (!control || !e.deltaY || Date.now() - lastWheel.current < 120) return;
+                  if (!control || !e.deltaY || Date.now() - lastWheel.current < 60) return;
                   lastWheel.current = Date.now();
                   void dispatch({ kind: 'wheel', delta: e.deltaY > 0 ? -1 : 1, ...position(e) });
                 }}
@@ -268,7 +365,7 @@ export default function LiveSession({ token, verification, preapproved = false, 
               </div>
             )}
           </div>
-          {buddy && <BuddyPanel token={token} frame={frame} config={buddy} />}
+          {buddy && <BuddyPanel token={token} frame={snapshot} config={buddy} />}
           </div>
           <p className="mt-3 text-sm text-muted-foreground">Primary display only. At the Windows PC, press Ctrl+2 or F12 to stop sharing.</p>
         </section>

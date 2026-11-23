@@ -1,12 +1,12 @@
 import { Router, raw, type Request, type Response } from "express";
 import {
-  JoinMsfwrBody, JoinMsfwrResponse, CreateMsfwrInviteResponse,
+  GetMsfwrEventsQueryParams, JoinMsfwrBody, JoinMsfwrResponse, CreateMsfwrInviteResponse,
   SendMsfwrInputBody, RegisterMsfwrStandingBody, RegisterMsfwrStandingResponse, CallMsfwrBody, ListMsfwrCallsBody, ListMsfwrCallsResponse, TickMsfwrResponse, GetMsfwrFrameQueryParams,
   CreateMsfwrLinkBody, CreateMsfwrLinkResponse, RegisterMsfwrLinkBody, RegisterMsfwrLinkResponse, GetMsfwrLinkStatusQueryParams, GetMsfwrLinkStatusResponse, RevokeMsfwrLinkBody,
   GetMsfwrLinkInfoQueryParams, GetMsfwrLinkInfoResponse, JoinMsfwrLinkBody, JoinMsfwrLinkResponse,
   GetMsfwrInboxResponse, AcceptMsfwrRequestBody, AcceptMsfwrRequestResponse, ConnectMsfwrPcBody, ConnectMsfwrPcResponse,
 } from "@workspace/api-zod";
-import { formatRaId, normalizeRaId } from "../lib/msfwr";
+import { decodeUpdates, encodeFrames, formatRaId, normalizeRaId, type Session } from "../lib/msfwr";
 import { accountsReady, activity, connectGateForRa, gateForRa, linkLogReady, linkRegister, operatorOf, requireUser, sendError, store } from "../lib/portal";
 import { keyedLimiter } from "../lib/security";
 
@@ -261,42 +261,112 @@ router.post("/end", (req, res) => {
   }
   res.sendStatus(204);
 });
-router.post("/tick", raw({type:"image/jpeg", limit:"768kb", inflate:false}), (req, res) => {
+// Holds a long-polling request until ready() is true, the session ends, the
+// client goes away, or ms pass; then calls done() once (unless the client left).
+function hold(res: Response, s: Session, ready: () => boolean, ms: number, done: () => void) {
+  if (s.closed || ready() || ms <= 0) { done(); return; }
+  let over = false;
+  const stop = () => { over = true; clearTimeout(timer); unwatch(); };
+  const finish = () => { if (!over) { stop(); done(); } };
+  // Checked on the next turn, so a batch of input or updates goes out whole.
+  const unwatch = store.watch(s, () => setImmediate(() => { if (s.closed || ready()) finish(); }));
+  const timer = setTimeout(finish, ms);
+  res.on("close", () => { if (!over) stop(); });
+}
+const gone = (res: Response) => res.status(410).json({error: "This session ended or expired. Ask for a new code."});
+
+// Host heartbeat. The body is a bare JPEG (a keyframe; older hosts) or, as
+// application/x-msfwr-frames, a list of keyframes and changed regions. A host
+// that reads input from /events sends X-Msfwr-Events: 1. The reply's
+// "patches" says this relay accepts changed regions; "key" asks for a keyframe.
+router.post("/tick",
+  raw({type: "image/jpeg", limit: "768kb", inflate: false}),
+  raw({type: "application/x-msfwr-frames", limit: "1536kb", inflate: false}),
+  (req, res) => {
+    const s = auth(req, res, "host");
+    if (!s) return;
+    const body: unknown = req.body;
+    let frame: Buffer | ReturnType<typeof decodeUpdates>;
+    if (Buffer.isBuffer(body) && req.is("application/x-msfwr-frames")) {
+      frame = decodeUpdates(body);
+      if (!frame) { res.status(400).json({error: "Expected screen updates."}); return; }
+    } else if (body !== undefined) {
+      if (!Buffer.isBuffer(body) || body.length < 4 || body.readUInt16BE(0) !== 0xffd8 || body.readUInt16BE(body.length - 2) !== 0xffd9) {
+        res.status(400).json({error: "Expected a binary JPEG frame."}); return;
+      }
+      frame = body;
+    }
+    if (frame && s.state !== "live") {
+      res.status(409).json({error: "No screen can be uploaded before host approval."}); return;
+    }
+    const reply = store.tick(s, frame, req.get("x-msfwr-events") === "1");
+    res.json({...TickMsfwrResponse.parse(reply), patches: true, ...("key" in reply ? {key: true} : {})});
+  });
+// The host's input channel: waits up to `wait` ms for viewer input, so input
+// reaches the PC one round trip after it is sent instead of on the next tick.
+router.get("/events", (req, res) => {
   const s = auth(req, res, "host");
   if (!s) return;
-  const frame: unknown = req.body;
-  if (frame !== undefined && (!Buffer.isBuffer(frame) || frame.length < 4 || frame.readUInt16BE(0) !== 0xffd8 || frame.readUInt16BE(frame.length - 2) !== 0xffd9)) {
-    res.status(400).json({error: "Expected a binary JPEG frame."}); return;
-  }
-  if (frame && s.state !== "live") {
-    res.status(409).json({error: "No screen can be uploaded before host approval."}); return;
-  }
-  res.json(TickMsfwrResponse.parse(store.tick(s, frame)));
+  const query = GetMsfwrEventsQueryParams.safeParse(req.query);
+  if (!query.success) { res.status(400).json({error: "Invalid wait."}); return; }
+  const ready = () => s.state !== "live" || s.input.length > 0;
+  hold(res, s, ready, query.data.wait ?? 0, () => {
+    if (s.closed) { gone(res); return; }
+    res.json(TickMsfwrResponse.parse({state: s.state, input: s.state === "live" ? store.takeInput(s) : []}));
+  });
 });
+// Viewers read the screen here. With v=2 the reply holds up to `wait` ms for
+// something newer than `after`, and carries every update the viewer is
+// missing (see encodeFrames). Without it, the latest keyframe as a JPEG.
 router.get("/frame", (req, res) => {
   const s = auth(req, res, "viewer");
   if (!s) return;
   const query = GetMsfwrFrameQueryParams.safeParse(req.query);
   if (!query.success) { res.status(400).json({error: "Invalid frame sequence."}); return; }
-  res.set("X-Msfwr-State", s.state);
-  if (s.state !== "live" || !s.frame || s.sequence <= (query.data.after ?? 0)) { res.sendStatus(204); return; }
-  res.set("X-Msfwr-Frame", String(s.sequence));
-  res.type("image/jpeg").send(s.frame);
+  const after = query.data.after ?? 0;
+  if (query.data.v !== 2) {
+    res.set("X-Msfwr-State", s.state);
+    const key = s.keySequence ?? s.sequence;
+    if (s.state !== "live" || !s.frame || key <= after) { res.sendStatus(204); return; }
+    res.set("X-Msfwr-Frame", String(key));
+    res.type("image/jpeg").send(s.frame);
+    return;
+  }
+  const state = s.state;
+  const ready = () => s.state !== state || (s.state === "live" && s.sequence > after && !!s.frame);
+  hold(res, s, ready, query.data.wait ?? 0, () => {
+    if (s.closed) { gone(res); return; }
+    res.set({"X-Msfwr-State": s.state, "X-Msfwr-Batch": "1"});
+    const items = s.state === "live" ? store.updatesAfter(s, after) : [];
+    if (!items.length) { res.sendStatus(204); return; }
+    res.set("X-Msfwr-Frame", String(items.at(-1)!.sequence));
+    res.type("application/x-msfwr-frames").send(encodeFrames(items));
+  });
 });
+// Remote input from a viewer: one action, or (with X-Msfwr-Batch) an array
+// of up to 32 sent together.
 router.post("/input", (req, res) => {
   const s = auth(req, res, "viewer");
   if (!s) return;
   if (s.state !== "live") { res.status(409).json({error: "Wait for the host to approve the session."}); return; }
-  const parsed = SendMsfwrInputBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({error: "Invalid remote input."}); return; }
-  const a = parsed.data;
-  if ((["move", "down", "up", "wheel"].includes(a.kind) && (a.x === undefined || a.y === undefined)) ||
-      ((a.kind === "down" || a.kind === "up") && a.button === undefined) ||
-      (a.kind === "wheel" && a.delta === undefined) ||
-      (a.kind === "key" && !a.key)) {
-    res.status(400).json({error: "Incomplete remote input."}); return;
+  const list: unknown[] = Array.isArray(req.body) ? req.body : [req.body];
+  if (!list.length || list.length > 32) { res.status(400).json({error: "Invalid remote input."}); return; }
+  const actions = [];
+  for (const item of list) {
+    const parsed = SendMsfwrInputBody.safeParse(item);
+    if (!parsed.success) { res.status(400).json({error: "Invalid remote input."}); return; }
+    const a = parsed.data;
+    if ((["move", "down", "up", "wheel"].includes(a.kind) && (a.x === undefined || a.y === undefined)) ||
+        ((a.kind === "down" || a.kind === "up") && a.button === undefined) ||
+        (a.kind === "wheel" && a.delta === undefined) ||
+        (a.kind === "key" && !a.key)) {
+      res.status(400).json({error: "Incomplete remote input."}); return;
+    }
+    actions.push(a);
   }
-  if (!store.enqueue(s, a)) { res.status(429).json({error: "Remote input was too fast."}); return; }
+  for (const a of actions) {
+    if (!store.enqueue(s, a)) { res.status(429).json({error: "Remote input was too fast."}); return; }
+  }
   res.sendStatus(204);
 });
 

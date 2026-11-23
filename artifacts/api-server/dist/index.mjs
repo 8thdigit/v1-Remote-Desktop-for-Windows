@@ -71421,9 +71421,42 @@ var TickMsfwrResponse = object({
     "alt": boolean2().optional()
   }))
 });
+var getMsfwrEventsQueryWaitMin = 0;
+var getMsfwrEventsQueryWaitMax = 8e3;
+var GetMsfwrEventsQueryParams = object({
+  "wait": coerce_exports.number().int().min(getMsfwrEventsQueryWaitMin).max(getMsfwrEventsQueryWaitMax).optional()
+});
+var getMsfwrEventsResponseInputItemXMin = 0;
+var getMsfwrEventsResponseInputItemXMax = 1;
+var getMsfwrEventsResponseInputItemYMin = 0;
+var getMsfwrEventsResponseInputItemYMax = 1;
+var getMsfwrEventsResponseInputItemButtonMin = 0;
+var getMsfwrEventsResponseInputItemButtonMax = 2;
+var getMsfwrEventsResponseInputItemKeyMax = 24;
+var GetMsfwrEventsResponse = object({
+  "state": _enum(["waiting", "pending", "live"]),
+  "verification": string2().optional(),
+  "input": array(object({
+    "kind": _enum(["key", "wheel", "down", "up", "move", "release"]),
+    "x": number2().min(getMsfwrEventsResponseInputItemXMin).max(getMsfwrEventsResponseInputItemXMax).optional(),
+    "y": number2().min(getMsfwrEventsResponseInputItemYMin).max(getMsfwrEventsResponseInputItemYMax).optional(),
+    "button": int().min(getMsfwrEventsResponseInputItemButtonMin).max(getMsfwrEventsResponseInputItemButtonMax).optional(),
+    "delta": union([literal(-1), literal(1)]).optional(),
+    "key": string2().max(getMsfwrEventsResponseInputItemKeyMax).optional(),
+    "ctrl": boolean2().optional(),
+    "shift": boolean2().optional(),
+    "alt": boolean2().optional()
+  }))
+});
 var getMsfwrFrameQueryAfterMin = 0;
+var getMsfwrFrameQueryVMin = 2;
+var getMsfwrFrameQueryVMax = 2;
+var getMsfwrFrameQueryWaitMin = 0;
+var getMsfwrFrameQueryWaitMax = 8e3;
 var GetMsfwrFrameQueryParams = object({
-  "after": coerce_exports.number().int().min(getMsfwrFrameQueryAfterMin).optional()
+  "after": coerce_exports.number().int().min(getMsfwrFrameQueryAfterMin).optional(),
+  "v": coerce_exports.number().int().min(getMsfwrFrameQueryVMin).max(getMsfwrFrameQueryVMax).optional(),
+  "wait": coerce_exports.number().int().min(getMsfwrFrameQueryWaitMin).max(getMsfwrFrameQueryWaitMax).optional()
 });
 var GetMsfwrFrameResponse = unknown();
 
@@ -71467,6 +71500,40 @@ function normalizeRaId(value) {
   return /^\d{6}$/.test(digits) ? digits : void 0;
 }
 var formatRaId = (raId) => `RA-${raId}`;
+var patchLogBytes = 4 * 1024 * 1024;
+var patchLogCount = 600;
+function encodeFrames(items) {
+  const parts = [];
+  for (const item of items) {
+    const head = Buffer.alloc(13);
+    head.writeUInt32BE(item.sequence, 0);
+    head.writeUInt8(item.key ? 0 : 1, 4);
+    head.writeUInt16BE(item.x, 5);
+    head.writeUInt16BE(item.y, 7);
+    head.writeUInt32BE(item.data.length, 9);
+    parts.push(head, item.data);
+  }
+  return Buffer.concat(parts);
+}
+var isJpeg = (b) => b.length >= 4 && b.readUInt16BE(0) === 65496 && b.readUInt16BE(b.length - 2) === 65497;
+function decodeUpdates(body) {
+  const out = [];
+  let at = 0;
+  while (at < body.length) {
+    if (body.length - at < 9 || out.length >= 64) return;
+    const kind = body.readUInt8(at);
+    const x = body.readUInt16BE(at + 1);
+    const y = body.readUInt16BE(at + 3);
+    const length = body.readUInt32BE(at + 5);
+    at += 9;
+    if (kind > 1 || length > body.length - at) return;
+    const data = body.subarray(at, at + length);
+    at += length;
+    if (!isJpeg(data) || kind === 0 && (x !== 0 || y !== 0)) return;
+    out.push({ key: kind === 0, x, y, data: Buffer.from(data) });
+  }
+  return out.length ? out : void 0;
+}
 var linkInfo = (link) => ({
   code: link.code,
   name: link.name,
@@ -71539,7 +71606,20 @@ function createMsfwrStore(clock = Date.now, hooks = {}) {
     for (const token of s.viewers.keys()) peers.delete(token);
     s.viewers.clear();
     s.frame = void 0;
+    s.patches = void 0;
+    s.patchBytes = 0;
     s.input = [];
+    s.closed = true;
+    notify(s);
+  };
+  const notify = (s) => {
+    if (!s.watchers?.size) return;
+    for (const fn of [...s.watchers]) {
+      try {
+        fn();
+      } catch {
+      }
+    }
   };
   const addViewer = (s) => {
     const token = randomBytes(32).toString("base64url");
@@ -72047,18 +72127,63 @@ function createMsfwrStore(clock = Date.now, hooks = {}) {
       goLive(s);
       return true;
     },
-    tick(s, frame) {
+    // A host heartbeat, with the screen updates it carries: a bare JPEG (a
+    // keyframe, from older hosts) or a list of keyframes and patches. With
+    // events set, the host reads input from /events, so the queue is left.
+    tick(s, frame, events = false) {
       if (s.state !== "live") return { state: s.state, verification: s.verification, input: [] };
       const now = clock();
-      if (frame && now - s.lastFrame >= 100) {
+      const updates = Buffer.isBuffer(frame) ? [{ key: true, x: 0, y: 0, data: frame }] : frame ?? [];
+      let changed = false;
+      for (const u of updates) {
+        if (u.key) {
+          s.sequence += 1;
+          s.frame = u.data;
+          s.keySequence = s.sequence;
+          s.patches = [];
+          s.patchBytes = 0;
+          s.wantKey = false;
+        } else {
+          if (!s.frame || s.wantKey || (s.patchBytes ?? 0) + u.data.length > patchLogBytes || (s.patches?.length ?? 0) >= patchLogCount) {
+            s.wantKey = true;
+            continue;
+          }
+          s.sequence += 1;
+          (s.patches ??= []).push({ ...u, sequence: s.sequence });
+          s.patchBytes = (s.patchBytes ?? 0) + u.data.length;
+        }
         s.lastFrame = now;
-        s.frame = frame;
-        s.sequence += 1;
+        changed = true;
       }
+      if (changed) notify(s);
+      const input = events ? [] : store2.takeInput(s);
+      return { state: s.state, input, ...s.wantKey ? { key: true } : {} };
+    },
+    // Removes and returns the input queued for the host.
+    takeInput(s) {
+      const now = clock();
       const queued = s.input.splice(0);
       const stale = queued.some(({ time: time2 }) => now - time2 > 1e3);
-      const input = stale ? [{ kind: "release" }] : queued.map(({ item }) => item);
-      return { state: s.state, input };
+      return stale ? [{ kind: "release" }] : queued.map(({ item }) => item);
+    },
+    // The screen updates a viewer that has seen sequence `after` still
+    // needs: the keyframe and every patch after it when the viewer is behind
+    // the keyframe, otherwise only the newer patches.
+    updatesAfter(s, after) {
+      if (!s.frame || s.keySequence === void 0 || s.sequence <= after) return [];
+      const patches = s.patches ?? [];
+      if (after < s.keySequence) {
+        return [{ key: true, x: 0, y: 0, data: s.frame, sequence: s.keySequence }, ...patches];
+      }
+      return patches.filter((p) => p.sequence > after);
+    },
+    // Runs fn whenever the session gets a frame or input, or ends, until the
+    // returned function is called.
+    watch(s, fn) {
+      (s.watchers ??= /* @__PURE__ */ new Set()).add(fn);
+      return () => {
+        s.watchers?.delete(fn);
+      };
     },
     enqueue(s, item) {
       const last = s.input.at(-1);
@@ -72066,9 +72191,11 @@ function createMsfwrStore(clock = Date.now, hooks = {}) {
       if (item.kind === "move" && last?.item.kind === "move") s.input.pop();
       if (s.input.length >= 48) {
         s.input = [{ item: { kind: "release" }, time: clock() }];
+        notify(s);
         return false;
       }
       s.input.push({ item, time: clock() });
+      notify(s);
       return true;
     },
     // Admin console: live sessions, online PCs and requests on this relay.
@@ -74659,19 +74786,78 @@ router2.post("/end", (req, res) => {
   }
   res.sendStatus(204);
 });
-router2.post("/tick", (0, import_express2.raw)({ type: "image/jpeg", limit: "768kb", inflate: false }), (req, res) => {
+function hold(res, s, ready, ms, done) {
+  if (s.closed || ready() || ms <= 0) {
+    done();
+    return;
+  }
+  let over = false;
+  const stop = () => {
+    over = true;
+    clearTimeout(timer);
+    unwatch();
+  };
+  const finish = () => {
+    if (!over) {
+      stop();
+      done();
+    }
+  };
+  const unwatch = store.watch(s, () => setImmediate(() => {
+    if (s.closed || ready()) finish();
+  }));
+  const timer = setTimeout(finish, ms);
+  res.on("close", () => {
+    if (!over) stop();
+  });
+}
+var gone = (res) => res.status(410).json({ error: "This session ended or expired. Ask for a new code." });
+router2.post(
+  "/tick",
+  (0, import_express2.raw)({ type: "image/jpeg", limit: "768kb", inflate: false }),
+  (0, import_express2.raw)({ type: "application/x-msfwr-frames", limit: "1536kb", inflate: false }),
+  (req, res) => {
+    const s = auth(req, res, "host");
+    if (!s) return;
+    const body = req.body;
+    let frame;
+    if (Buffer.isBuffer(body) && req.is("application/x-msfwr-frames")) {
+      frame = decodeUpdates(body);
+      if (!frame) {
+        res.status(400).json({ error: "Expected screen updates." });
+        return;
+      }
+    } else if (body !== void 0) {
+      if (!Buffer.isBuffer(body) || body.length < 4 || body.readUInt16BE(0) !== 65496 || body.readUInt16BE(body.length - 2) !== 65497) {
+        res.status(400).json({ error: "Expected a binary JPEG frame." });
+        return;
+      }
+      frame = body;
+    }
+    if (frame && s.state !== "live") {
+      res.status(409).json({ error: "No screen can be uploaded before host approval." });
+      return;
+    }
+    const reply = store.tick(s, frame, req.get("x-msfwr-events") === "1");
+    res.json({ ...TickMsfwrResponse.parse(reply), patches: true, ..."key" in reply ? { key: true } : {} });
+  }
+);
+router2.get("/events", (req, res) => {
   const s = auth(req, res, "host");
   if (!s) return;
-  const frame = req.body;
-  if (frame !== void 0 && (!Buffer.isBuffer(frame) || frame.length < 4 || frame.readUInt16BE(0) !== 65496 || frame.readUInt16BE(frame.length - 2) !== 65497)) {
-    res.status(400).json({ error: "Expected a binary JPEG frame." });
+  const query = GetMsfwrEventsQueryParams.safeParse(req.query);
+  if (!query.success) {
+    res.status(400).json({ error: "Invalid wait." });
     return;
   }
-  if (frame && s.state !== "live") {
-    res.status(409).json({ error: "No screen can be uploaded before host approval." });
-    return;
-  }
-  res.json(TickMsfwrResponse.parse(store.tick(s, frame)));
+  const ready = () => s.state !== "live" || s.input.length > 0;
+  hold(res, s, ready, query.data.wait ?? 0, () => {
+    if (s.closed) {
+      gone(res);
+      return;
+    }
+    res.json(TickMsfwrResponse.parse({ state: s.state, input: s.state === "live" ? store.takeInput(s) : [] }));
+  });
 });
 router2.get("/frame", (req, res) => {
   const s = auth(req, res, "viewer");
@@ -74681,13 +74867,34 @@ router2.get("/frame", (req, res) => {
     res.status(400).json({ error: "Invalid frame sequence." });
     return;
   }
-  res.set("X-Msfwr-State", s.state);
-  if (s.state !== "live" || !s.frame || s.sequence <= (query.data.after ?? 0)) {
-    res.sendStatus(204);
+  const after = query.data.after ?? 0;
+  if (query.data.v !== 2) {
+    res.set("X-Msfwr-State", s.state);
+    const key = s.keySequence ?? s.sequence;
+    if (s.state !== "live" || !s.frame || key <= after) {
+      res.sendStatus(204);
+      return;
+    }
+    res.set("X-Msfwr-Frame", String(key));
+    res.type("image/jpeg").send(s.frame);
     return;
   }
-  res.set("X-Msfwr-Frame", String(s.sequence));
-  res.type("image/jpeg").send(s.frame);
+  const state = s.state;
+  const ready = () => s.state !== state || s.state === "live" && s.sequence > after && !!s.frame;
+  hold(res, s, ready, query.data.wait ?? 0, () => {
+    if (s.closed) {
+      gone(res);
+      return;
+    }
+    res.set({ "X-Msfwr-State": s.state, "X-Msfwr-Batch": "1" });
+    const items = s.state === "live" ? store.updatesAfter(s, after) : [];
+    if (!items.length) {
+      res.sendStatus(204);
+      return;
+    }
+    res.set("X-Msfwr-Frame", String(items.at(-1).sequence));
+    res.type("application/x-msfwr-frames").send(encodeFrames(items));
+  });
 });
 router2.post("/input", (req, res) => {
   const s = auth(req, res, "viewer");
@@ -74696,19 +74903,30 @@ router2.post("/input", (req, res) => {
     res.status(409).json({ error: "Wait for the host to approve the session." });
     return;
   }
-  const parsed = SendMsfwrInputBody.safeParse(req.body);
-  if (!parsed.success) {
+  const list = Array.isArray(req.body) ? req.body : [req.body];
+  if (!list.length || list.length > 32) {
     res.status(400).json({ error: "Invalid remote input." });
     return;
   }
-  const a = parsed.data;
-  if (["move", "down", "up", "wheel"].includes(a.kind) && (a.x === void 0 || a.y === void 0) || (a.kind === "down" || a.kind === "up") && a.button === void 0 || a.kind === "wheel" && a.delta === void 0 || a.kind === "key" && !a.key) {
-    res.status(400).json({ error: "Incomplete remote input." });
-    return;
+  const actions = [];
+  for (const item of list) {
+    const parsed = SendMsfwrInputBody.safeParse(item);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid remote input." });
+      return;
+    }
+    const a = parsed.data;
+    if (["move", "down", "up", "wheel"].includes(a.kind) && (a.x === void 0 || a.y === void 0) || (a.kind === "down" || a.kind === "up") && a.button === void 0 || a.kind === "wheel" && a.delta === void 0 || a.kind === "key" && !a.key) {
+      res.status(400).json({ error: "Incomplete remote input." });
+      return;
+    }
+    actions.push(a);
   }
-  if (!store.enqueue(s, a)) {
-    res.status(429).json({ error: "Remote input was too fast." });
-    return;
+  for (const a of actions) {
+    if (!store.enqueue(s, a)) {
+      res.status(429).json({ error: "Remote input was too fast." });
+      return;
+    }
   }
   res.sendStatus(204);
 });

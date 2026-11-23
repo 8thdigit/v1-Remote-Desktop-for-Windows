@@ -261,3 +261,54 @@ test("a new relay has a default admin with PIN 121212 that must be changed at fi
     rmSync(freshDir, { recursive: true, force: true });
   }
 });
+
+test("streaming: long-polled frames with patches, batched input and the host's input channel", async () => {
+  const pc = client();
+  const invite = (await pc("POST", "/msfwr/invite")).json;
+  const acme = client();
+  await acme("POST", "/auth/login", { username: "acme", password: "acme-pass-123" });
+  const joined = await acme("POST", "/msfwr/join", { code: invite.code });
+  assert.equal(joined.status, 200, JSON.stringify(joined.json));
+  const host = { authorization: `Bearer ${invite.token}` };
+  const viewer = { authorization: `Bearer ${joined.json.token}` };
+  assert.equal((await pc("POST", "/msfwr/approve", undefined, host)).status, 204);
+
+  const jpeg = (n) => Buffer.from([255, 216, n, 255, 217]);
+  const item = (kind, x, y, data) => Buffer.concat([Buffer.from([kind, x >> 8, x & 255, y >> 8, y & 255, 0, 0, 0, data.length]), data]);
+  const upload = (body) => fetch(`${base}/msfwr/tick`, { method: "POST", headers: { ...host, "content-type": "application/x-msfwr-frames", "x-msfwr-events": "1" }, body });
+
+  // A viewer waiting for the screen is answered as soon as it arrives.
+  const started = Date.now();
+  const waiting = fetch(`${base}/msfwr/frame?after=0&v=2&wait=5000`, { headers: viewer });
+  await new Promise((r) => setTimeout(r, 150));
+  const ticked = await (await upload(Buffer.concat([item(0, 0, 0, jpeg(1)), item(1, 16, 32, jpeg(2))]))).json();
+  assert.deepEqual([ticked.state, ticked.patches, ticked.input], ["live", true, []]);
+  const res = await waiting;
+  assert.ok(Date.now() - started < 3000, "the frame request returned when the frame arrived");
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("x-msfwr-frame"), "2");
+  assert.equal(res.headers.get("x-msfwr-batch"), "1");
+  const body = Buffer.from(await res.arrayBuffer());
+  assert.deepEqual([body.readUInt32BE(0), body[4], body.readUInt32BE(9)], [1, 0, 5]);
+  assert.deepEqual([body.readUInt32BE(18), body[22], body.readUInt16BE(23), body.readUInt16BE(25)], [2, 1, 16, 32]);
+  // Older viewers still get the keyframe as a JPEG.
+  const legacy = await fetch(`${base}/msfwr/frame?after=0`, { headers: viewer });
+  assert.equal(legacy.headers.get("content-type"), "image/jpeg");
+  assert.deepEqual(Buffer.from(await legacy.arrayBuffer()), jpeg(1));
+  // Nothing newer: an empty answer once the wait runs out.
+  assert.equal((await fetch(`${base}/msfwr/frame?after=2&v=2&wait=100`, { headers: viewer })).status, 204);
+  assert.equal((await upload(Buffer.from([1, 0, 0]))).status, 400);
+
+  // The host's input channel returns as soon as the viewer sends a batch.
+  const events = fetch(`${base}/msfwr/events?wait=5000`, { headers: host });
+  await new Promise((r) => setTimeout(r, 150));
+  assert.equal((await acme("POST", "/msfwr/input", [{ kind: "down", button: 0, x: 0.5, y: 0.5 }, { kind: "up", button: 0, x: 0.5, y: 0.5 }], viewer)).status, 204);
+  assert.deepEqual((await (await events).json()).input.map((a) => a.kind), ["down", "up"]);
+  assert.equal((await acme("POST", "/msfwr/input", [{ kind: "down" }], viewer)).status, 400);
+
+  // Ending the session releases a waiting request.
+  const last = fetch(`${base}/msfwr/frame?after=2&v=2&wait=5000`, { headers: viewer });
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal((await pc("POST", "/msfwr/end", undefined, host)).status, 204);
+  assert.equal((await last).status, 410);
+});
