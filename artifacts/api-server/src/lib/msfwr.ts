@@ -143,6 +143,12 @@ export type Session = {
   sequence: number;
   lastFrame: number;
   input: { item: MsfwrInput; time: number }[];
+  // Hosts and viewers that number their requests (X-Msfwr-Seq) may have
+  // several in flight; these put them back in order.
+  hostOrder?: Reorder<FrameUpdate[] | Buffer | undefined>;
+  inputOrder?: Map<string, Reorder<MsfwrInput[]>>; // by viewer
+  // The picture quality a viewer asked for; the host reads it from ticks.
+  quality?: ViewQuality;
   // Long-polling requests waiting for a frame, input or the session's end.
   watchers?: Set<() => void>;
   closed?: boolean;
@@ -155,8 +161,64 @@ export type FramePatch = FrameUpdate & { sequence: number };
 
 // Bounds the patch log of one session. Past it, patches are ignored until the
 // host sends a new keyframe (the tick reply asks for one).
-export const patchLogBytes = 4 * 1024 * 1024;
-export const patchLogCount = 600;
+// Native-resolution screens make larger patches, so the log is sized for them.
+export const patchLogBytes = 12 * 1024 * 1024;
+export const patchLogCount = 1200;
+
+// Picture quality a viewer can ask the host for: "sharp" keeps the native
+// resolution and high JPEG quality for reading text, "balanced" caps the
+// screen at 1920 pixels wide, "fast" at 1280 with lower quality for slow links.
+export const viewQualities = ["sharp", "balanced", "fast"] as const;
+export type ViewQuality = typeof viewQualities[number];
+
+// Puts numbered requests from one sender back in order. A request that
+// arrives early waits (at most reorderWait ms, or until reorderMax are
+// waiting) for the ones before it; past that the gap is skipped.
+// Senders number their requests from 1.
+export type Reorder<T> = { next?: number; pending: Map<number, { item: T; at: number }> };
+export const reorderWait = 1000;
+const reorderMax = 8;
+export function reorder<T>(r: Reorder<T>, seq: number, item: T, now: number, resets = false) {
+  const ready: T[] = [];
+  let skipped = false;
+  if (r.next === undefined) r.next = 1;
+  if (seq < r.next) return {ready, late: true, skipped};
+  if (resets && seq > r.next) {
+    // A keyframe replaces everything before it: no need to wait.
+    for (const k of [...r.pending.keys()]) if (k < seq) r.pending.delete(k);
+    r.next = seq;
+  }
+  r.pending.set(seq, {item, at: now});
+  const drain = () => {
+    while (r.pending.has(r.next!)) {
+      ready.push(r.pending.get(r.next!)!.item);
+      r.pending.delete(r.next!);
+      r.next! += 1;
+    }
+  };
+  drain();
+  if (r.pending.size) {
+    const oldest = Math.min(...[...r.pending.values()].map((p) => p.at));
+    if (r.pending.size >= reorderMax || now - oldest > reorderWait) {
+      r.next = Math.min(...r.pending.keys());
+      skipped = true;
+      drain();
+    }
+  }
+  return {ready, late: false, skipped};
+}
+
+// Records of the streaming frame channel (/frame?v=3) besides keyframes and
+// patches: kind 2 carries the session state as text, kind 3 says the stream
+// ends now and the viewer should open the next one. Same 13-byte head as
+// encodeFrames, with sequence 0.
+export function streamRecord(kind: 2 | 3, text = "") {
+  const data = Buffer.from(text, "utf8");
+  const head = Buffer.alloc(13);
+  head.writeUInt8(kind, 4);
+  head.writeUInt32BE(data.length, 9);
+  return Buffer.concat([head, data]);
+}
 
 // Encodes updates for a viewer: for each, the sequence (u32), kind (u8, 0 for
 // a keyframe, 1 for a patch), x and y (u16), the JPEG length (u32) and the
@@ -802,6 +864,42 @@ export function createMsfwrStore(clock = Date.now, hooks: StoreHooks = {}) {
       if (changed) notify(s);
       const input = events ? [] : store.takeInput(s);
       return {state: s.state, input, ...(s.wantKey ? {key: true} : {})};
+    },
+    // A tick numbered by the host (X-Msfwr-Seq), which may have several
+    // uploads in flight: updates are applied in the host's order. A patch
+    // that arrives after a later update was applied, or a skipped gap,
+    // leaves the screen wrong, so the host is asked for a keyframe.
+    tickInOrder(s: Session, seq: number, frame?: Buffer | FrameUpdate[], events = false) {
+      if (s.state !== "live") return store.tick(s, frame, events);
+      const order = (s.hostOrder ??= {pending: new Map()});
+      const key = Buffer.isBuffer(frame) || !!frame?.[0]?.key;
+      const {ready, late, skipped} = reorder(order, seq, frame, clock(), key);
+      for (const f of ready) store.tick(s, f, true);
+      if ((late && frame) || skipped) s.wantKey = true;
+      return store.tick(s, undefined, events);
+    },
+    // Input numbered by the viewer (X-Msfwr-Seq), applied in its order. A
+    // lost or late batch could leave a button held, so it releases.
+    enqueueInOrder(s: Session, viewer: string, seq: number, items: MsfwrInput[]) {
+      const orders = (s.inputOrder ??= new Map());
+      let order = orders.get(viewer);
+      if (!order) {
+        if (orders.size >= 16) orders.clear();
+        orders.set(viewer, order = {pending: new Map()});
+      }
+      const {ready, late, skipped} = reorder(order, seq, items, clock());
+      if (late || skipped) {
+        if (!store.enqueue(s, {kind: "release"})) return false;
+      }
+      for (const list of ready) {
+        for (const item of list) if (!store.enqueue(s, item)) return false;
+      }
+      return true;
+    },
+    setQuality(s: Session, quality: ViewQuality) {
+      if (s.quality === quality) return;
+      s.quality = quality;
+      notify(s);
     },
     // Removes and returns the input queued for the host.
     takeInput(s: Session): MsfwrInput[] {

@@ -312,3 +312,88 @@ test("streaming: long-polled frames with patches, batched input and the host's i
   assert.equal((await pc("POST", "/msfwr/end", undefined, host)).status, 204);
   assert.equal((await last).status, 410);
 });
+
+test("streaming v3: frames and input are pushed the moment they arrive; numbered ticks keep order; viewers pick quality", async () => {
+  const pc = client();
+  const invite = (await pc("POST", "/msfwr/invite")).json;
+  const acme = client();
+  await acme("POST", "/auth/login", { username: "acme", password: "acme-pass-123" });
+  const joined = await acme("POST", "/msfwr/join", { code: invite.code });
+  const host = { authorization: `Bearer ${invite.token}` };
+  const viewer = { authorization: `Bearer ${joined.json.token}` };
+  assert.equal((await pc("POST", "/msfwr/approve", undefined, host)).status, 204);
+  const jpeg = (n) => Buffer.from([255, 216, n, 255, 217]);
+  const item = (kind, x, y, data) => Buffer.concat([Buffer.from([kind, x >> 8, x & 255, y >> 8, y & 255, 0, 0, 0, data.length]), data]);
+  const upload = (body, seq) => fetch(`${base}/msfwr/tick`, { method: "POST", headers: { ...host, "content-type": "application/x-msfwr-frames", "x-msfwr-events": "1", "x-msfwr-seq": String(seq) }, body });
+
+  // Reads records off the viewer's stream as they arrive.
+  const res = await fetch(`${base}/msfwr/frame?after=0&v=3`, { headers: viewer });
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("x-msfwr-stream"), "1");
+  const reader = res.body.getReader();
+  let buffered = Buffer.alloc(0);
+  const record = async () => {
+    for (;;) {
+      if (buffered.length >= 13) {
+        const length = buffered.readUInt32BE(9);
+        if (buffered.length >= 13 + length) {
+          const out = { sequence: buffered.readUInt32BE(0), kind: buffered[4], x: buffered.readUInt16BE(5), data: buffered.subarray(13, 13 + length) };
+          buffered = buffered.subarray(13 + length);
+          return out;
+        }
+      }
+      const { value, done } = await reader.read();
+      if (done) return undefined;
+      buffered = Buffer.concat([buffered, Buffer.from(value)]);
+    }
+  };
+  const first = await record();
+  assert.deepEqual([first.kind, first.data.toString()], [2, "live"], "the stream opens with the state");
+
+  // Upload 2 overtakes upload 1; the viewer still gets them in order.
+  const second = await (await upload(item(1, 32, 0, jpeg(2)), 2)).json();
+  assert.equal(second.pipeline, true);
+  await upload(item(0, 0, 0, jpeg(1)), 1);
+  const got = [];
+  while (got.length < 2) {
+    const r = await record();
+    if (r.kind !== 2) got.push(r);
+  }
+  assert.deepEqual(got.map((r) => [r.sequence, r.kind, r.data[2]]), [[1, 0, 1], [2, 1, 2]]);
+
+  // Input reaches the host's stream as soon as it is sent, in order.
+  const events = await fetch(`${base}/msfwr/events?stream=1`, { headers: host });
+  assert.equal(events.headers.get("content-type"), "application/x-ndjson");
+  const lines = events.body.pipeThrough(new TextDecoderStream()).getReader();
+  let text = "";
+  const line = async () => {
+    for (;;) {
+      const at = text.indexOf("\n");
+      if (at >= 0) { const out = JSON.parse(text.slice(0, at)); text = text.slice(at + 1); return out; }
+      const { value, done } = await lines.read();
+      if (done) return undefined;
+      text += value;
+    }
+  };
+  const send = (seq, list) => fetch(`${base}/msfwr/input`, { method: "POST", headers: { ...viewer, "content-type": "application/json", "x-msfwr-seq": String(seq) }, body: JSON.stringify(list) });
+  assert.equal((await send(2, [{ kind: "key", key: "b" }])).status, 204);
+  assert.equal((await send(1, [{ kind: "key", key: "a" }])).status, 204);
+  const keys = [];
+  while (keys.length < 2) keys.push(...(await line()).input.map((a) => a.key));
+  assert.deepEqual(keys, ["a", "b"]);
+
+  // The viewer asks for sharper pictures; the host hears it on its next tick.
+  assert.equal((await acme("POST", "/msfwr/view", { quality: "sharp" }, viewer)).status, 204);
+  assert.equal((await acme("POST", "/msfwr/view", { quality: "ultra" }, viewer)).status, 400);
+  const beat = await fetch(`${base}/msfwr/tick`, { method: "POST", headers: { ...host, "x-msfwr-events": "1", "x-msfwr-seq": "3" } });
+  assert.equal((await beat.json()).quality, "sharp");
+
+  // Ending the session closes both streams with an "ended" record.
+  assert.equal((await pc("POST", "/msfwr/end", undefined, host)).status, 204);
+  let r;
+  do { r = await record(); } while (r && !(r.kind === 2 && r.data.toString() === "ended"));
+  assert.ok(r, "the viewer's stream says the session ended");
+  let l;
+  do { l = await line(); } while (l && l.state !== "ended");
+  assert.ok(l, "the host's stream says the session ended");
+});

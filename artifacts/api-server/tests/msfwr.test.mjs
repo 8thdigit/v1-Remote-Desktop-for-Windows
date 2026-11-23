@@ -512,3 +512,40 @@ test("watchers wake on frames, input and the end; an events host leaves input ou
   assert.equal(s.closed, true);
   stop();
 });
+
+test("numbered ticks and input are applied in the sender's order", () => {
+  let now = 1_000_000;
+  const store = createMsfwrStore(() => now);
+  const host = store.invite();
+  const s = store.authenticate(bearer(host.token), "host");
+  store.join(host.code);
+  store.approve(s);
+  const jpeg = (n) => Buffer.from([255, 216, n, 255, 217]);
+  const key = (n) => [{key: true, x: 0, y: 0, data: jpeg(n)}];
+  const patch = (n) => [{key: false, x: 16, y: 0, data: jpeg(n)}];
+  store.tickInOrder(s, 1, key(1), true);
+  // Upload 3 overtakes upload 2: it waits, then both apply in order.
+  store.tickInOrder(s, 3, patch(3), true);
+  assert.equal(s.patches.length, 0);
+  store.tickInOrder(s, 2, patch(2), true);
+  assert.deepEqual(s.patches.map((p) => p.data[2]), [2, 3]);
+  assert.equal(s.wantKey, false);
+  // A patch that arrives after its turn would draw on a newer screen: the
+  // host is asked for a keyframe.
+  store.tickInOrder(s, 5, patch(5), true);
+  now += 1500;
+  const reply = store.tickInOrder(s, 6, patch(6), true);
+  assert.equal(reply.key, true, "a gap past the wait asks for a keyframe");
+  assert.equal(store.tickInOrder(s, 4, patch(4), true).key, true);
+  // A keyframe never waits for the uploads before it.
+  store.tickInOrder(s, 9, key(9), true);
+  assert.deepEqual(s.frame, jpeg(9));
+  assert.equal(s.wantKey, false);
+
+  store.enqueueInOrder(s, "v1", 1, [{kind: "down", button: 0, x: 0.1, y: 0.1}]);
+  store.enqueueInOrder(s, "v1", 3, [{kind: "key", key: "b"}]);
+  store.enqueueInOrder(s, "v1", 2, [{kind: "up", button: 0, x: 0.1, y: 0.1}, {kind: "key", key: "a"}]);
+  assert.deepEqual(store.takeInput(s).map((a) => a.key ?? a.kind), ["down", "up", "a", "b"]);
+  store.enqueueInOrder(s, "v1", 2, [{kind: "down", button: 0, x: 0.1, y: 0.1}]);
+  assert.deepEqual(store.takeInput(s).map((a) => a.kind), ["release"], "a late batch releases instead of replaying");
+});

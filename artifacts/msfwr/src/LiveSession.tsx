@@ -29,9 +29,58 @@ function parseUpdates(buffer: ArrayBuffer): Update[] {
   return out;
 }
 
+// Records of the streaming channel (/frame?v=3): keyframes (kind 0) and
+// patches (1) as in parseUpdates, the session state as text (2, also sent as
+// a heartbeat) and "this stream ends; open the next one" (3).
+type StreamRecord = { sequence: number; kind: number; x: number; y: number; data: Uint8Array };
+function takeRecords(buffer: Uint8Array): [StreamRecord[], Uint8Array] {
+  const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  const out: StreamRecord[] = [];
+  let at = 0;
+  while (buffer.byteLength - at >= 13) {
+    const length = view.getUint32(at + 9);
+    if (length > 64 * 1024 * 1024) throw new Error('Invalid frame');
+    if (buffer.byteLength - at - 13 < length) break;
+    out.push({
+      sequence: view.getUint32(at), kind: view.getUint8(at + 4),
+      x: view.getUint16(at + 5), y: view.getUint16(at + 7),
+      data: buffer.subarray(at + 13, at + 13 + length),
+    });
+    at += 13 + length;
+  }
+  return [out, buffer.slice(at)];
+}
+function joinBytes(a: Uint8Array, b: Uint8Array) {
+  if (!a.byteLength) return b;
+  const out = new Uint8Array(a.byteLength + b.byteLength);
+  out.set(a);
+  out.set(b, a.byteLength);
+  return out;
+}
+
+// Picture quality the viewer asks the PC for (newer PC apps): sharp keeps the
+// PC's native resolution with high JPEG quality, balanced caps it at 1920
+// pixels wide, fast at 1280 with lower quality for slow links.
+type Quality = 'sharp' | 'balanced' | 'fast';
+const qualityLabels: Record<Quality, string> = { sharp: 'Sharp', balanced: 'Balanced', fast: 'Fast' };
+function savedQuality(): Quality {
+  try {
+    const v = localStorage.getItem('winrss.quality');
+    if (v === 'sharp' || v === 'balanced' || v === 'fast') return v;
+  } catch { /* storage blocked */ }
+  return 'balanced';
+}
+
+// Where the pointer is on the remote screen, from 0 to 1. The canvas keeps
+// the screen's aspect ratio inside its box (object-fit: contain), so the
+// letterbox around the picture is left out.
 function position(e: PointerEvent<HTMLCanvasElement> | WheelEvent<HTMLCanvasElement>) {
-  const r = e.currentTarget.getBoundingClientRect();
-  return { x: clamp((e.clientX - r.left) / r.width), y: clamp((e.clientY - r.top) / r.height) };
+  const el = e.currentTarget;
+  const r = el.getBoundingClientRect();
+  const scale = Math.min(r.width / (el.width || 1), r.height / (el.height || 1));
+  const w = (el.width || 1) * scale, h = (el.height || 1) * scale;
+  const left = r.left + (r.width - w) / 2, top = r.top + (r.height - h) / 2;
+  return { x: clamp((e.clientX - left) / w), y: clamp((e.clientY - top) / h) };
 }
 
 export default function LiveSession({ token, verification, preapproved = false, onLeave }: Props) {
@@ -46,6 +95,18 @@ export default function LiveSession({ token, verification, preapproved = false, 
   // The relay takes several input actions in one request (it says so on
   // its frame replies).
   const batching = useRef(false);
+  // The relay streams the screen and takes numbered input requests, so two
+  // can be in flight at once.
+  const ordered = useRef(false);
+  const inputSeq = useRef(0);
+  const inFlight = useRef(0);
+  const [quality, setQuality] = useState<Quality>(savedQuality);
+  const qualityRef = useRef(quality);
+  qualityRef.current = quality;
+  // Fit the screen to the window, or show it pixel for pixel (scrolling).
+  const [actual, setActual] = useState(false);
+  const [size, setSize] = useState<{ w: number; h: number }>();
+  const [fps, setFps] = useState(0);
   const surface = useRef<HTMLCanvasElement | null>(null);
   // The screen is composed here (keyframe, then patches) and copied to the
   // visible canvas, which can mount after the first frame arrives.
@@ -56,7 +117,7 @@ export default function LiveSession({ token, verification, preapproved = false, 
     if (!el || !from) return;
     el.width = from.width;
     el.height = from.height;
-    el.getContext('2d')?.drawImage(from, 0, 0);
+    el.getContext('2d', { alpha: false })?.drawImage(from, 0, 0);
   }, []);
   const stage = useRef<HTMLDivElement>(null);
   // Full screen uses the browser's own full-screen mode where it exists, and
@@ -112,16 +173,20 @@ export default function LiveSession({ token, verification, preapproved = false, 
     let snapUrl: string | undefined;
     const buffer = document.createElement('canvas');
     screen.current = buffer;
-    const paint = buffer.getContext('2d');
+    const paint = buffer.getContext('2d', { alpha: false });
+    let frames = 0;
+    const counter = window.setInterval(() => { setFps(frames); frames = 0; }, 1000);
     // Draws decoded updates in order on the buffer and the visible canvas.
     function draw(updates: { key: boolean; x: number; y: number; image: ImageBitmap }[]) {
       const shown = surface.current;
-      const visible = shown?.getContext('2d');
+      const visible = shown?.getContext('2d', { alpha: false });
+      frames += 1;
       for (const { key, x, y, image } of updates) {
         if (key && (buffer.width !== image.width || buffer.height !== image.height)) {
           buffer.width = image.width;
           buffer.height = image.height;
           if (shown) { shown.width = image.width; shown.height = image.height; }
+          setSize({ w: image.width, h: image.height });
         }
         paint?.drawImage(image, x, y);
         visible?.drawImage(image, x, y);
@@ -143,48 +208,138 @@ export default function LiveSession({ token, verification, preapproved = false, 
         }, 'image/jpeg', 0.9);
       }, Math.max(0, 1000 - (Date.now() - snapAt)));
     }
-    // Frames are long-polled: the relay answers as soon as the screen
-    // changes, and the next request goes out at once. A relay without
-    // long polling answers at once; those are paced at 150 ms.
-    async function poll() {
-      while (!controller.signal.aborted) {
-        const asked = Date.now();
-        const res = await fetch(getGetMsfwrFrameUrl({ after: sequence, v: 2, wait: 4000 }), {
-          headers: { Authorization: `Bearer ${token}` }, cache: 'no-store',
-          credentials: 'omit', redirect: 'error',
-          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12000)]),
+    // Decodes updates off the main thread, all at once, then draws them in
+    // order.
+    async function show(updates: Update[]) {
+      if (!updates.length) return;
+      if (!updates[0].key && !sequence) throw new Error('Invalid frame');
+      const images = await Promise.all(updates.map(async (u) => ({ ...u, image: await createImageBitmap(u.jpeg) })));
+      if (controller.signal.aborted) { images.forEach((u) => u.image.close()); return; }
+      draw(images);
+      setFrame(true);
+      snap();
+      sequence = updates.at(-1)!.sequence;
+    }
+    const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    // One streaming request: the relay writes each screen update the moment
+    // the PC uploads it, so nothing waits for the viewer to ask again. It
+    // closes after about 25 seconds and the next one opens. Returns
+    // "fallback" when the relay (or a proxy) cannot stream.
+    async function streamOnce(): Promise<'again' | 'fallback' | 'done'> {
+      const watchdog = new AbortController();
+      let timer = 0;
+      const arm = (ms: number) => { clearTimeout(timer); timer = window.setTimeout(() => watchdog.abort(), ms); };
+      let gotRecord = false;
+      arm(5000);
+      try {
+        const res = await fetch(`/api/msfwr/frame?after=${sequence}&v=3`, {
+          headers: { Authorization: `Bearer ${token}` }, cache: 'no-store', credentials: 'omit', redirect: 'error',
+          signal: AbortSignal.any([controller.signal, watchdog.signal]),
         });
-        if (controller.signal.aborted) return;
         if (res.status === 410) {
           finishRef.current('The host ended the session, or it expired. Ask for a new code to reconnect.', true);
-          return;
+          return 'done';
         }
-        if (!res.ok) throw new Error('Frame request failed');
-        const current = res.headers.get('X-Msfwr-State');
-        if (current !== 'live' && current !== 'pending') throw new Error('Invalid relay response');
-        const held = res.headers.get('X-Msfwr-Batch') === '1';
-        batching.current = held;
-        setState(current);
-        if (res.status === 200) {
-          const nextSequence = Number(res.headers.get('X-Msfwr-Frame'));
-          const type = res.headers.get('content-type')?.split(';')[0];
-          if (!Number.isSafeInteger(nextSequence) || nextSequence <= sequence ||
-              (type !== 'image/jpeg' && type !== 'application/x-msfwr-frames')) throw new Error('Invalid frame');
-          const updates = type === 'image/jpeg'
-            ? [{ sequence: nextSequence, key: true, x: 0, y: 0, jpeg: await res.blob() }]
-            : parseUpdates(await res.arrayBuffer());
-          if (!updates.length || (!updates[0].key && !sequence)) throw new Error('Invalid frame');
-          // Decode off the main thread, all at once, then draw in order.
-          const images = await Promise.all(updates.map(async (u) => ({ ...u, image: await createImageBitmap(u.jpeg) })));
-          if (controller.signal.aborted) { images.forEach((u) => u.image.close()); return; }
-          draw(images);
-          setFrame(true);
-          snap();
-          sequence = nextSequence;
+        if (!res.ok || res.headers.get('X-Msfwr-Stream') !== '1' || !res.body) {
+          void res.body?.cancel().catch(() => {});
+          return res.ok || res.status === 400 || res.status === 404 ? 'fallback' : 'again';
         }
-        if (!held || current !== 'live') {
-          const pause = (current === 'live' ? 150 : 650) - (Date.now() - asked);
-          if (pause > 0) await new Promise((resolve) => setTimeout(resolve, pause));
+        ordered.current = true;
+        batching.current = true;
+        const reader = res.body.getReader();
+        let pending: Uint8Array = new Uint8Array(0);
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) return gotRecord ? 'again' : 'fallback';
+          arm(8000);
+          const [records, rest] = takeRecords(joinBytes(pending, value));
+          pending = rest;
+          const updates: Update[] = [];
+          for (const r of records) {
+            gotRecord = true;
+            if (r.kind === 2) {
+              const current = new TextDecoder().decode(r.data);
+              if (current === 'ended') {
+                finishRef.current('The host ended the session, or it expired. Ask for a new code to reconnect.', true);
+                return 'done';
+              }
+              if (current === 'live' || current === 'pending') setState(current);
+            } else if (r.kind <= 1 && r.sequence > (updates.at(-1)?.sequence ?? sequence)) {
+              updates.push({ sequence: r.sequence, key: r.kind === 0, x: r.x, y: r.y, jpeg: new Blob([r.data as BlobPart], { type: 'image/jpeg' }) });
+            }
+          }
+          // A keyframe makes everything before it in this batch moot.
+          const lastKey = updates.findLastIndex((u) => u.key);
+          await show(lastKey > 0 ? updates.slice(lastKey) : updates);
+          if (controller.signal.aborted) return 'done';
+        }
+      } catch (error) {
+        if (controller.signal.aborted) return 'done';
+        // Nothing arrived in time: a proxy is holding the stream back.
+        if (watchdog.signal.aborted) return gotRecord ? 'again' : 'fallback';
+        throw error;
+      } finally {
+        clearTimeout(timer);
+        watchdog.abort();
+      }
+    }
+    // Long polling, for relays that cannot stream: the relay answers as soon
+    // as the screen changes, and the next request goes out at once. A relay
+    // without long polling answers at once; those are paced at 150 ms.
+    async function pollOnce() {
+      const asked = Date.now();
+      const res = await fetch(getGetMsfwrFrameUrl({ after: sequence, v: 2, wait: 4000 }), {
+        headers: { Authorization: `Bearer ${token}` }, cache: 'no-store',
+        credentials: 'omit', redirect: 'error',
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12000)]),
+      });
+      if (controller.signal.aborted) return;
+      if (res.status === 410) {
+        finishRef.current('The host ended the session, or it expired. Ask for a new code to reconnect.', true);
+        return;
+      }
+      if (!res.ok) throw new Error('Frame request failed');
+      const current = res.headers.get('X-Msfwr-State');
+      if (current !== 'live' && current !== 'pending') throw new Error('Invalid relay response');
+      const held = res.headers.get('X-Msfwr-Batch') === '1';
+      batching.current = held;
+      setState(current);
+      if (res.status === 200) {
+        const nextSequence = Number(res.headers.get('X-Msfwr-Frame'));
+        const type = res.headers.get('content-type')?.split(';')[0];
+        if (!Number.isSafeInteger(nextSequence) || nextSequence <= sequence ||
+            (type !== 'image/jpeg' && type !== 'application/x-msfwr-frames')) throw new Error('Invalid frame');
+        const updates = type === 'image/jpeg'
+          ? [{ sequence: nextSequence, key: true, x: 0, y: 0, jpeg: await res.blob() }]
+          : parseUpdates(await res.arrayBuffer());
+        if (!updates.length) throw new Error('Invalid frame');
+        await show(updates);
+        sequence = nextSequence;
+      }
+      if (!held || current !== 'live') {
+        const pause = (current === 'live' ? 150 : 650) - (Date.now() - asked);
+        if (pause > 0) await sleep(pause);
+      }
+    }
+    async function poll() {
+      let streaming = true;
+      let failures = 0;
+      while (!controller.signal.aborted) {
+        try {
+          if (streaming) {
+            const result = await streamOnce();
+            if (result === 'done') return;
+            if (result === 'fallback') { streaming = false; ordered.current = false; }
+          } else {
+            await pollOnce();
+          }
+          failures = 0;
+        } catch (error) {
+          // A dropped connection is retried a few times before giving up.
+          if (controller.signal.aborted) return;
+          failures += 1;
+          if (failures > 5) throw error;
+          await sleep(250 * failures);
         }
       }
     }
@@ -198,6 +353,7 @@ export default function LiveSession({ token, verification, preapproved = false, 
     window.addEventListener('pagehide', pageExit);
     return () => {
       controller.abort();
+      clearInterval(counter);
       screen.current = null;
       clearTimeout(snapTimer);
       if (snapUrl) URL.revokeObjectURL(snapUrl);
@@ -205,7 +361,7 @@ export default function LiveSession({ token, verification, preapproved = false, 
     };
   }, [token]);
 
-  async function dispatch(item: MsfwrInput) {
+  function dispatch(item: MsfwrInput) {
     const signal = stream.current?.signal;
     if (!signal || signal.aborted) return;
     const queue = input.current;
@@ -218,29 +374,64 @@ export default function LiveSession({ token, verification, preapproved = false, 
       return;
     }
     queue.push(item);
-    if (sending.current) return;
-    sending.current = true;
-    try {
-      // Everything queued while a request was out goes in the next one.
-      while (!signal.aborted && queue.length) {
-        const options = { headers, signal: AbortSignal.any([signal, AbortSignal.timeout(3000)]), redirect: 'error' as const, credentials: 'omit' as const };
-        if (batching.current && queue.length > 1) {
-          const items = queue.splice(0, 32);
-          const res = await fetch(getSendMsfwrInputUrl(), {
-            ...options, method: 'POST', cache: 'no-store',
-            headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(items),
-          });
-          if (!res.ok) throw new Error('Input request failed');
-        } else {
-          await sendMsfwrInput(queue.shift()!, options);
-        }
+    pump();
+  }
+  // Sends queued input. Everything queued while a request is out goes in the
+  // next one. A relay that orders numbered requests takes two at once, so
+  // input never waits a whole round trip behind the previous request.
+  function pump() {
+    const signal = stream.current?.signal;
+    const queue = input.current;
+    if (!signal || signal.aborted) return;
+    const limit = ordered.current ? 2 : 1;
+    while (queue.length && inFlight.current < limit) {
+      const options = { headers, signal: AbortSignal.any([signal, AbortSignal.timeout(4000)]), redirect: 'error' as const, credentials: 'omit' as const };
+      let request: Promise<unknown>;
+      if (ordered.current) {
+        const items = queue.splice(0, 32);
+        inputSeq.current += 1;
+        request = fetch(getSendMsfwrInputUrl(), {
+          ...options, method: 'POST', cache: 'no-store',
+          headers: { ...headers, 'Content-Type': 'application/json', 'X-Msfwr-Seq': String(inputSeq.current) }, body: JSON.stringify(items),
+        }).then((res) => { if (!res.ok) throw new Error('Input request failed'); });
+      } else if (batching.current && queue.length > 1) {
+        const items = queue.splice(0, 32);
+        request = fetch(getSendMsfwrInputUrl(), {
+          ...options, method: 'POST', cache: 'no-store',
+          headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(items),
+        }).then((res) => { if (!res.ok) throw new Error('Input request failed'); });
+      } else {
+        request = sendMsfwrInput(queue.shift()!, options);
       }
-    } catch {
-      if (!signal.aborted) finish('Remote input was interrupted. The session was stopped.');
-    } finally {
-      sending.current = false;
+      inFlight.current += 1;
+      sending.current = true;
+      request.then(() => {
+        inFlight.current -= 1;
+        sending.current = inFlight.current > 0;
+        pump();
+      }, () => {
+        inFlight.current -= 1;
+        if (!signal.aborted) finish('Remote input was interrupted. The session was stopped.');
+      });
     }
   }
+  // Asks the PC for a picture quality. Older relays and PC apps ignore it.
+  function chooseQuality(next: Quality) {
+    setQuality(next);
+    try { localStorage.setItem('winrss.quality', next); } catch { /* storage blocked */ }
+    void fetch('/api/msfwr/view', {
+      method: 'POST', cache: 'no-store', credentials: 'omit', redirect: 'error',
+      headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ quality: next }),
+    }).catch(() => {});
+  }
+  // Tells the PC the saved quality once the session is live.
+  useEffect(() => {
+    if (state !== 'live') return;
+    void fetch('/api/msfwr/view', {
+      method: 'POST', cache: 'no-store', credentials: 'omit', redirect: 'error',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ quality: qualityRef.current }),
+    }).catch(() => {});
+  }, [state, token]);
 
   function release() {
     pressed.current = null;
