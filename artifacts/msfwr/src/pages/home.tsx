@@ -1010,6 +1010,17 @@ function ConnectView({ code, setCode, error, pending, onSubmit }: {
 
 function DownloadView({ installer, relay }: { installer: string; relay: string }) {
   const [copied, setCopied] = useState(false);
+  // Label the button with the release it downloads. The link itself always
+  // follows releases/latest, so the button works even if this lookup fails.
+  const [release, setRelease] = useState('');
+  useEffect(() => {
+    const ctrl = new AbortController();
+    fetch('https://api.github.com/repos/mailbhrp-1/Remote-Desktop-for-Windows/releases/latest', { signal: ctrl.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((r) => { if (r && typeof r.tag_name === 'string' && /^v?[0-9][0-9A-Za-z.+-]{0,31}$/.test(r.tag_name)) setRelease(r.tag_name); })
+      .catch(() => {});
+    return () => ctrl.abort();
+  }, []);
   return (
     <div className="dl-rise mx-auto max-w-2xl">
       <div className="rounded-3xl border bg-card/90 p-6 shadow-[0_20px_50px_-35px_hsl(200_32%_13%/0.6)] md:p-8">
@@ -1019,7 +1030,7 @@ function DownloadView({ installer, relay }: { installer: string; relay: string }
         <a href={installer} download data-testid="link-download"
           className="mt-6 flex items-center justify-between rounded-xl bg-foreground px-5 py-3.5 font-bold text-background transition-transform active:scale-[0.99]">
           <span className="flex items-center gap-2"><Download className="h-4 w-4" /> Download for Windows</span>
-          <span className="font-mono text-[11px] opacity-70">x64 .exe</span>
+          <span data-testid="text-installer-version" className="font-mono text-[11px] opacity-70">{release ? `${release} · x64 .exe` : 'x64 .exe'}</span>
         </a>
         <p className="mt-6 font-mono text-[11px] uppercase tracking-widest text-muted-foreground">Relay URL — paste into the app</p>
         <div className="mt-2 flex items-stretch overflow-hidden rounded-xl border bg-muted">

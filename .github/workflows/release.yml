@@ -1,9 +1,17 @@
 name: Release installer
 
-# Builds the Windows installer and attaches it to a GitHub release.
-# Run it from the Actions tab (Run workflow), or push a tag such as v0.1.0.
+# Builds the Windows installer and attaches it to a GitHub release. The site's
+# Download button links to releases/latest, so a new release is live there at once.
+#
+# It runs by itself whenever a change to the Windows host lands on main. The
+# version comes from windows-host/VERSION; once that version is released, later
+# runs bump the patch number (0.6.0, 0.6.1, ...). Edit VERSION to start a new
+# minor or major line. You can also run it from the Actions tab with a tag, or
+# push a tag such as v0.7.0.
 on:
   push:
+    branches: [main]
+    paths: ['windows-host/**', '.github/workflows/release.yml']
     tags: ['v*']
   workflow_dispatch:
     inputs:
@@ -15,13 +23,42 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-installer
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest
-    env:
-      TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Pick the release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          if [[ -n "$INPUT_TAG" ]]; then
+            tag="$INPUT_TAG"
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            tag="$GITHUB_REF_NAME"
+          else
+            base="v$(tr -d '[:space:]' < windows-host/VERSION)"
+            if ! gh release view "$base" >/dev/null 2>&1; then
+              tag="$base"
+            else
+              # Newest released patch on this VERSION line, plus one.
+              latest="$(git tag -l "${base%.*}.*" --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1)"
+              patch="${latest##*.}"
+              tag="${base%.*}.$((patch + 1))"
+            fi
+          fi
+          if [[ ! $tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.+-][0-9A-Za-z.+-]*)?$ ]]; then
+            echo "Not a release tag: $tag" >&2; exit 1
+          fi
+          echo "Releasing $tag"
+          echo "TAG=$tag" >> "$GITHUB_ENV"
       - uses: actions/setup-go@v5
         with:
           go-version-file: windows-host/go.mod
