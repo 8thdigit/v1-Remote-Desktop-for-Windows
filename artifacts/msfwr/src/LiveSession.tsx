@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type WheelEvent } from 'react';
 import { ArrowLeft, Laptop, Maximize2, Minimize2, MousePointer2, ShieldCheck } from 'lucide-react';
 import { LogoMark, Wordmark } from '@/components/logo';
+import { BuddyPanel, useBuddyConfig } from '@/components/buddy-panel';
 import { endMsfwr, getGetMsfwrFrameUrl, sendMsfwrInput, type MsfwrInput } from '@workspace/api-client-react';
 
 type Props = { token: string; verification: string; preapproved?: boolean; onLeave: (message?: string) => void };
@@ -47,6 +48,7 @@ export default function LiveSession({ token, verification, preapproved = false, 
   const lastWheel = useRef(0);
   const pressed = useRef<number | null>(null);
   const headers = { Authorization: `Bearer ${token}` };
+  const buddy = useBuddyConfig(token, state === 'live');
   leaveRef.current = onLeave;
 
   function finish(message?: string, remoteAlreadyClosed = false) {
@@ -204,6 +206,7 @@ export default function LiveSession({ token, verification, preapproved = false, 
               </button>
             </div>
           </div>
+          <div className={buddy ? 'grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]' : undefined}>
           <div ref={stage}
             className={full
               ? 'fixed inset-0 z-50 flex items-center justify-center bg-black text-background'
@@ -264,6 +267,8 @@ export default function LiveSession({ token, verification, preapproved = false, 
                 Waiting for the first screen frame…
               </div>
             )}
+          </div>
+          {buddy && <BuddyPanel token={token} frame={frame} config={buddy} />}
           </div>
           <p className="mt-3 text-sm text-muted-foreground">Primary display only. At the Windows PC, press Ctrl+2 or F12 to stop sharing.</p>
         </section>

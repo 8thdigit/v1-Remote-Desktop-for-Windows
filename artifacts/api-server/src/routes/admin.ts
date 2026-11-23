@@ -4,7 +4,7 @@ import { CreateUserBody, UpdateUserBody } from "@workspace/api-zod";
 import { formatRaId } from "../lib/msfwr";
 import { DAY } from "../lib/billing";
 import type { AssetKind } from "../lib/site";
-import { accountsReady, activity, billingReady, limiter, linkRegister, requireUser, sendError, siteReady, store } from "../lib/portal";
+import { accountsReady, activity, billingReady, buddyReady, limiter, linkRegister, requireUser, sendError, siteReady, store } from "../lib/portal";
 
 // The admin console: accounts, live sessions, requests and activity.
 const router = Router();
@@ -255,6 +255,97 @@ router.delete("/registrations/:id", async (req, res) => {
     await (await siteReady()).removeRegistration(req.params.id);
     res.sendStatus(204);
   } catch (err) { sendError(res, err); }
+});
+
+// --- Session summaries and AI Buddy ---
+// Every session, live and ended, with AI Buddy's summary where it has one.
+router.get("/session-summaries", async (_req, res) => {
+  try {
+    const [accounts, billing, buddy] = await Promise.all([accountsReady(), billingReady(), buddyReady()]);
+    const users = accounts.list();
+    const nameOf = new Map(users.map((u) => [u.id, u.displayName]));
+    const byRa = new Map(users.map((u) => [u.raId, u.displayName]));
+    const notes = buddy.sessionsIndex();
+    const { live } = store.overview();
+    const rows = [
+      ...live.filter((s) => s.state === "live").map((s) => ({
+        id: s.id, live: true, pcName: s.name, mode: s.mode, operator: s.operator ?? "",
+        company: (s.ra && byRa.get(s.ra)) || "", raId: s.ra ?? "",
+        startedAt: s.liveAt ?? s.createdAt, endedAt: null as number | null, durationMs: Date.now() - (s.liveAt ?? s.createdAt), viewers: s.viewers,
+      })),
+      ...billing.listSessions({}, 1000).map((h) => ({
+        id: h.sessionId ?? h.id, live: false, pcName: h.pcName, mode: h.mode, operator: h.operator,
+        company: (h.accountId && nameOf.get(h.accountId)) || (h.raId && byRa.get(h.raId)) || "", raId: h.raId,
+        startedAt: h.startedAt, endedAt: h.endedAt as number | null, durationMs: h.durationMs, viewers: h.viewers,
+      })),
+    ];
+    res.json({
+      sessions: rows.map((r) => {
+        const b = notes.get(r.id);
+        return {
+          ...r,
+          summary: b?.summary ?? "", summaryBy: b?.summaryBy ?? "", issues: b?.issues ?? [],
+          captureCount: b?.captureCount ?? 0, resolution: b?.resolution ?? "", hasRecord: !!b,
+        };
+      }),
+    });
+  } catch (err) { sendError(res, err); }
+});
+
+router.get("/buddy/sessions/:id", async (req, res) => {
+  try {
+    const s = (await buddyReady()).session(req.params.id);
+    if (!s) { res.status(404).json({ error: "AI Buddy has no screen record for that session." }); return; }
+    res.json(s);
+  } catch (err) { sendError(res, err); }
+});
+
+router.post("/buddy/sessions/:id/summarize", async (req, res) => {
+  try { res.json(await (await buddyReady()).summarize(req.params.id)); } catch (err) { sendError(res, err); }
+});
+
+router.patch("/buddy/sessions/:id", async (req, res) => {
+  try { res.json(await (await buddyReady()).updateSession(req.params.id, req.body)); } catch (err) { sendError(res, err); }
+});
+
+router.delete("/buddy/sessions/:id", async (req, res) => {
+  try {
+    await (await buddyReady()).removeSession(req.params.id);
+    activity.add("buddy", `${req.account!.displayName} deleted an AI Buddy screen record`, req.account!.username);
+    res.sendStatus(204);
+  } catch (err) { sendError(res, err); }
+});
+
+router.post("/buddy/sessions/:id/kb", async (req, res) => {
+  try { res.status(201).json(await (await buddyReady()).kbFromSession(req.params.id, req.account!.displayName, req.body)); } catch (err) { sendError(res, err); }
+});
+
+router.get("/buddy/settings", async (_req, res) => {
+  try { res.json((await buddyReady()).settings()); } catch (err) { sendError(res, err); }
+});
+
+router.patch("/buddy/settings", async (req, res) => {
+  try {
+    const settings = await (await buddyReady()).updateSettings(req.body);
+    activity.add("buddy", `${req.account!.displayName} changed the AI Buddy settings`, req.account!.username);
+    res.json(settings);
+  } catch (err) { sendError(res, err); }
+});
+
+router.get("/buddy/kb", async (_req, res) => {
+  try { res.json({ entries: (await buddyReady()).listKb() }); } catch (err) { sendError(res, err); }
+});
+
+router.post("/buddy/kb", async (req, res) => {
+  try { res.status(201).json(await (await buddyReady()).addKb(req.body, req.account!.displayName)); } catch (err) { sendError(res, err); }
+});
+
+router.patch("/buddy/kb/:id", async (req, res) => {
+  try { res.json(await (await buddyReady()).updateKb(req.params.id, req.body)); } catch (err) { sendError(res, err); }
+});
+
+router.delete("/buddy/kb/:id", async (req, res) => {
+  try { await (await buddyReady()).removeKb(req.params.id); res.sendStatus(204); } catch (err) { sendError(res, err); }
 });
 
 export default router;
