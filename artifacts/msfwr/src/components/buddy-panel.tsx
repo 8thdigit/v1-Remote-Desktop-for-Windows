@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { BookOpen, ChevronDown, Eye, EyeOff, Loader2, Sparkles, TriangleAlert } from 'lucide-react';
+import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, Eye, EyeOff, Loader2, Sparkles, TriangleAlert } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import type { Worker as OcrWorker } from 'tesseract.js';
 
 // AI Buddy in the helper's viewer: watches the shared screen for changes,
@@ -11,7 +12,10 @@ export type BuddyConfig = { enabled: boolean; ai: boolean; autoAssist: boolean; 
 
 type KbMatch = { id: string; title: string; symptoms: string; steps: string; score: number };
 type CaptureResult = { issues: string[]; matches: KbMatch[] };
-type Capture = { at: number; thumb: string; text: string; issues: string[] };
+// full is an object URL of the whole screen at its own size, kept only in
+// this browser so the helper can open it larger.
+type Capture = { at: number; thumb: string; full: string; text: string; issues: string[] };
+const MAX_KEPT = 8;
 
 async function call<T>(token: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`/api/buddy${path}`, {
@@ -76,6 +80,11 @@ export function BuddyPanel({ token, frame, config }: { token: string; frame?: st
   const [advice, setAdvice] = useState<{ text: string; at: number } | null>(null);
   const [asking, setAsking] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
+  // The capture shown larger, by its time.
+  const [viewing, setViewing] = useState<number | null>(null);
+  const capturesRef = useRef<Capture[]>([]);
+  capturesRef.current = captures;
+  useEffect(() => () => { for (const c of capturesRef.current) if (c.full.startsWith('blob:')) URL.revokeObjectURL(c.full); }, []);
 
   const sigCanvas = useRef<HTMLCanvasElement | null>(null);
   const latest = useRef<{ img: HTMLImageElement; sig: Uint8Array } | null>(null);
@@ -150,7 +159,13 @@ export function BuddyPanel({ token, frame, config }: { token: string; frame?: st
       lastText.current = text;
       const res = await call<CaptureResult>(token, '/capture', { text });
       setResult(res);
-      setCaptures((list) => [{ at: Date.now(), thumb: thumb.toDataURL('image/jpeg', 0.6), text, issues: res.issues }, ...list].slice(0, 8));
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+      const full = blob ? URL.createObjectURL(blob) : thumb.toDataURL('image/jpeg', 0.6);
+      setCaptures((list) => {
+        const next = [{ at: Date.now(), thumb: thumb.toDataURL('image/jpeg', 0.6), full, text, issues: res.issues }, ...list];
+        for (const dropped of next.slice(MAX_KEPT)) if (dropped.full.startsWith('blob:')) URL.revokeObjectURL(dropped.full);
+        return next.slice(0, MAX_KEPT);
+      });
       setProblem(null);
       setStatus('idle');
       if (configRef.current.autoAssist && res.issues.length) void assist(true);
@@ -265,12 +280,15 @@ export function BuddyPanel({ token, frame, config }: { token: string; frame?: st
           {captures.length === 0 ? <p className="mt-1 text-xs text-muted-foreground">None yet.</p> : (
             <ul className="mt-1.5 space-y-2">
               {captures.map((c) => (
-                <li key={c.at} className="flex gap-2">
-                  <img src={c.thumb} alt="" className="h-12 w-20 shrink-0 rounded border border-foreground/10 object-cover" />
-                  <div className="min-w-0 text-[11px]">
-                    <p className="font-semibold">{timeFmt(c.at)}{c.issues.length ? <span className="ml-1 text-amber-700">· {c.issues.length} problem{c.issues.length === 1 ? '' : 's'}</span> : null}</p>
-                    <p className="line-clamp-2 text-muted-foreground">{c.text.split('\n').find((l) => l.trim()) || 'No text found'}</p>
-                  </div>
+                <li key={c.at}>
+                  <button type="button" onClick={() => setViewing(c.at)} title="View larger" data-testid={`buddy-capture-${c.at}`}
+                    className="group flex w-full gap-2 rounded-lg p-1 text-left hover:bg-muted/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                    <img src={c.thumb} alt={`Screen at ${timeFmt(c.at)}`} className="h-12 w-20 shrink-0 cursor-zoom-in rounded border border-foreground/10 object-cover transition group-hover:border-primary" />
+                    <div className="min-w-0 text-[11px]">
+                      <p className="font-semibold">{timeFmt(c.at)}{c.issues.length ? <span className="ml-1 text-amber-700">· {c.issues.length} problem{c.issues.length === 1 ? '' : 's'}</span> : null}</p>
+                      <p className="line-clamp-2 text-muted-foreground">{c.text.split('\n').find((l) => l.trim()) || 'No text found'}</p>
+                    </div>
+                  </button>
                 </li>
               ))}
             </ul>
@@ -280,6 +298,52 @@ export function BuddyPanel({ token, frame, config }: { token: string; frame?: st
       <p className="border-t border-foreground/10 px-4 py-2 text-[10px] text-muted-foreground">
         Screen text is read in this browser and saved with the session record for your support team. Screenshots stay in this browser.
       </p>
+      {viewing !== null && <CaptureViewer captures={captures} at={viewing} onChange={setViewing} />}
     </aside>
+  );
+}
+
+// A screen change at full size, with the text read from it. Arrow keys or
+// the buttons move between the kept screens (newest first).
+function CaptureViewer({ captures, at, onChange }: { captures: Capture[]; at: number; onChange: (at: number | null) => void }) {
+  const i = captures.findIndex((c) => c.at === at);
+  const c = captures[i];
+  useEffect(() => {
+    if (!c) return;
+    const key = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'ArrowLeft' && i < captures.length - 1) onChange(captures[i + 1].at);
+      if (e.key === 'ArrowRight' && i > 0) onChange(captures[i - 1].at);
+    };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, [c, i, captures, onChange]);
+  if (!c) return null;
+  const nav = 'inline-flex items-center gap-1 rounded-lg border border-foreground/15 px-2.5 py-1 text-xs font-semibold hover:bg-muted disabled:opacity-40';
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onChange(null); }}>
+      <DialogContent className="max-h-[95dvh] w-[96vw] max-w-6xl overflow-y-auto" data-testid="buddy-capture-viewer">
+        <DialogHeader>
+          <DialogTitle>Screen at {timeFmt(c.at)}</DialogTitle>
+          <DialogDescription>
+            Screen {captures.length - i} of {captures.length} kept in this browser{c.issues.length ? ` · ${c.issues.length} problem${c.issues.length === 1 ? '' : 's'} spotted` : ''}.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex items-center justify-between gap-2">
+          <button type="button" className={nav} disabled={i >= captures.length - 1} onClick={() => onChange(captures[i + 1].at)}><ChevronLeft className="h-3.5 w-3.5" /> Older</button>
+          <a href={c.full} target="_blank" rel="noreferrer" className="text-xs font-semibold text-primary underline-offset-2 hover:underline">Open full size in a new tab</a>
+          <button type="button" className={nav} disabled={i <= 0} onClick={() => onChange(captures[i - 1].at)}>Newer <ChevronRight className="h-3.5 w-3.5" /></button>
+        </div>
+        <img src={c.full} alt={`Remote screen at ${timeFmt(c.at)}`} className="w-full rounded-lg border border-foreground/10 bg-black object-contain" />
+        {c.issues.length > 0 && (
+          <ul className="space-y-1">
+            {c.issues.map((x) => <li key={x} className="flex gap-1.5 text-xs"><TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />{x}</li>)}
+          </ul>
+        )}
+        <details className="rounded-lg border border-foreground/10 px-3 py-2">
+          <summary className="cursor-pointer text-xs font-semibold">Text read from this screen</summary>
+          <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap font-sans text-xs text-muted-foreground">{c.text || 'No text found.'}</pre>
+        </details>
+      </DialogContent>
+    </Dialog>
   );
 }
