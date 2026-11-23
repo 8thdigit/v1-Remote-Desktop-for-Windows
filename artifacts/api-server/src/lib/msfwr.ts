@@ -62,6 +62,8 @@ export type Operator = { id: string; name: string; raId: string };
 // the session history and quota counting. The accountId is resolved by the
 // caller from the RA ID.
 export type EndedSession = {
+  // The live session's internal id.
+  sessionId?: string;
   raId: string;
   // The link code, for sessions opened through a remote access URL.
   link?: string;
@@ -233,6 +235,7 @@ export function createMsfwrStore(clock = Date.now, hooks: StoreHooks = {}) {
     const now = clock();
     try {
       hooks.onEnd({
+        sessionId: s.id,
         raId: s.ra ?? "",
         pcName: s.name || s.call?.name || "",
         link: s.linkCode,

@@ -10,6 +10,7 @@ import {
 } from "./billing";
 import { createSite, fileSiteBackend, postgresSiteBackend, SiteError, type Site } from "./site";
 import { createMsfwrStore, type EndedSession, type Session } from "./msfwr";
+import { BuddyError, createBuddy, fileBuddyBackend, postgresBuddyBackend, type Buddy } from "./buddy";
 import { createLinkLog, fileLinkLogBackend, postgresLinkLogBackend, type LinkLog } from "./linklog";
 import { logger } from "./logger";
 
@@ -50,7 +51,12 @@ export const store = createMsfwrStore(Date.now, {
             startedAt: ended.startedAt, endedAt: ended.endedAt, durationMs: ended.durationMs, viewers: ended.viewers,
           });
         }
+        if (ended.sessionId) {
+          const sessionId = ended.sessionId;
+          void buddyReady().then((b) => b.ended(sessionId, ended.endedAt)).catch((err) => logger.warn({ err }, "Could not close the AI Buddy record"));
+        }
         await (await billingReady()).recordSession({
+          sessionId: ended.sessionId,
           accountId: account?.id ?? null,
           raId: ended.raId,
           pcName: ended.pcName,
@@ -355,7 +361,7 @@ export function requireUser(role?: "admin", options: { allowPasswordChange?: boo
 }
 
 export function sendError(res: Response, err: unknown) {
-  if (err instanceof AccountError || err instanceof BillingError || err instanceof SiteError) { res.status(err.status).json({ error: err.message }); return; }
+  if (err instanceof AccountError || err instanceof BillingError || err instanceof SiteError || err instanceof BuddyError) { res.status(err.status).json({ error: err.message }); return; }
   logger.error({ err }, "Portal request failed");
   res.status(500).json({ error: "Something went wrong on the relay. Try again." });
 }
@@ -380,4 +386,25 @@ export function limiter(max: number, windowMs: number) {
     },
     clear(key: string) { hits.delete(key); },
   };
+}
+
+// AI Buddy's screen records, knowledge base and settings share the accounts'
+// storage location.
+async function openBuddy(): Promise<Buddy> {
+  const url = process.env["DATABASE_URL"];
+  const backend = url
+    ? await postgresBuddyBackend(url)
+    : fileBuddyBackend(process.env["MSFWR_DATA_DIR"] || path.resolve(process.cwd(), ".data"));
+  const { init, api } = createBuddy(backend);
+  await init;
+  return api;
+}
+
+let openingBuddy: Promise<Buddy> | undefined;
+export function buddyReady() {
+  openingBuddy ??= openBuddy().catch((err) => {
+    openingBuddy = undefined;
+    throw err;
+  });
+  return openingBuddy;
 }
