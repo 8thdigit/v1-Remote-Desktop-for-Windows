@@ -612,6 +612,7 @@ components:
         password: {type: string, maxLength: 200}
         role: {type: string, enum: [admin, company]}
         raId: {type: string, maxLength: 16, description: Optional; six digits. A unique one is generated when empty.}
+        adminPin: {type: string, maxLength: 12, description: The six-digit admin creation PIN; required when role is admin}
     AccountUpdate:
       type: object
       properties:
@@ -620,6 +621,7 @@ components:
         role: {type: string, enum: [admin, company]}
         disabled: {type: boolean}
         raId: {type: string, maxLength: 16}
+        adminPin: {type: string, maxLength: 12, description: The six-digit admin creation PIN; required to make an account an admin}
     AuthStatus:
       type: object
       properties:

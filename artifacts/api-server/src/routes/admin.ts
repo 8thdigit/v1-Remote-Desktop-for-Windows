@@ -1,9 +1,10 @@
-import { Router } from "express";
+import { createHash, timingSafeEqual } from "node:crypto";
+import { Router, type Request, type Response } from "express";
 import { CreateUserBody, UpdateUserBody } from "@workspace/api-zod";
 import { formatRaId } from "../lib/msfwr";
 import { DAY } from "../lib/billing";
 import type { AssetKind } from "../lib/site";
-import { accountsReady, activity, billingReady, linkRegister, requireUser, sendError, siteReady, store } from "../lib/portal";
+import { accountsReady, activity, billingReady, limiter, linkRegister, requireUser, sendError, siteReady, store } from "../lib/portal";
 
 // The admin console: accounts, live sessions, requests and activity.
 const router = Router();
@@ -13,6 +14,35 @@ router.use((_req, res, next) => {
   next();
 });
 router.use(requireUser("admin"));
+
+// Creating a WINRSS admin account (or making an account an admin) needs the
+// six-digit admin creation PIN. It is a secret kept in the relay's
+// environment (ADMIN_CREATION_PIN), never in the code or the browser.
+const adminPinTries = limiter(5, 15 * 60_000);
+const digest = (v: string) => createHash("sha256").update(v).digest();
+
+function adminPinOk(req: Request, res: Response) {
+  const secret = (process.env["ADMIN_CREATION_PIN"] ?? "").trim();
+  if (!/^\d{6}$/.test(secret)) {
+    res.status(503).json({ error: "Admin account creation is turned off: set ADMIN_CREATION_PIN (six digits) in the relay's environment." });
+    return false;
+  }
+  const key = req.account!.id;
+  if (adminPinTries.blocked(key)) {
+    res.status(429).json({ error: "Too many wrong admin PINs. Try again in 15 minutes." });
+    return false;
+  }
+  const given = String((req.body as { adminPin?: unknown } | undefined)?.adminPin ?? "").replace(/\D/g, "");
+  if (!given) { res.status(403).json({ error: "Enter the 6-digit admin creation PIN." }); return false; }
+  if (!timingSafeEqual(digest(given), digest(secret))) {
+    adminPinTries.fail(key);
+    activity.add("admin-pin-failed", `${req.account!.displayName} entered a wrong admin creation PIN`, req.account!.username);
+    res.status(403).json({ error: "That admin creation PIN is not correct." });
+    return false;
+  }
+  adminPinTries.clear(key);
+  return true;
+}
 
 router.get("/users", async (_req, res) => {
   try {
@@ -26,6 +56,7 @@ router.post("/users", async (req, res) => {
     const accounts = await accountsReady();
     const body = CreateUserBody.safeParse(req.body);
     if (!body.success) { res.status(400).json({ error: "Fill in a login ID, a password and a role." }); return; }
+    if (body.data.role === "admin" && !adminPinOk(req, res)) return;
     const user = await accounts.create({ ...body.data, mustChangePassword: true });
     activity.add("user-created", `${req.account!.displayName} created ${user.role === "admin" ? "admin" : "company"} ${user.displayName} (${formatRaId(user.raId)})`, req.account!.username);
     res.status(201).json(user);
@@ -38,6 +69,7 @@ router.patch("/users/:id", async (req, res) => {
     const body = UpdateUserBody.safeParse(req.body);
     if (!body.success) { res.status(400).json({ error: "Invalid change." }); return; }
     const before = accounts.get(req.params.id);
+    if (body.data.role === "admin" && before?.role !== "admin" && !adminPinOk(req, res)) return;
     const user = await accounts.update(req.params.id, body.data, req.account!.id);
     if (user.disabled) { store.endOperator(user.id); store.dropCompanyPin(user.id); }
     const changes = [
@@ -194,10 +226,27 @@ router.get("/registrations", async (_req, res) => {
 
 router.patch("/registrations/:id", async (req, res) => {
   try {
-    const body = (req.body ?? {}) as { status?: unknown; note?: unknown };
-    const entry = await (await siteReady()).updateRegistration(req.params.id, { status: body.status, note: body.note });
-    if (body.status !== undefined) activity.add("registration", `${req.account!.displayName} marked the access request from ${entry.name} ${entry.status}`, req.account!.username);
+    const body = (req.body ?? {}) as { status?: unknown; actionPlan?: unknown; outcome?: unknown; note?: unknown };
+    const entry = await (await siteReady()).updateRegistration(req.params.id, {
+      status: body.status, actionPlan: body.actionPlan, outcome: body.outcome, note: body.note,
+    });
+    const who = req.account!.displayName;
+    if (body.status !== undefined) activity.add("registration", `${who} ${entry.status === "pending" ? "reopened" : entry.status} the access request from ${entry.name}`, req.account!.username);
+    if (body.outcome) activity.add("registration", `${who} marked the access request from ${entry.name} as ${entry.outcome === "converted" ? "converted to customer" : "query closed"}`, req.account!.username);
     res.json(entry);
+  } catch (err) { sendError(res, err); }
+});
+
+router.post("/registrations/:id/comments", async (req, res) => {
+  try {
+    const entry = await (await siteReady()).addRegistrationComment(req.params.id, (req.body as { text?: unknown } | undefined)?.text, req.account!.displayName);
+    res.status(201).json(entry);
+  } catch (err) { sendError(res, err); }
+});
+
+router.delete("/registrations/:id/comments/:commentId", async (req, res) => {
+  try {
+    res.json(await (await siteReady()).removeRegistrationComment(req.params.id, req.params.commentId));
   } catch (err) { sendError(res, err); }
 });
 

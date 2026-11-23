@@ -383,6 +383,11 @@ export interface AccountCreate {
      * @maxLength 16
      */
   raId?: string;
+  /**
+     * The six-digit admin creation PIN; required when role is admin
+     * @maxLength 12
+     */
+  adminPin?: string;
 }
 
 export type AccountUpdateRole = typeof AccountUpdateRole[keyof typeof AccountUpdateRole];
@@ -402,6 +407,11 @@ export interface AccountUpdate {
   disabled?: boolean;
   /** @maxLength 16 */
   raId?: string;
+  /**
+     * The six-digit admin creation PIN; required to make an account an admin
+     * @maxLength 12
+     */
+  adminPin?: string;
 }
 
 export interface AuthStatus {

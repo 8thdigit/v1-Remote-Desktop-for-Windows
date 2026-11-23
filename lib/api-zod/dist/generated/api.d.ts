@@ -359,6 +359,7 @@ export declare const createUserBodyUsernameMax = 64;
 export declare const createUserBodyDisplayNameMax = 80;
 export declare const createUserBodyPasswordMax = 200;
 export declare const createUserBodyRaIdMax = 16;
+export declare const createUserBodyAdminPinMax = 12;
 export declare const CreateUserBody: zod.ZodObject<{
     username: zod.ZodString;
     displayName: zod.ZodOptional<zod.ZodString>;
@@ -368,6 +369,7 @@ export declare const CreateUserBody: zod.ZodObject<{
         admin: "admin";
     }>;
     raId: zod.ZodOptional<zod.ZodString>;
+    adminPin: zod.ZodOptional<zod.ZodString>;
 }, zod.z.core.$strip>;
 export declare const CreateUserResponse: zod.ZodObject<{
     id: zod.ZodString;
@@ -389,6 +391,7 @@ export declare const UpdateUserParams: zod.ZodObject<{
 export declare const updateUserBodyDisplayNameMax = 80;
 export declare const updateUserBodyPasswordMax = 200;
 export declare const updateUserBodyRaIdMax = 16;
+export declare const updateUserBodyAdminPinMax = 12;
 export declare const UpdateUserBody: zod.ZodObject<{
     displayName: zod.ZodOptional<zod.ZodString>;
     password: zod.ZodOptional<zod.ZodString>;
@@ -398,6 +401,7 @@ export declare const UpdateUserBody: zod.ZodObject<{
     }>>;
     disabled: zod.ZodOptional<zod.ZodBoolean>;
     raId: zod.ZodOptional<zod.ZodString>;
+    adminPin: zod.ZodOptional<zod.ZodString>;
 }, zod.z.core.$strip>;
 export declare const UpdateUserResponse: zod.ZodObject<{
     id: zod.ZodString;

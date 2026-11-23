@@ -443,6 +443,8 @@ export const createUserBodyPasswordMax = 200;
 
 export const createUserBodyRaIdMax = 16;
 
+export const createUserBodyAdminPinMax = 12;
+
 
 
 export const CreateUserBody = zod.object({
@@ -450,7 +452,8 @@ export const CreateUserBody = zod.object({
   "displayName": zod.string().max(createUserBodyDisplayNameMax).optional(),
   "password": zod.string().max(createUserBodyPasswordMax),
   "role": zod.enum(['admin', 'company']),
-  "raId": zod.string().max(createUserBodyRaIdMax).optional().describe('Optional; six digits. A unique one is generated when empty.')
+  "raId": zod.string().max(createUserBodyRaIdMax).optional().describe('Optional; six digits. A unique one is generated when empty.'),
+  "adminPin": zod.string().max(createUserBodyAdminPinMax).optional().describe('The six-digit admin creation PIN; required when role is admin')
 })
 
 export const CreateUserResponse = zod.object({
@@ -476,6 +479,8 @@ export const updateUserBodyPasswordMax = 200;
 
 export const updateUserBodyRaIdMax = 16;
 
+export const updateUserBodyAdminPinMax = 12;
+
 
 
 export const UpdateUserBody = zod.object({
@@ -483,7 +488,8 @@ export const UpdateUserBody = zod.object({
   "password": zod.string().max(updateUserBodyPasswordMax).optional(),
   "role": zod.enum(['admin', 'company']).optional(),
   "disabled": zod.boolean().optional(),
-  "raId": zod.string().max(updateUserBodyRaIdMax).optional()
+  "raId": zod.string().max(updateUserBodyRaIdMax).optional(),
+  "adminPin": zod.string().max(updateUserBodyAdminPinMax).optional().describe('The six-digit admin creation PIN; required to make an account an admin')
 })
 
 export const UpdateUserResponse = zod.object({

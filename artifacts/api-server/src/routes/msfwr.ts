@@ -107,9 +107,15 @@ router.get("/inbox", requireUser(), async (req, res) => {
   try {
     // The company's current Access PIN (a new one every few minutes until it
     // is used) and the remote access URLs it has authored.
-    const pin = store.companyPin({id: user.id, name: user.displayName, raId: user.raId});
+    // A company that cannot start sessions (quota reached, expired or
+    // suspended) gets no Access PIN, so no new URL can be authorized with it.
+    const gate = await connectGateForRa(user.raId);
+    let pin;
+    if (gate.ok) pin = store.companyPin({id: user.id, name: user.displayName, raId: user.raId});
+    else store.dropCompanyPin(user.id);
     const links = await linkRegister({accountId: user.id});
-    res.json(GetMsfwrInboxResponse.parse({raId: user.raId, company: user.displayName, ...store.inbox(user.raId), accessPin: pin, links}));
+    const inbox = GetMsfwrInboxResponse.parse({raId: user.raId, company: user.displayName, ...store.inbox(user.raId), accessPin: pin, links});
+    res.json(gate.ok ? inbox : {...inbox, pinBlocked: {reason: gate.reason ?? "inactive", message: gate.message ?? ""}});
   } catch (err) { sendError(res, err); }
 });
 router.post("/accept", requireUser(), async (req, res) => {

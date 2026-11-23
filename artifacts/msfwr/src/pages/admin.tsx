@@ -17,6 +17,7 @@ import { LinkRecordList } from '@/components/access-pins';
 import { Brand, RaBadge, UserMenu } from '@/components/user-menu';
 import { errorText, raLabel, useAuth } from '@/lib/auth';
 import { relativeTime } from '@/lib/unattended';
+import { takeLanding } from './sign-in';
 import { SubscriptionsPanel, PaymentsPanel, SessionHistoryPanel } from './billing-admin';
 import { DashboardPanel, RegistrationsPanel, SiteSettingsPanel, useDashboard, type Registration } from './admin-dashboard';
 
@@ -51,6 +52,8 @@ export default function Admin() {
   const client = useQueryClient();
   // The open section follows the URL hash (/admin#site), so it survives a reload.
   const [tab, setTabState] = useState<Tab>(() => {
+    // Right after signing in, always open on the dashboard.
+    if (takeLanding()) { if (typeof window !== 'undefined' && window.location.hash) window.history.replaceState(null, '', window.location.pathname); return 'dashboard'; }
     const h = typeof window !== 'undefined' ? window.location.hash.slice(1) : '';
     return (TABS as string[]).includes(h) ? (h as Tab) : 'dashboard';
   });
@@ -64,6 +67,8 @@ export default function Admin() {
   const pendingRegistrations = dashboard.data?.registrations.pending ?? 0;
   const [now, setNow] = useState(Date.now);
   const [creating, setCreating] = useState(false);
+  const [createKind, setCreateKind] = useState<'admin' | 'company'>('company');
+  const [promote, setPromote] = useState<Account | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const users = useQuery({ queryKey: getListUsersQueryKey(), queryFn: () => listUsers(), refetchInterval: 15_000 });
   const overview = useQuery<AdminOverview>({ queryKey: getGetAdminOverviewQueryKey(), queryFn: () => getAdminOverview(), refetchInterval: 4000 });
@@ -110,10 +115,16 @@ export default function Admin() {
             <h1 className="flex items-center gap-2 text-2xl font-extrabold tracking-tight md:text-3xl"><ShieldCheck className="h-7 w-7 text-primary" /> Admin console</h1>
             <p className="mt-1 text-sm text-muted-foreground">Manage company accounts (login ID and RA ID), and see PCs, sessions, requests and activity.</p>
           </div>
-          <button type="button" onClick={() => setCreating(true)} data-testid="button-add-user"
-            className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground shadow-sm active:scale-[0.98]">
-            <Building2 className="h-4 w-4" /> Add company
-          </button>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => { setCreateKind('admin'); setCreating(true); }} data-testid="button-add-admin"
+              className="flex items-center gap-2 rounded-xl border border-foreground/15 bg-card px-4 py-2.5 text-sm font-bold shadow-sm hover:bg-muted active:scale-[0.98]">
+              <ShieldCheck className="h-4 w-4" /> Add WINRSS admin
+            </button>
+            <button type="button" onClick={() => { setCreateKind('company'); setCreating(true); }} data-testid="button-add-user"
+              className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground shadow-sm active:scale-[0.98]">
+              <Building2 className="h-4 w-4" /> Add customer company
+            </button>
+          </div>
         </div>
 
         {problem && (
@@ -134,11 +145,11 @@ export default function Admin() {
 
         <section className="dl-rise mt-4">
           {tab === 'dashboard' && <DashboardPanel onOpen={setTab} onError={setProblem} />}
-          {tab === 'registrations' && <RegistrationsPanel onError={setProblem} onCreateCompany={(r) => { setPrefill(r); setCreating(true); }} />}
+          {tab === 'registrations' && <RegistrationsPanel onError={setProblem} onCreateCompany={(r) => { setPrefill(r); setCreateKind('company'); setCreating(true); }} />}
           {tab === 'site' && <SiteSettingsPanel onError={setProblem} />}
           {tab === 'users' && (
             <UsersPanel users={list} me={me} now={now} loading={users.isPending}
-              onRole={(u, role) => void run(() => updateUser(u.id, { role }), 'Could not change the role.')}
+              onRole={(u, role) => { if (role === 'admin') setPromote(u); else void run(() => updateUser(u.id, { role }), 'Could not change the role.'); }}
               onToggle={(u) => void run(() => updateUser(u.id, { disabled: !u.disabled }), 'Could not change the account.')}
               onRename={(u, displayName) => run(() => updateUser(u.id, { displayName }), 'Could not rename the account.')}
               onReset={(u, password) => run(() => updateUser(u.id, { password }), 'Could not reset the password.')}
@@ -246,7 +257,8 @@ export default function Admin() {
         )}
       </main>
 
-      <CreateUser open={creating} prefill={prefill} onClose={() => { setCreating(false); setPrefill(null); }} onCreated={reload} />
+      <CreateUser open={creating} kind={createKind} onKind={setCreateKind} prefill={prefill} onClose={() => { setCreating(false); setPrefill(null); }} onCreated={reload} />
+      <PromoteAdmin user={promote} onClose={() => setPromote(null)} onPromote={(u, adminPin) => run(() => updateUser(u.id, { role: 'admin', adminPin }), 'Could not make this account an admin.')} />
     </div>
   );
 }
@@ -417,30 +429,48 @@ function PasswordField({ value, onChange }: { value: string; onChange: (v: strin
   );
 }
 
-function CreateUser({ open, prefill, onClose, onCreated }: { open: boolean; prefill?: Registration | null; onClose: () => void; onCreated: () => void }) {
+// Six digits, typed like a PIN and never shown.
+function AdminPinField({ value, onChange, testId }: { value: string; onChange: (v: string) => void; testId?: string }) {
+  return (
+    <label className="block text-xs font-semibold text-muted-foreground">Admin creation PIN <span className="font-normal">(6 digits)</span>
+      <input className={`${inputCls} mt-1 font-mono tracking-[0.4em]`} type="password" inputMode="numeric" autoComplete="off" maxLength={6} required
+        value={value} onChange={(e) => onChange(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="••••••" data-testid={testId} />
+    </label>
+  );
+}
+
+function CreateUser({ open, kind, onKind, prefill, onClose, onCreated }: {
+  open: boolean; kind: 'admin' | 'company'; onKind: (k: 'admin' | 'company') => void; prefill?: Registration | null; onClose: () => void; onCreated: () => void;
+}) {
   const [displayName, setDisplayName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState(generatePassword);
-  const [role, setRole] = useState<Account['role']>('company');
   const [raId, setRaId] = useState('');
+  const [adminPin, setAdminPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState<{ user: Account; password: string } | null>(null);
-  // Opened from an approved access request: start from its company name.
+  const isAdmin = kind === 'admin';
+  // Opened from an accepted access request: start from its company name.
   useEffect(() => {
     if (!open || !prefill) return;
     const name = prefill.company || prefill.name;
     setDisplayName(name);
     setUsername(name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32));
   }, [open, prefill]);
-  const close = () => { setDisplayName(''); setUsername(''); setPassword(generatePassword()); setRole('company'); setRaId(''); setError(null); setCreated(null); onClose(); };
+  const reset = () => { setDisplayName(''); setUsername(''); setPassword(generatePassword()); setRaId(''); setAdminPin(''); setError(null); setCreated(null); };
+  const close = () => { reset(); onClose(); };
+  const switchKind = (k: 'admin' | 'company') => { if (k !== kind) { setError(null); setAdminPin(''); onKind(k); } };
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      const user = await createUser({ displayName: displayName.trim() || undefined, username: username.trim(), password, role, raId: raId.trim() || undefined });
+      const user = await createUser(isAdmin
+        ? { displayName: displayName.trim() || undefined, username: username.trim(), password, role: 'admin', adminPin }
+        : { displayName: displayName.trim() || undefined, username: username.trim(), password, role: 'company', raId: raId.trim() || undefined });
       setCreated({ user, password });
+      setAdminPin('');
       onCreated();
     } catch (reason) {
       setError(errorText(reason, 'Could not create the account.'));
@@ -448,53 +478,75 @@ function CreateUser({ open, prefill, onClose, onCreated }: { open: boolean; pref
       setBusy(false);
     }
   }
-  const summary = created && `WINRSS.net sign-in: ${window.location.origin}\nLogin ID: ${created.user.username}\nPassword: ${created.password}\nRA ID (enter it on your PCs): ${raLabel(created.user.raId)}`;
+  const summary = created && (created.user.role === 'admin'
+    ? `WINRSS.net admin console: ${window.location.origin}/admin\nLogin ID: ${created.user.username}\nPassword: ${created.password}`
+    : `WINRSS.net sign-in: ${window.location.origin}\nLogin ID: ${created.user.username}\nPassword: ${created.password}\nRA ID (enter it on your PCs): ${raLabel(created.user.raId)}`);
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) close(); }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{created ? 'Account created' : 'Add company'}</DialogTitle>
+          <DialogTitle>{created ? (created.user.role === 'admin' ? 'Admin account created' : 'Company created') : 'Create an account'}</DialogTitle>
           <DialogDescription>
-            {created ? 'Share these sign-in details privately. The password is not shown again.' : 'The company signs in with its login ID. PCs pointed to its RA ID show up for it, with their requests.'}
+            {created ? 'Share these sign-in details privately. The password is not shown again.'
+              : isAdmin ? 'A WINRSS admin manages every company, subscription and setting in this console. It needs the admin creation PIN.'
+              : 'A customer company signs in with its login ID. PCs pointed to its RA ID show up for it, with their requests.'}
           </DialogDescription>
         </DialogHeader>
+        {!created && (
+          <div role="tablist" aria-label="Account type" className="grid grid-cols-2 gap-1 rounded-xl bg-muted/80 p-1">
+            {([['company', 'Customer company creation', Building2], ['admin', 'WINRSS admin account creation', ShieldCheck]] as const).map(([value, label, Icon]) => (
+              <button key={value} type="button" role="tab" aria-selected={kind === value} onClick={() => switchKind(value)} data-testid={`create-tab-${value}`}
+                className={`flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-bold transition-colors ${kind === value
+                  ? value === 'admin' ? 'bg-foreground text-background shadow-sm' : 'bg-card text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'}`}>
+                <Icon className="h-3.5 w-3.5 shrink-0" /> <span className="text-left leading-tight">{label}</span>
+              </button>
+            ))}
+          </div>
+        )}
         {created ? (
           <div className="space-y-3">
             <div className="rounded-2xl bg-foreground p-4 text-background">
-              <p className="font-mono text-[11px] uppercase tracking-widest text-background/60">RA ID</p>
-              <p className="font-mono text-3xl font-bold tracking-wider" data-testid="text-new-ra">{raLabel(created.user.raId)}</p>
+              {created.user.role === 'admin' ? (
+                <>
+                  <p className="font-mono text-[11px] uppercase tracking-widest text-background/60">WINRSS admin</p>
+                  <p className="font-mono text-2xl font-bold" data-testid="text-new-admin">{created.user.username}</p>
+                </>
+              ) : (
+                <>
+                  <p className="font-mono text-[11px] uppercase tracking-widest text-background/60">RA ID</p>
+                  <p className="font-mono text-3xl font-bold tracking-wider" data-testid="text-new-ra">{raLabel(created.user.raId)}</p>
+                </>
+              )}
               <p className="mt-3 text-sm">{created.user.displayName} · login ID <span className="font-mono">{created.user.username}</span> · <span className="font-mono">{created.password}</span></p>
             </div>
             <CopyButton text={summary!} label="Copy sign-in details" />
           </div>
         ) : (
-          <form id="create-user" onSubmit={submit} className="space-y-3">
-            <label className="block text-xs font-semibold text-muted-foreground">Company name
-              <input className={`${inputCls} mt-1`} value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={80} placeholder="e.g. Acme Ltd" autoFocus data-testid="input-new-name" />
+          <form id="create-user" onSubmit={submit} className="space-y-3" key={kind}>
+            <label className="block text-xs font-semibold text-muted-foreground">{isAdmin ? 'Admin name' : 'Company name'}
+              <input className={`${inputCls} mt-1`} value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={80}
+                placeholder={isAdmin ? 'e.g. Priya (WINRSS support)' : 'e.g. Acme Ltd'} autoFocus data-testid="input-new-name" />
             </label>
             <label className="block text-xs font-semibold text-muted-foreground">Login ID
               <input className={`${inputCls} mt-1`} value={username} onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/\s/g, ''))} maxLength={32} required
-                placeholder="e.g. acme" autoCapitalize="none" spellCheck={false} data-testid="input-new-username" />
+                placeholder={isAdmin ? 'e.g. priya' : 'e.g. acme'} autoCapitalize="none" spellCheck={false} data-testid="input-new-username" />
             </label>
-            <label className="block text-xs font-semibold text-muted-foreground">RA ID <span className="font-normal">(six digits; leave empty to generate one)</span>
-              <input className={`${inputCls} mt-1 font-mono`} value={raId} onChange={(e) => setRaId(e.target.value.toUpperCase())} maxLength={9}
-                placeholder="RA-123456" spellCheck={false} data-testid="input-new-ra" />
-            </label>
+            {!isAdmin && (
+              <label className="block text-xs font-semibold text-muted-foreground">RA ID <span className="font-normal">(six digits; leave empty to generate one)</span>
+                <input className={`${inputCls} mt-1 font-mono`} value={raId} onChange={(e) => setRaId(e.target.value.toUpperCase())} maxLength={9}
+                  placeholder="RA-123456" spellCheck={false} data-testid="input-new-ra" />
+              </label>
+            )}
             <div className="text-xs font-semibold text-muted-foreground">Temporary password <span className="font-normal">(they choose their own at first sign-in)</span>
               <div className="mt-1"><PasswordField value={password} onChange={setPassword} /></div>
             </div>
-            <fieldset>
-              <legend className="text-xs font-semibold text-muted-foreground">Role</legend>
-              <div className="mt-1 grid grid-cols-2 gap-2">
-                {([['company', 'Company', 'Sees its PCs and requests, and connects'], ['admin', 'Admin', 'Also manages accounts in this console']] as const).map(([value, title, text]) => (
-                  <button key={value} type="button" onClick={() => setRole(value)} aria-pressed={role === value}
-                    className={`rounded-xl border p-3 text-left ${role === value ? 'border-primary bg-primary/8 ring-2 ring-primary/20' : 'hover:bg-muted'}`}>
-                    <span className="block text-sm font-bold">{title}</span>
-                    <span className="block text-xs text-muted-foreground">{text}</span>
-                  </button>
-                ))}
+            {isAdmin && (
+              <div className="rounded-xl border border-foreground/15 bg-muted/40 p-3">
+                <AdminPinField value={adminPin} onChange={setAdminPin} testId="input-admin-pin" />
+                <p className="mt-1.5 text-[11px] text-muted-foreground">Ask the WINRSS owner for this PIN. It is checked by the relay and never stored in the browser.</p>
               </div>
-            </fieldset>
+            )}
             {error && <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
           </form>
         )}
@@ -504,12 +556,36 @@ function CreateUser({ open, prefill, onClose, onCreated }: { open: boolean; pref
           ) : (
             <>
               <button type="button" onClick={close} className="rounded-xl border px-4 py-2 text-sm font-semibold hover:bg-muted">Cancel</button>
-              <button type="submit" form="create-user" disabled={busy || !username || password.length < 8} data-testid="button-create-user"
-                className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground disabled:opacity-40">
-                <Plus className="h-4 w-4" /> {busy ? 'Creating…' : 'Create account'}
+              <button type="submit" form="create-user" disabled={busy || !username || password.length < 8 || (isAdmin && adminPin.length !== 6)} data-testid="button-create-user"
+                className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-bold disabled:opacity-40 ${isAdmin ? 'bg-foreground text-background' : 'bg-primary text-primary-foreground'}`}>
+                <Plus className="h-4 w-4" /> {busy ? 'Creating…' : isAdmin ? 'Create admin' : 'Create company'}
               </button>
             </>
           )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Making an existing account an admin needs the same PIN.
+function PromoteAdmin({ user, onClose, onPromote }: { user: Account | null; onClose: () => void; onPromote: (u: Account, pin: string) => Promise<boolean> }) {
+  const [pin, setPin] = useState('');
+  const [busy, setBusy] = useState(false);
+  const close = () => { setPin(''); onClose(); };
+  return (
+    <Dialog open={!!user} onOpenChange={(o) => { if (!o) close(); }}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Make {user?.displayName} a WINRSS admin?</DialogTitle>
+          <DialogDescription>Admins manage every company, subscription and setting. Enter the admin creation PIN to continue.</DialogDescription>
+        </DialogHeader>
+        <form id="promote-admin" onSubmit={async (e) => { e.preventDefault(); if (!user) return; setBusy(true); await onPromote(user, pin); setBusy(false); close(); }}>
+          <AdminPinField value={pin} onChange={setPin} testId="input-promote-pin" />
+        </form>
+        <DialogFooter>
+          <button type="button" onClick={close} className="rounded-xl border px-4 py-2 text-sm font-semibold hover:bg-muted">Cancel</button>
+          <button type="submit" form="promote-admin" disabled={busy || pin.length !== 6} className="rounded-xl bg-foreground px-4 py-2 text-sm font-bold text-background disabled:opacity-40">Make admin</button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -23,11 +23,14 @@ export type Plan = {
 export type Subscription = {
   accountId: string; planId: string | null; status: Exclude<SubStatus, 'none'>;
   currentPeriodStart: number; currentPeriodEnd: number; sessionsUsed: number;
+  urlsUsed?: number; extraSessionsUsed?: number; graceSessions?: number; graceLog?: GraceExtension[];
   licenseVersion: number; autoRenew: boolean; requireLicense: boolean; notes: string;
 };
+export type GraceExtension = { id: string; amount: number; remarks: string; by: string; at: number; periodEnd: number };
 export type Entitlement = {
   subscribed: boolean; status: SubStatus; reason?: string; plan?: Plan;
   sessionsUsed: number; sessionQuota: number; remaining: number | null; currentPeriodEnd: number | null;
+  planQuota?: number; graceSessions?: number; urlsUsed?: number; extraSessionsUsed?: number;
   licenseVersion: number;
 };
 export type Company = {
@@ -123,6 +126,7 @@ export function SubscriptionsPanel({ onError }: { onError: (msg: string | null) 
   const [planEdit, setPlanEdit] = useState<Plan | null | 'new'>(null);
   const [subEdit, setSubEdit] = useState<Company | null>(null);
   const [clientFor, setClientFor] = useState<Company | null>(null);
+  const [graceFor, setGraceFor] = useState<Company | null>(null);
 
   const reload = () => {
     void qc.invalidateQueries({ queryKey: ['billing'] });
@@ -155,7 +159,7 @@ export function SubscriptionsPanel({ onError }: { onError: (msg: string | null) 
             <table className="w-full min-w-[640px] text-left text-sm">
               <thead><tr className="text-xs text-muted-foreground">
                 <th className="px-1 py-2 font-semibold">Plan</th><th className="px-1 py-2 font-semibold">Price</th>
-                <th className="px-1 py-2 font-semibold">Billing</th><th className="px-1 py-2 font-semibold">Session quota</th>
+                <th className="px-1 py-2 font-semibold">Billing</th><th className="px-1 py-2 font-semibold">Usage quota</th>
                 <th className="px-1 py-2 font-semibold">Limits</th><th className="px-1 py-2" />
               </tr></thead>
               <tbody className="divide-y divide-foreground/8">
@@ -206,7 +210,7 @@ export function SubscriptionsPanel({ onError }: { onError: (msg: string | null) 
                       <td className="px-1 py-2.5"><p className="font-semibold">{c.displayName}</p><p className="font-mono text-xs text-muted-foreground">{raLabel(c.raId)}</p></td>
                       <td className="px-1 py-2.5"><StatusBadge status={ent.status} />{ent.reason === 'quota' && <span className="mt-0.5 block text-[11px] text-amber-700">Quota reached</span>}</td>
                       <td className="px-1 py-2.5">{plan ? plan.name : <span className="text-muted-foreground">—</span>}</td>
-                      <td className="px-1 py-2.5 text-xs">{ent.sessionQuota ? `${ent.sessionsUsed} / ${ent.sessionQuota}` : ent.subscribed ? `${ent.sessionsUsed} · unlimited` : '—'}</td>
+                      <td className="px-1 py-2.5 text-xs"><UsageCell ent={ent} /></td>
                       <td className="px-1 py-2.5 text-xs text-muted-foreground">{dateFmt(ent.currentPeriodEnd)}</td>
                       <td className="px-1 py-2.5 text-xs">{c.nextDue ? <span className={c.nextDue.status === 'overdue' ? 'font-semibold text-destructive' : 'text-muted-foreground'}>{inr(c.nextDue.amountInr)} · {dateFmt(c.nextDue.dueDate)}</span> : <span className="text-muted-foreground">—</span>}</td>
                       <td className="px-1 py-2.5 text-right">
@@ -215,6 +219,7 @@ export function SubscriptionsPanel({ onError }: { onError: (msg: string | null) 
                           <MenuContent align="end">
                             <MenuItem onSelect={() => setSubEdit(c)} data-testid={`button-configure-sub-${c.username}`}>Configure subscription</MenuItem>
                             <MenuItem onSelect={() => setClientFor(c)} data-testid={`button-configure-client-${c.username}`}>Configure client…</MenuItem>
+                            {c.subscription && (plan?.sessionQuota ?? 0) > 0 && <MenuItem onSelect={() => setGraceFor(c)} data-testid={`button-grace-${c.username}`}>Grace extension…</MenuItem>}
                             {c.subscription && <MenuItem onSelect={() => void run(() => api(`/subscriptions/${c.id}/renew`, { method: 'POST', body: JSON.stringify({ markPaid: false }) }), 'Could not renew.')}>Renew one period (create due)</MenuItem>}
                             {c.subscription && <>
                               <MenuSep />
@@ -231,12 +236,109 @@ export function SubscriptionsPanel({ onError }: { onError: (msg: string | null) 
           </div>
         )}
         <p className="mt-3 text-xs text-muted-foreground">A company with no subscription is not restricted. Once you assign a plan, its PCs only work while the subscription is active and within quota — the relay enforces this at registration.</p>
+        <p className="mt-1 text-xs text-muted-foreground">Usage counts each remote access URL the company authorizes with its Access PIN, plus each session started while another of its sessions is already live. At the quota the company gets no new Access PIN and cannot start sessions until you renew or add a grace extension.</p>
       </Card>
 
       <PlanDialog edit={planEdit} onClose={() => setPlanEdit(null)} onSaved={reload} onError={onError} />
       <SubscriptionDialog company={subEdit} plans={activePlans} onClose={() => setSubEdit(null)} onSaved={reload} onError={onError} />
       <ClientConfigDialog company={clientFor} onClose={() => setClientFor(null)} />
+      <GraceDialog company={graceFor} onClose={() => setGraceFor(null)} onSaved={reload} onError={onError} />
     </div>
+  );
+}
+
+// Used / quota with a bar, and what the usage is made of.
+function UsageCell({ ent }: { ent: Entitlement }) {
+  if (!ent.subscribed) return <span className="text-muted-foreground">—</span>;
+  if (!ent.sessionQuota) return <span>{ent.sessionsUsed} · unlimited</span>;
+  const pct = Math.min(100, (ent.sessionsUsed / ent.sessionQuota) * 100);
+  const tone = pct >= 100 ? 'bg-destructive' : pct >= 80 ? 'bg-amber-500' : 'bg-emerald-500';
+  return (
+    <div className="min-w-[110px]" title={`${ent.urlsUsed ?? 0} URL(s) authorized · ${ent.extraSessionsUsed ?? 0} extra session(s)`}>
+      <p><span className="font-semibold">{ent.sessionsUsed} / {ent.sessionQuota}</span>
+        {(ent.graceSessions ?? 0) > 0 && <span className="ml-1 rounded-full bg-primary/12 px-1.5 py-0.5 text-[10px] font-semibold text-primary">+{ent.graceSessions} grace</span>}</p>
+      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-foreground/10"><div className={`h-full rounded-full ${tone}`} style={{ width: `${pct}%` }} /></div>
+      <p className="mt-0.5 text-[11px] text-muted-foreground">{ent.urlsUsed ?? 0} URLs · {ent.extraSessionsUsed ?? 0} extra sessions</p>
+    </div>
+  );
+}
+
+// --- Grace extension: extra usage for this period, with remarks ---
+function GraceDialog({ company, onClose, onSaved, onError }: { company: Company | null; onClose: () => void; onSaved: () => void; onError: (m: string | null) => void }) {
+  const [amount, setAmount] = useState('10');
+  const [remarks, setRemarks] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  useEffect(() => { if (company) { setAmount('10'); setRemarks(''); setProblem(null); } }, [company]);
+  const ent = company?.entitlement;
+  const log = company?.subscription?.graceLog ?? [];
+  const n = Math.trunc(Number(amount));
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!company) return;
+    setBusy(true);
+    setProblem(null);
+    onError(null);
+    try {
+      await api(`/subscriptions/${company.id}/grace`, { method: 'POST', body: JSON.stringify({ amount: n, remarks }) });
+      onSaved();
+      onClose();
+    } catch (err) { setProblem(errorText(err, 'Could not add the grace extension.')); } finally { setBusy(false); }
+  }
+  return (
+    <Dialog open={!!company} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Grace extension for {company?.displayName}</DialogTitle>
+          <DialogDescription>
+            Extra usage on top of the plan for the current period, until {dateFmt(ent?.currentPeriodEnd)}. It ends when the period renews.
+          </DialogDescription>
+        </DialogHeader>
+        {ent && (
+          <p className="rounded-xl bg-muted/60 px-3 py-2 text-sm">
+            Used <b>{ent.sessionsUsed}</b> of <b>{ent.sessionQuota}</b>{(ent.graceSessions ?? 0) > 0 ? ` (plan ${ent.planQuota} + ${ent.graceSessions} grace)` : ''}.
+            {n > 0 && <> After this: <b>{ent.sessionQuota + n}</b>.</>}
+          </p>
+        )}
+        <form id="grace-form" onSubmit={submit} className="space-y-3">
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground">Extra sessions</p>
+            <div className="mt-1 flex flex-wrap gap-2">
+              {[5, 10, 20, 50].map((v) => (
+                <button key={v} type="button" onClick={() => setAmount(String(v))} aria-pressed={n === v}
+                  className={`rounded-xl border px-3 py-1.5 text-sm font-bold ${n === v ? 'border-primary bg-primary/10 text-primary' : 'hover:bg-muted'}`}>+{v}</button>
+              ))}
+              <input type="number" min={1} max={100000} value={amount} onChange={(e) => setAmount(e.target.value)} aria-label="Extra sessions"
+                className="w-24 rounded-xl border bg-background px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/40" data-testid="input-grace-amount" />
+            </div>
+          </div>
+          <label className="block text-xs font-semibold text-muted-foreground">Remarks <span className="font-normal">(required, kept with the extension)</span>
+            <textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} rows={3} maxLength={500} required data-testid="input-grace-remarks"
+              placeholder="e.g. Renewal payment promised by 30 Nov"
+              className="mt-1 w-full rounded-xl border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40" />
+          </label>
+          {problem && <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{problem}</p>}
+        </form>
+        {log.length > 0 && (
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground">Earlier extensions</p>
+            <ul className="mt-1 max-h-36 divide-y divide-foreground/8 overflow-y-auto text-xs">
+              {log.slice(0, 20).map((g) => (
+                <li key={g.id} className="flex gap-2 py-1.5">
+                  <span className="shrink-0 font-bold text-primary">+{g.amount}</span>
+                  <span className="min-w-0 flex-1">{g.remarks}<span className="block text-muted-foreground">{g.by ? `${g.by} · ` : ''}{dateFmt(g.at)}</span></span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <DialogFooter>
+          <button type="button" onClick={onClose} className="rounded-xl border px-4 py-2 text-sm font-semibold hover:bg-muted">Cancel</button>
+          <button type="submit" form="grace-form" disabled={busy || !(n > 0) || !remarks.trim()} data-testid="button-save-grace"
+            className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground disabled:opacity-40">{busy ? 'Saving…' : `Add +${n > 0 ? n : 0}`}</button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
