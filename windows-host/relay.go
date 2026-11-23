@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/tls"
@@ -15,6 +16,9 @@ import (
 	"strings"
 	"time"
 )
+
+// maxResponse bounds what the PC reads from one relay answer.
+const maxResponse = 1 << 20
 
 var codeFormat = regexp.MustCompile(`^(L[0-9A-F]|S[0-9A-F]{11}|[A-F0-9]{12})$`)
 var linkCodeFormat = regexp.MustCompile(`^L[0-9A-F]{11}$`)
@@ -43,6 +47,14 @@ type tick struct {
 	// Patches says the relay accepts changed regions; Key asks for a
 	// keyframe. Older relays send neither.
 	Patches, Key bool
+	// Pipeline says the relay puts numbered ticks (X-Msfwr-Seq) back in
+	// order, so several may be in flight. Stream says /events can stream.
+	Pipeline, Stream bool
+	// Quality is the picture quality the viewer asked for: sharp, balanced
+	// or fast. Empty when none was asked for.
+	Quality string
+	// End closes one streamed response of /events; the next one opens.
+	End bool
 }
 
 type event struct {
@@ -86,11 +98,92 @@ func (r *relay) post(ctx context.Context, path string, jpeg []byte, response any
 // tick sends a heartbeat with packed screen updates (see packUpdates), if
 // any. With events set, the relay leaves input for the events channel.
 func (r *relay) tick(ctx context.Context, updates []byte, events bool, response *tick) error {
-	var extra map[string]string
+	return r.tickSeq(ctx, updates, "application/x-msfwr-frames", events, 0, response)
+}
+
+// tickSeq sends a tick numbered seq (from 1; 0 sends none), so a relay that
+// supports it applies ticks in order even with several in flight.
+func (r *relay) tickSeq(ctx context.Context, body []byte, contentType string, events bool, seq uint64, response *tick) error {
+	extra := map[string]string{}
 	if events {
-		extra = map[string]string{"X-Msfwr-Events": "1"}
+		extra["X-Msfwr-Events"] = "1"
 	}
-	return r.sendWith(ctx, "tick", updates, "application/x-msfwr-frames", extra, r.client, response)
+	if seq > 0 {
+		extra["X-Msfwr-Seq"] = fmt.Sprint(seq)
+	}
+	client := r.client
+	if len(body) > 256*1024 {
+		// Big keyframes on a slow uplink need longer than a heartbeat.
+		c := *r.client
+		c.Timeout = 20 * time.Second
+		client = &c
+	}
+	return r.sendWith(ctx, "tick", body, contentType, extra, client, response)
+}
+
+// errNoStream says the relay (or a proxy in front of it) cannot stream.
+var errNoStream = errors.New("relay cannot stream input")
+
+// eventStream reads remote input as the relay streams it: one JSON line per
+// batch, the moment the viewer sends it. It calls fn for each line and
+// returns nil when the relay closes this response (the caller opens the
+// next one), or errNoStream when the relay answers without streaming or
+// nothing arrives in time (a buffering proxy).
+func (r *relay) eventStream(ctx context.Context, fn func(tick) error) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	client := *r.client
+	client.Timeout = 0 // the watchdog below bounds the wait instead
+	req, err := http.NewRequestWithContext(ctx, "GET", r.base+"events?stream=1", nil)
+	if err != nil {
+		return err
+	}
+	if r.token != "" {
+		req.Header.Set("Authorization", "Bearer "+r.token)
+	}
+	got := false
+	watchdog := time.AfterFunc(6*time.Second, cancel)
+	defer watchdog.Stop()
+	res, err := client.Do(req)
+	if err != nil {
+		if ctx.Err() != nil && !got && errors.Is(err, context.Canceled) {
+			return errNoStream
+		}
+		return err
+	}
+	defer res.Body.Close()
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		return &statusError{status: res.StatusCode, text: fmt.Sprintf("relay rejected events (HTTP %d)", res.StatusCode)}
+	}
+	if res.Header.Get("X-Msfwr-Stream") != "1" {
+		io.Copy(io.Discard, io.LimitReader(res.Body, 1<<20))
+		return errNoStream
+	}
+	lines := bufio.NewReaderSize(res.Body, 64*1024)
+	for {
+		line, err := lines.ReadSlice('\n')
+		if err != nil {
+			if !got {
+				return errNoStream
+			}
+			if errors.Is(err, bufio.ErrBufferFull) {
+				return errors.New("relay response exceeded limit")
+			}
+			return err
+		}
+		got = true
+		watchdog.Reset(8 * time.Second)
+		var t tick
+		if err := json.Unmarshal(line, &t); err != nil {
+			return err
+		}
+		if err := fn(t); err != nil {
+			return err
+		}
+		if t.End {
+			return nil
+		}
+	}
 }
 
 // events waits up to wait for remote input. Relays without the input
@@ -126,15 +219,15 @@ func (r *relay) get(ctx context.Context, path string, response any) error {
 		return err
 	}
 	defer res.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(res.Body, 65537))
+	body, err := io.ReadAll(io.LimitReader(res.Body, maxResponse+1))
 	if err != nil {
 		return err
 	}
-	if len(body) > 65536 {
-		return errors.New("relay response exceeded limit")
-	}
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		return &statusError{status: res.StatusCode, text: fmt.Sprintf("relay rejected %s (HTTP %d)", path, res.StatusCode)}
+	}
+	if len(body) > maxResponse {
+		return errors.New("relay response exceeded limit")
 	}
 	if response != nil {
 		return json.Unmarshal(body, response)
@@ -244,11 +337,13 @@ func (r *relay) do(client *http.Client, req *http.Request, path string, response
 		return err
 	}
 	defer res.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(res.Body, 65537))
+	body, err := io.ReadAll(io.LimitReader(res.Body, maxResponse+1))
 	if err != nil {
 		return err
 	}
-	if len(body) > 65536 {
+	// The status comes first: a proxy's error page can be large, and the
+	// HTTP status says more than its size.
+	if len(body) > maxResponse && res.StatusCode >= 200 && res.StatusCode < 300 {
 		return errors.New("relay response exceeded limit")
 	}
 	if res.StatusCode < 200 || res.StatusCode >= 300 {

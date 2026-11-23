@@ -74952,7 +74952,7 @@ function stream2(req, res, s, role, type, handlers) {
 router2.post(
   "/tick",
   (0, import_express2.raw)({ type: "image/jpeg", limit: "768kb", inflate: false }),
-  (0, import_express2.raw)({ type: "application/x-msfwr-frames", limit: "1536kb", inflate: false }),
+  (0, import_express2.raw)({ type: "application/x-msfwr-frames", limit: "4mb", inflate: false }),
   (req, res) => {
     const s = auth(req, res, "host");
     if (!s) return;

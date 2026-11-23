@@ -94,9 +94,11 @@ func run(parent context.Context, r *relay, lines <-chan string, updates chan<- s
 
 // stream shares the screen and applies remote input until the session ends.
 // Screen updates and input travel separately: the screen loop uploads only
-// the regions that changed, as fast as the link allows, while input arrives
-// on its own long-polling channel (on relays that offer it) and is applied
-// the moment it lands.
+// the regions that changed, as fast as the link allows (two uploads in
+// flight on relays that put them back in order), while input arrives on its
+// own channel (streamed where the relay can) and is applied the moment it
+// lands. A dropped request is retried for a while instead of ending the
+// session.
 func stream(ctx context.Context, r *relay) error {
 	ctx, cancel := context.WithCancel(ctx)
 	input := newControls()
@@ -108,8 +110,10 @@ func stream(ctx context.Context, r *relay) error {
 		input.release()
 		inputMu.Unlock()
 	}()
+	pace := newPacer()
 	screen := newCapturer()
 	defer screen.close()
+	screen.limit(pace.prof.maxW, pace.prof.maxH)
 	frame, w, h, rects, err := screen.grab()
 	if err != nil {
 		return err
@@ -129,39 +133,72 @@ func stream(ctx context.Context, r *relay) error {
 		return nil
 	}
 
-	// The input channel. A relay without /events answers 404; input then
-	// comes with each tick, as before.
+	// The input channel: streamed where the relay can, long-polled where
+	// it cannot. A relay without /events answers 404; input then comes with
+	// each tick, as before.
 	var eventsOn atomic.Bool
 	inputDone := make(chan error, 1)
 	go func() {
-		var reply tick
-		if err := r.events(ctx, 0, &reply); err != nil {
-			var status *statusError
-			if errors.As(err, &status) && status.status == 404 {
-				inputDone <- nil
-				return
-			}
+		stop := func(err error) {
 			inputDone <- err
 			cancel()
-			return
 		}
-		eventsOn.Store(true)
-		for {
+		onReply := func(reply tick) error {
 			if reply.State != "live" {
-				inputDone <- errors.New("relay ended the approved session")
-				cancel()
+				return errors.New("relay ended the approved session")
+			}
+			eventsOn.Store(true)
+			return apply(reply.Input)
+		}
+		streaming := true
+		var failingSince time.Time
+		for ctx.Err() == nil {
+			var err error
+			if streaming {
+				err = r.eventStream(ctx, onReply)
+				if errors.Is(err, errNoStream) {
+					streaming = false
+					continue
+				}
+			} else {
+				var reply tick
+				wait := 4 * time.Second
+				if !eventsOn.Load() {
+					wait = 0
+				}
+				if err = r.events(ctx, wait, &reply); err == nil {
+					err = onReply(reply)
+				}
+			}
+			if err == nil {
+				failingSince = time.Time{}
+				continue
+			}
+			var status *statusError
+			switch {
+			case ctx.Err() != nil:
+				return
+			case errors.As(err, &status) && status.status == 404 && !eventsOn.Load():
+				inputDone <- nil // an older relay: input comes with ticks
+				return
+			case errors.Is(err, context.Canceled), err.Error() == "relay ended the approved session":
+				stop(err)
+				return
+			case errors.As(err, &status) && status.status != 429 && status.status < 500:
+				stop(err)
 				return
 			}
-			if err := apply(reply.Input); err != nil {
-				inputDone <- err
-				cancel()
+			// A network hiccup: try again for a while.
+			if failingSince.IsZero() {
+				failingSince = time.Now()
+			} else if time.Since(failingSince) > retryFor {
+				stop(err)
 				return
 			}
-			reply = tick{}
-			if err := r.events(ctx, 4*time.Second, &reply); err != nil {
-				inputDone <- err
-				cancel()
+			select {
+			case <-ctx.Done():
 				return
+			case <-time.After(300 * time.Millisecond):
 			}
 		}
 	}()
@@ -177,13 +214,70 @@ func stream(ctx context.Context, r *relay) error {
 		return err
 	}
 
-	pace := newPacer()
+	type result struct {
+		reply tick
+		err   error
+		sent  int
+		took  time.Duration
+	}
+	results := make(chan result, 4)
+	inFlight := 0
+	var seq uint64
 	deadline := time.Now().Add(30 * time.Minute)
-	patches := false // the relay accepts patches (learned from its replies)
-	needKey := true  // the next update must be a keyframe
-	refine := false  // patches were sent since the last keyframe
+	patches := false  // the relay accepts patches (learned from its replies)
+	pipeline := false // the relay orders numbered ticks
+	needKey := true   // the next update must be a keyframe
+	refine := false   // patches were sent since the last keyframe
 	var keyBytes, sinceKey int
-	var lastChange, lastTick time.Time
+	var lastChange, lastTick, failingSince time.Time
+	// handle takes the answer to one upload.
+	handle := func(res result) error {
+		inFlight--
+		if res.err != nil {
+			var status *statusError
+			if errors.As(res.err, &status) && status.status != 429 && status.status < 500 && status.status != 413 {
+				return res.err
+			}
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			// A network hiccup: the upload is lost, so the viewer needs a
+			// whole new screen. Keep going for a while before giving up.
+			needKey = true
+			if failingSince.IsZero() {
+				failingSince = time.Now()
+			} else if time.Since(failingSince) > retryFor {
+				return res.err
+			}
+			pace.observe(1, slowRTT*2)
+			return nil
+		}
+		failingSince = time.Time{}
+		pace.observe(res.sent, res.took)
+		reply := res.reply
+		if reply.State != "live" {
+			return errors.New("relay ended the approved session")
+		}
+		// A relay that does not know patches never says so; it is sent
+		// keyframes only.
+		if reply.Patches {
+			patches = true
+		}
+		if reply.Pipeline {
+			pipeline = true
+		}
+		if reply.Key {
+			needKey = true
+		}
+		if reply.Quality != "" && pace.setProfile(reply.Quality) {
+			screen.limit(pace.prof.maxW, pace.prof.maxH)
+			needKey = true
+		}
+		if len(reply.Input) > 0 {
+			return apply(reply.Input)
+		}
+		return nil
+	}
 	for {
 		if ctx.Err() != nil {
 			return fail(ctx.Err())
@@ -198,95 +292,113 @@ func stream(ctx context.Context, r *relay) error {
 		if rects != nil {
 			lastChange = started
 		}
-		// Decide what to send: a keyframe when one is due, the changed
-		// regions otherwise, or nothing.
-		var list []update
-		key := needKey || !patches || (rects != nil && totalArea(rects, frame.Rect.Dx(), frame.Rect.Dy()) > keyArea) ||
-			(rects != nil && keyBytes > 0 && sinceKey > 2*keyBytes)
-		quality := pace.quality()
-		if rects == nil && !needKey {
-			key = false
-			// Once the screen settles, replace the patches with a sharper
-			// keyframe so their edges and low-quality blocks clear.
-			if refine && patches && started.Sub(lastChange) > 1200*time.Millisecond {
-				key, quality = true, pace.refineQuality()
-			}
-		}
-		if key {
-			data, err := encodeJPEG(frame, quality)
-			if err != nil {
-				return err
-			}
-			list = []update{{key: true, jpeg: data}}
-		} else if rects != nil {
-			for _, rc := range rects {
-				data, err := encodeJPEG(frame.SubImage(rc), quality)
-				if err != nil {
-					return err
+		// Take the answers that came in.
+	drain:
+		for {
+			select {
+			case res := <-results:
+				if err := handle(res); err != nil {
+					return fail(err)
 				}
-				list = append(list, update{x: rc.Min.X, y: rc.Min.Y, jpeg: data})
+			default:
+				break drain
 			}
 		}
 		heartbeat := 200 * time.Millisecond
 		if eventsOn.Load() {
 			heartbeat = time.Second
 		}
-		if len(list) > 0 || time.Since(lastTick) >= heartbeat {
-			var reply tick
-			sent := 0
-			t0 := time.Now()
+		// Once the screen settles, replace the patches with a sharper
+		// keyframe so their edges and low-quality blocks clear.
+		settle := rects == nil && refine && patches && started.Sub(lastChange) > 800*time.Millisecond
+		if rects != nil || needKey || settle || time.Since(lastTick) >= heartbeat {
+			// Wait for a free upload slot, taking answers meanwhile.
+			limit := 1
+			if pipeline {
+				limit = 2
+			}
+			for inFlight >= limit {
+				select {
+				case <-ctx.Done():
+					return fail(ctx.Err())
+				case res := <-results:
+					if err := handle(res); err != nil {
+						return fail(err)
+					}
+				}
+			}
+			// Decide what to send: a keyframe when one is due, the changed
+			// regions otherwise, or nothing (a heartbeat).
+			size := 3 << 20 // what the relay takes in one upload
+			if !pipeline {
+				size = 1400 << 10 // relays before pipelining take 1.5 MB
+			}
+			if !patches {
+				size = 700 << 10 // older relays take a bare JPEG up to 768 KB
+			}
+			quality, subsample := pace.quality(), pace.prof.subsample
+			key := needKey || !patches || (rects != nil && totalArea(rects, frame.Rect.Dx(), frame.Rect.Dy()) > keyArea) ||
+				(rects != nil && keyBytes > 0 && sinceKey > 2*keyBytes)
+			if rects == nil && !needKey {
+				key = settle
+				if settle {
+					quality = pace.refineQuality()
+				}
+			}
+			var list []update
+			if key {
+				data, err := encodeJPEG(frame, quality, subsample, size)
+				if err != nil {
+					return err
+				}
+				list = []update{{key: true, jpeg: data}}
+			} else if rects != nil {
+				for _, rc := range rects {
+					data, err := encodeJPEG(frame.SubImage(rc), quality, subsample, size)
+					if err != nil {
+						return err
+					}
+					list = append(list, update{x: rc.Min.X, y: rc.Min.Y, jpeg: data})
+				}
+			}
+			var body []byte
+			contentType := "application/x-msfwr-frames"
 			switch {
 			case len(list) == 0:
-				err = r.tick(ctx, nil, eventsOn.Load(), &reply)
 			case patches:
-				body := packUpdates(list)
-				if !list[0].key && len(body) > 1400*1024 {
+				body = packUpdates(list)
+				if !list[0].key && len(body) > size {
 					// Too many changes for one upload: send the whole screen.
-					data, err := encodeJPEG(frame, quality)
+					data, err := encodeJPEG(frame, quality, subsample, size)
 					if err != nil {
 						return err
 					}
 					list = []update{{key: true, jpeg: data}}
 					body = packUpdates(list)
 				}
-				sent = len(body)
-				err = r.tick(ctx, body, eventsOn.Load(), &reply)
 			default:
 				// A relay without patches takes a bare JPEG keyframe.
-				sent = len(list[0].jpeg)
-				err = r.post(ctx, "tick", list[0].jpeg, &reply)
-			}
-			if err != nil {
-				return fail(err)
-			}
-			lastTick = time.Now()
-			pace.observe(sent, lastTick.Sub(t0))
-			if reply.State != "live" {
-				return errors.New("relay ended the approved session")
+				body, contentType = list[0].jpeg, "image/jpeg"
 			}
 			if len(list) > 0 {
 				if list[0].key {
-					keyBytes, sinceKey = sent, 0
+					keyBytes, sinceKey = len(body), 0
 					refine = false
 				} else {
-					sinceKey += sent
+					sinceKey += len(body)
 					refine = true
 				}
 				needKey = false
 			}
-			// A relay that does not know patches never says so; it is
-			// sent keyframes only.
-			if reply.Patches {
-				patches = true
-			}
-			if reply.Key {
-				needKey = true
-			}
-			if len(reply.Input) > 0 {
-				if err := apply(reply.Input); err != nil {
-					return err
-				}
-			}
+			seq++
+			inFlight++
+			lastTick = time.Now()
+			go func(body []byte, contentType string, seq uint64) {
+				var reply tick
+				t0 := time.Now()
+				err := r.tickSeq(ctx, body, contentType, eventsOn.Load(), seq, &reply)
+				results <- result{reply: reply, err: err, sent: len(body), took: time.Since(t0)}
+			}(body, contentType, seq)
 		}
 		if ctx.Err() != nil {
 			return fail(ctx.Err())
@@ -299,7 +411,7 @@ func stream(ctx context.Context, r *relay) error {
 		if !patches && gap < 100*time.Millisecond {
 			gap = 100 * time.Millisecond
 		}
-		if len(list) == 0 {
+		if rects == nil {
 			// Nothing changed: look again soon, so a change shows quickly.
 			gap = minGap
 		}
@@ -309,6 +421,19 @@ func stream(ctx context.Context, r *relay) error {
 			case <-ctx.Done():
 				t.Stop()
 				return fail(ctx.Err())
+			case res := <-results:
+				t.Stop()
+				if err := handle(res); err != nil {
+					return fail(err)
+				}
+				// Wait out the rest of the gap.
+				if rest := gap - time.Since(started); rest > 0 {
+					select {
+					case <-ctx.Done():
+						return fail(ctx.Err())
+					case <-time.After(rest):
+					}
+				}
 			case <-t.C:
 			}
 		}
@@ -318,6 +443,10 @@ func stream(ctx context.Context, r *relay) error {
 		}
 	}
 }
+
+// retryFor is how long the PC keeps trying through network hiccups before
+// it ends the session.
+const retryFor = 12 * time.Second
 
 type unattendedUpdate struct {
 	state, text string // state is ready, calling, connected, offline or locked

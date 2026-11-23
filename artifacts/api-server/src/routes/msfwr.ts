@@ -337,7 +337,7 @@ function stream(req: Request, res: Response, s: Session, role: "host" | "viewer"
 // "patches" says this relay accepts changed regions; "key" asks for a keyframe.
 router.post("/tick",
   raw({type: "image/jpeg", limit: "768kb", inflate: false}),
-  raw({type: "application/x-msfwr-frames", limit: "1536kb", inflate: false}),
+  raw({type: "application/x-msfwr-frames", limit: "4mb", inflate: false}),
   (req, res) => {
     const s = auth(req, res, "host");
     if (!s) return;

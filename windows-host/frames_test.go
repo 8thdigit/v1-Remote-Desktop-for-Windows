@@ -76,11 +76,44 @@ func TestPacerAdaptsToUploadSpeed(t *testing.T) {
 	if p.quality() <= start || p.gap != minGap {
 		t.Fatalf("fast uploads: quality %d gap %v", p.quality(), p.gap)
 	}
-	if p.refineQuality() > 85 {
-		t.Fatal("refine quality above 85")
+	if p.refineQuality() > 94 || p.refineQuality() < p.quality() {
+		t.Fatalf("refine quality %d", p.refineQuality())
 	}
 	p.observe(0, time.Second) // heartbeats do not count
 	if p.gap != minGap {
 		t.Fatal("an empty tick changed the pace")
+	}
+}
+
+func TestProfilesSetResolutionAndQuality(t *testing.T) {
+	p := newPacer()
+	if p.prof.name != defaultProfile {
+		t.Fatalf("default profile %q", p.prof.name)
+	}
+	if w, h := fitted(1920, 1080, p.prof.maxW, p.prof.maxH); w != 1920 || h != 1080 {
+		t.Fatalf("a 1080p screen is not sent at native size: %dx%d", w, h)
+	}
+	if !p.setProfile("sharp") || p.setProfile("sharp") {
+		t.Fatal("setProfile should report a change once")
+	}
+	if w, h := fitted(2560, 1440, p.prof.maxW, p.prof.maxH); w != 2560 || h != 1440 {
+		t.Fatalf("sharp scaled a 1440p screen to %dx%d", w, h)
+	}
+	p.setProfile("fast")
+	if w, h := fitted(1920, 1080, p.prof.maxW, p.prof.maxH); w != 1280 || h != 720 {
+		t.Fatalf("fast sent %dx%d", w, h)
+	}
+	if !p.prof.subsample || profileFor("balanced").subsample {
+		t.Fatal("only fast subsamples colour")
+	}
+	if profileFor("nonsense").name != defaultProfile {
+		t.Fatal("unknown names fall back to the default")
+	}
+	// A big keyframe on a good link does not count as slow.
+	q := newPacer()
+	before := q.quality()
+	q.observe(1<<20, 900*time.Millisecond)
+	if q.quality() != before {
+		t.Fatal("a 1 MB keyframe in 0.9 s lowered quality")
 	}
 }

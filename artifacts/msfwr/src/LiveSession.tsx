@@ -478,13 +478,27 @@ export default function LiveSession({ token, verification, preapproved = false, 
           <p className="mt-4 text-sm text-muted-foreground">No screen or remote control is available until they approve.</p>
         </section>
       ) : (
-        <section className="mx-auto max-w-7xl px-4 py-5 md:px-8">
+        <section className="mx-auto max-w-screen-2xl px-4 py-5 md:px-8">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h1 className="text-2xl font-bold">Remote desktop</h1>
               <p className="text-sm text-muted-foreground">{control ? 'Press Esc to release control in this browser.' : 'You are viewing without sending input.'}</p>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <div role="group" aria-label="Picture quality" className="inline-flex overflow-hidden rounded-lg border border-foreground/25 text-sm font-semibold">
+                {(['sharp', 'balanced', 'fast'] as Quality[]).map((q) => (
+                  <button key={q} type="button" aria-pressed={quality === q} onClick={() => chooseQuality(q)} data-testid={`button-quality-${q}`}
+                    title={q === 'sharp' ? 'Full resolution, best for reading text' : q === 'fast' ? 'Lower resolution for slow connections' : 'Up to 1920 pixels wide'}
+                    className={`px-3 py-2 ${quality === q ? 'bg-foreground text-background' : 'hover:bg-foreground/10'}`}>
+                    {qualityLabels[q]}
+                  </button>
+                ))}
+              </div>
+              <button type="button" disabled={!frame} aria-pressed={actual} onClick={() => setActual((a) => !a)} data-testid="button-actual-size"
+                title={actual ? 'Fit the screen to the window' : 'Show the screen pixel for pixel'}
+                className="inline-flex items-center gap-2 rounded-lg border border-foreground/25 px-4 py-2 text-sm font-semibold hover:bg-foreground/10 disabled:opacity-50">
+                {actual ? 'Fit' : '100%'}
+              </button>
               <button type="button" disabled={!frame} onClick={() => void toggleFull()} data-testid="button-fullscreen"
                 className="inline-flex items-center gap-2 rounded-lg border border-foreground/25 px-4 py-2 text-sm font-semibold hover:bg-foreground/10 disabled:opacity-50">
                 <Maximize2 size={16} /> Full screen
@@ -497,8 +511,8 @@ export default function LiveSession({ token, verification, preapproved = false, 
           <div className={buddy ? 'grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]' : undefined}>
           <div ref={stage}
             className={full
-              ? 'fixed inset-0 z-50 flex items-center justify-center bg-black text-background'
-              : 'flex min-h-52 items-center justify-center rounded-xl bg-foreground p-2 text-background'}>
+              ? `fixed inset-0 z-50 flex bg-black text-background ${actual ? 'overflow-auto' : 'items-center justify-center'}`
+              : `flex min-h-52 rounded-xl bg-foreground p-2 text-background ${actual ? 'max-h-[80dvh] overflow-auto' : 'items-center justify-center'}`}>
             {full && (
               <div className="absolute right-3 top-3 z-10 flex gap-2 opacity-70 transition-opacity hover:opacity-100">
                 <button type="button" aria-pressed={control} onClick={toggle} data-testid="button-fullscreen-input"
@@ -518,7 +532,10 @@ export default function LiveSession({ token, verification, preapproved = false, 
                 aria-label="Live view of the host's primary Windows screen"
                 tabIndex={0}
                 draggable={false}
-                className={`block ${full ? 'max-h-[100dvh] max-w-[100vw] object-contain' : 'max-h-[72dvh] max-w-full rounded-sm outline-offset-4'} ${control ? 'touch-none cursor-default' : ''}`}
+                // 100%: one screen pixel per device pixel, so text is as
+                // crisp as on the PC. Fit: scaled into the window.
+                style={actual && size ? { width: size.w / (window.devicePixelRatio || 1), height: size.h / (window.devicePixelRatio || 1), maxWidth: 'none', flex: 'none' } : undefined}
+                className={`block ${actual ? 'm-auto' : full ? 'h-[100dvh] w-[100vw] object-contain' : 'max-h-[78dvh] max-w-full rounded-sm outline-offset-4'} ${control ? 'touch-none cursor-default' : ''}`}
                 onBlur={() => { release(); setControl(false); }}
                 onKeyDown={key}
                 onContextMenu={(e) => { if (control) e.preventDefault(); }}
@@ -531,7 +548,7 @@ export default function LiveSession({ token, verification, preapproved = false, 
                   void dispatch({ kind: 'down', button: e.button, ...position(e) });
                 }}
                 onPointerMove={(e) => {
-                  if (!control || Date.now() - lastMove.current < 30) return;
+                  if (!control || Date.now() - lastMove.current < 16) return;
                   lastMove.current = Date.now();
                   void dispatch({ kind: 'move', ...position(e) });
                 }}
@@ -558,7 +575,10 @@ export default function LiveSession({ token, verification, preapproved = false, 
           </div>
           {buddy && <BuddyPanel token={token} frame={snapshot} config={buddy} />}
           </div>
-          <p className="mt-3 text-sm text-muted-foreground">Primary display only. At the Windows PC, press Ctrl+2 or F12 to stop sharing.</p>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Primary display only. At the Windows PC, press Ctrl+2 or F12 to stop sharing.
+            {frame && size && <span className="ml-2 font-mono text-xs" data-testid="text-stream-stats">{size.w}×{size.h} · {fps} updates/s</span>}
+          </p>
         </section>
       )}
     </main>

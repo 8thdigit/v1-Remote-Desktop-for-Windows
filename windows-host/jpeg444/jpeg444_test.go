@@ -93,7 +93,6 @@ func TestSubImage(t *testing.T) {
 	}
 }
 
-
 func BenchmarkScreen1080(b *testing.B) {
 	m := screenLike(1920, 1080)
 	for i := 0; i < b.N; i++ {
