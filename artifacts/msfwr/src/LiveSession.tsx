@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type WheelEvent } from 'react';
-import { ArrowLeft, Laptop, Maximize2, Minimize2, MousePointer2, ShieldCheck } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent, type WheelEvent } from 'react';
+import { ArrowLeft, ChevronDown, ChevronUp, Laptop, Maximize2, Minimize2, MousePointer2, ShieldCheck } from 'lucide-react';
 import { LogoMark, Wordmark } from '@/components/logo';
 import { BuddyPanel, useBuddyConfig } from '@/components/buddy-panel';
 import { endMsfwr, getGetMsfwrFrameUrl, getSendMsfwrInputUrl, sendMsfwrInput, type MsfwrInput } from '@workspace/api-client-react';
@@ -131,15 +131,25 @@ export default function LiveSession({ token, verification, preapproved = false, 
       if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
     };
   }, []);
+  // Remote input stays on across full-screen changes: the screen gets the
+  // keyboard back afterwards so typing keeps reaching the PC.
+  const controlRef = useRef(false);
+  function refocus() {
+    if (controlRef.current) requestAnimationFrame(() => surface.current?.focus({ preventScroll: true }));
+  }
   async function toggleFull() {
-    if (document.fullscreenElement) { await document.exitFullscreen().catch(() => {}); return; }
-    if (full) { setFull(false); return; }
+    if (document.fullscreenElement) { await document.exitFullscreen().catch(() => {}); refocus(); return; }
+    if (full) { setFull(false); refocus(); return; }
     const el = stage.current;
     if (el?.requestFullscreen) {
-      try { await el.requestFullscreen({ navigationUI: 'hide' }); return; } catch { /* fall back below */ }
+      try { await el.requestFullscreen({ navigationUI: 'hide' }); refocus(); return; } catch { /* fall back below */ }
     }
     setFull(true);
+    refocus();
   }
+  // The control bar can hide in full screen to show the whole picture.
+  const [barHidden, setBarHidden] = useState(false);
+  useEffect(() => { if (!full) setBarHidden(false); }, [full]);
   const lastMove = useRef(0);
   const lastWheel = useRef(0);
   const pressed = useRef<number | null>(null);
@@ -445,10 +455,55 @@ export default function LiveSession({ token, verification, preapproved = false, 
     e.preventDefault();
     void dispatch({ kind: 'key', key: e.key, ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey });
   }
+  controlRef.current = control;
   function toggle() {
     if (control) { release(); setControl(false); }
-    else { setControl(true); surface.current?.focus(); }
+    else { setControl(true); surface.current?.focus({ preventScroll: true }); }
   }
+
+  // Toolbar clicks keep the keyboard on the remote screen while input is on.
+  const keepFocus = (e: MouseEvent) => { if (control) e.preventDefault(); };
+  const dark = full;
+  const btn = `inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold disabled:opacity-50 ${dark ? 'bg-white/10 text-white hover:bg-white/20' : 'border border-foreground/25 hover:bg-foreground/10'}`;
+  const controlBar = (
+    <div role="toolbar" aria-label="Session controls" onMouseDown={keepFocus} className="flex flex-wrap items-center gap-2" data-testid="control-bar">
+      <button type="button" disabled={!frame} aria-pressed={control} onClick={toggle} data-testid={full ? 'button-fullscreen-input' : 'button-remote-input'}
+        className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold disabled:opacity-50 ${control
+          ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+          : dark ? 'bg-white text-black hover:bg-white/85' : 'bg-foreground text-background hover:bg-foreground/85'}`}>
+        <MousePointer2 size={15} /> {control ? 'Remote input on' : 'Enable remote input'}
+      </button>
+      <div role="group" aria-label="Picture quality" className={`inline-flex overflow-hidden rounded-lg text-sm font-semibold ${dark ? 'bg-white/10' : 'border border-foreground/25'}`}>
+        {(['sharp', 'balanced', 'fast'] as Quality[]).map((q) => (
+          <button key={q} type="button" aria-pressed={quality === q} onClick={() => chooseQuality(q)} data-testid={`button-quality-${q}`}
+            title={q === 'sharp' ? 'Full resolution, best for reading text' : q === 'fast' ? 'Lower resolution for slow connections' : 'Up to 1920 pixels wide'}
+            className={`px-3 py-1.5 ${quality === q ? (dark ? 'bg-white text-black' : 'bg-foreground text-background') : (dark ? 'text-white hover:bg-white/20' : 'hover:bg-foreground/10')}`}>
+            {qualityLabels[q]}
+          </button>
+        ))}
+      </div>
+      <button type="button" disabled={!frame} aria-pressed={actual} onClick={() => setActual((a) => !a)} data-testid="button-actual-size"
+        title={actual ? 'Fit the screen to the window' : 'Show the screen pixel for pixel'} className={btn}>
+        {actual ? 'Fit' : '100%'}
+      </button>
+      <button type="button" disabled={!frame} onClick={() => void toggleFull()} data-testid={full ? 'button-exit-fullscreen' : 'button-fullscreen'} className={btn}>
+        {full ? <><Minimize2 size={15} /> Exit full screen</> : <><Maximize2 size={15} /> Full screen</>}
+      </button>
+      {frame && size && <span className={`font-mono text-xs ${dark ? 'text-white/60' : 'text-muted-foreground'}`} data-testid={full ? undefined : 'text-stream-stats'}>{size.w}×{size.h} · {fps}/s</span>}
+      <div className="ml-auto flex items-center gap-2">
+        {full && (
+          <>
+            <button type="button" onClick={() => finish()} className={btn} data-testid="button-fullscreen-end">
+              <ArrowLeft size={15} /> End session
+            </button>
+            <button type="button" onClick={() => setBarHidden(true)} title="Hide the control bar" aria-label="Hide the control bar" className={btn} data-testid="button-hide-bar">
+              <ChevronUp size={15} />
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <main className="min-h-[100dvh] bg-background text-foreground" data-fullscreen={full || undefined}>
@@ -479,52 +534,27 @@ export default function LiveSession({ token, verification, preapproved = false, 
         </section>
       ) : (
         <section className="mx-auto max-w-screen-2xl px-4 py-5 md:px-8">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h1 className="text-2xl font-bold">Remote desktop</h1>
-              <p className="text-sm text-muted-foreground">{control ? 'Press Esc to release control in this browser.' : 'You are viewing without sending input.'}</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <div role="group" aria-label="Picture quality" className="inline-flex overflow-hidden rounded-lg border border-foreground/25 text-sm font-semibold">
-                {(['sharp', 'balanced', 'fast'] as Quality[]).map((q) => (
-                  <button key={q} type="button" aria-pressed={quality === q} onClick={() => chooseQuality(q)} data-testid={`button-quality-${q}`}
-                    title={q === 'sharp' ? 'Full resolution, best for reading text' : q === 'fast' ? 'Lower resolution for slow connections' : 'Up to 1920 pixels wide'}
-                    className={`px-3 py-2 ${quality === q ? 'bg-foreground text-background' : 'hover:bg-foreground/10'}`}>
-                    {qualityLabels[q]}
-                  </button>
-                ))}
-              </div>
-              <button type="button" disabled={!frame} aria-pressed={actual} onClick={() => setActual((a) => !a)} data-testid="button-actual-size"
-                title={actual ? 'Fit the screen to the window' : 'Show the screen pixel for pixel'}
-                className="inline-flex items-center gap-2 rounded-lg border border-foreground/25 px-4 py-2 text-sm font-semibold hover:bg-foreground/10 disabled:opacity-50">
-                {actual ? 'Fit' : '100%'}
-              </button>
-              <button type="button" disabled={!frame} onClick={() => void toggleFull()} data-testid="button-fullscreen"
-                className="inline-flex items-center gap-2 rounded-lg border border-foreground/25 px-4 py-2 text-sm font-semibold hover:bg-foreground/10 disabled:opacity-50">
-                <Maximize2 size={16} /> Full screen
-              </button>
-              <button type="button" disabled={!frame} aria-pressed={control} onClick={toggle} className="inline-flex items-center gap-2 rounded-lg bg-foreground px-4 py-2 text-sm font-semibold text-background disabled:opacity-50">
-                <MousePointer2 size={16} /> {control ? 'Disable remote input' : 'Enable remote input'}
-              </button>
-            </div>
+          <div className="mb-3">
+            <h1 className="text-2xl font-bold">Remote desktop</h1>
+            <p className="text-sm text-muted-foreground">{control ? 'Remote input is on. Press Esc on the screen to turn it off.' : 'You are viewing without sending input.'}</p>
           </div>
+          {!full && <div className="sticky top-0 z-30 -mx-4 mb-4 px-4 py-2 md:-mx-8 md:px-8 bg-background/95 backdrop-blur border-b border-foreground/10">{controlBar}</div>}
           <div className={buddy ? 'grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]' : undefined}>
-          <div ref={stage}
-            className={full
-              ? `fixed inset-0 z-50 flex bg-black text-background ${actual ? 'overflow-auto' : 'items-center justify-center'}`
-              : `flex min-h-52 rounded-xl bg-foreground p-2 text-background ${actual ? 'max-h-[80dvh] overflow-auto' : 'items-center justify-center'}`}>
-            {full && (
-              <div className="absolute right-3 top-3 z-10 flex gap-2 opacity-70 transition-opacity hover:opacity-100">
-                <button type="button" aria-pressed={control} onClick={toggle} data-testid="button-fullscreen-input"
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur hover:bg-white/25">
-                  <MousePointer2 size={14} /> {control ? 'Input on' : 'Input off'}
-                </button>
-                <button type="button" onClick={() => void toggleFull()} data-testid="button-exit-fullscreen"
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur hover:bg-white/25">
-                  <Minimize2 size={14} /> Exit full screen
-                </button>
-              </div>
+          <div ref={stage} className={full ? 'fixed inset-0 z-50 flex flex-col bg-black text-background' : undefined}>
+            {full && !barHidden && (
+              <div className="z-10 shrink-0 border-b border-white/10 bg-neutral-900/95 px-3 py-2 text-white" data-testid="fullscreen-control-bar">{controlBar}</div>
             )}
+            {full && barHidden && (
+              <button type="button" onClick={() => setBarHidden(false)} onMouseDown={keepFocus} data-testid="button-show-bar"
+                title="Show the control bar"
+                className="absolute left-1/2 top-0 z-10 -translate-x-1/2 rounded-b-lg bg-white/20 px-3 py-0.5 text-white opacity-60 backdrop-blur transition-opacity hover:opacity-100">
+                <ChevronDown size={16} />
+              </button>
+            )}
+          <div
+            className={full
+              ? `flex min-h-0 min-w-0 flex-1 ${actual ? 'overflow-auto' : 'items-center justify-center'}`
+              : `flex min-h-52 rounded-xl bg-foreground p-2 text-background ${actual ? 'max-h-[80dvh] overflow-auto' : 'items-center justify-center'}`}>
             {frame ? (
               <canvas
                 ref={showScreen}
@@ -535,8 +565,11 @@ export default function LiveSession({ token, verification, preapproved = false, 
                 // 100%: one screen pixel per device pixel, so text is as
                 // crisp as on the PC. Fit: scaled into the window.
                 style={actual && size ? { width: size.w / (window.devicePixelRatio || 1), height: size.h / (window.devicePixelRatio || 1), maxWidth: 'none', flex: 'none' } : undefined}
-                className={`block ${actual ? 'm-auto' : full ? 'h-[100dvh] w-[100vw] object-contain' : 'max-h-[78dvh] max-w-full rounded-sm outline-offset-4'} ${control ? 'touch-none cursor-default' : ''}`}
-                onBlur={() => { release(); setControl(false); }}
+                className={`block ${actual ? 'm-auto' : full ? 'h-full w-full min-h-0 min-w-0 object-contain' : 'max-h-[78dvh] max-w-full rounded-sm outline-offset-4'} ${control ? 'touch-none cursor-default' : ''}`}
+                // Leaving the screen (a toolbar click, entering full screen,
+                // another window) lets go of held buttons but keeps remote
+                // input on. Keys and the mouse only reach the PC from here.
+                onBlur={release}
                 onKeyDown={key}
                 onContextMenu={(e) => { if (control) e.preventDefault(); }}
                 onPointerDown={(e) => {
@@ -573,11 +606,11 @@ export default function LiveSession({ token, verification, preapproved = false, 
               </div>
             )}
           </div>
+          </div>
           {buddy && <BuddyPanel token={token} frame={snapshot} config={buddy} />}
           </div>
           <p className="mt-3 text-sm text-muted-foreground">
             Primary display only. At the Windows PC, press Ctrl+2 or F12 to stop sharing.
-            {frame && size && <span className="ml-2 font-mono text-xs" data-testid="text-stream-stats">{size.w}×{size.h} · {fps} updates/s</span>}
           </p>
         </section>
       )}
