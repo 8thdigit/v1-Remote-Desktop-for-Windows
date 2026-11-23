@@ -169,6 +169,56 @@ test("requireLicense blocks an unlicensed PC and allows a licensed one", async (
   await admin("PUT", `/billing/subscriptions/${companyId}`, { requireLicense: false });
 });
 
+test("a company that is suspended or over quota cannot connect to its PC", async () => {
+  // A fresh company so the ordering of earlier assertions is unaffected.
+  const made = await admin("POST", "/admin/users", { username: "gateco", password: "temp-pass-123", role: "company", displayName: "Gate Co" });
+  assert.equal(made.status, 201, JSON.stringify(made.json));
+  const gateId = made.json.id;
+  const gateRa = made.json.raId;
+
+  // The company signs in and chooses its own password (admin-set passwords are temporary).
+  const company = client();
+  assert.equal((await company("POST", "/auth/login", { username: "gateco", password: "temp-pass-123" })).status, 200);
+  assert.equal((await company("POST", "/auth/password", { current: "temp-pass-123", next: "gate-pass-123" })).status, 204);
+
+  // A single-session plan, active.
+  const plan = await admin("POST", "/billing/plans", { name: "Solo", priceInr: 100, interval: "monthly", sessionQuota: 1 });
+  assert.equal((await admin("PUT", `/billing/subscriptions/${gateId}`, { planId: plan.json.id, status: "active" })).status, 200);
+
+  // A PC registers for the company's RA (ungated while active) and shows in the inbox.
+  assert.equal((await registerStanding(pcKey("k"), "Gate-PC", gateRa)).status, 201);
+  const inbox = await company("GET", "/msfwr/inbox");
+  const pc = inbox.json.pcs.find((p) => p.name === "Gate-PC");
+  assert.ok(pc, "the PC appears in the company inbox");
+
+  // Suspended: the company cannot open a session even though the PC is up.
+  assert.equal((await admin("PUT", `/billing/subscriptions/${gateId}`, { status: "suspended" })).status, 200);
+  const blocked = await company("POST", "/msfwr/connect", { pc: pc.id });
+  assert.equal(blocked.status, 402, JSON.stringify(blocked.json));
+  assert.equal(blocked.json.reason, "suspended");
+
+  // Reactivated: it connects, which uses the one allowed session of the period.
+  assert.equal((await admin("PUT", `/billing/subscriptions/${gateId}`, { status: "active" })).status, 200);
+  const ok = await company("POST", "/msfwr/connect", { pc: pc.id });
+  assert.equal(ok.status, 200, JSON.stringify(ok.json));
+
+  // Wait for that live-start to be counted (the store reports it to billing
+  // asynchronously via its lifecycle hook).
+  let used = 0;
+  for (let i = 0; i < 50 && used < 1; i++) {
+    const list = await admin("GET", "/billing/companies");
+    used = list.json.companies.find((c) => c.id === gateId)?.entitlement.sessionsUsed ?? 0;
+    if (used < 1) await new Promise((r) => setTimeout(r, 50));
+  }
+  assert.equal(used, 1, "the live session was counted against the quota");
+
+  // The quota is now spent, so a further connect is refused for quota. The gate
+  // runs before PC availability, so the reason is the subscription, not the PC.
+  const overQuota = await company("POST", "/msfwr/connect", { pc: pc.id });
+  assert.equal(overQuota.status, 402, JSON.stringify(overQuota.json));
+  assert.equal(overQuota.json.reason, "quota");
+});
+
 test("security headers are present on API responses", async () => {
   const res = await fetch(`${base}/healthz`);
   assert.equal(res.headers.get("x-content-type-options"), "nosniff");

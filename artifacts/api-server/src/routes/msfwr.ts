@@ -7,7 +7,7 @@ import {
   GetMsfwrInboxResponse, AcceptMsfwrRequestBody, AcceptMsfwrRequestResponse, ConnectMsfwrPcBody, ConnectMsfwrPcResponse,
 } from "@workspace/api-zod";
 import { formatRaId, normalizeRaId } from "../lib/msfwr";
-import { accountsReady, activity, gateForRa, operatorOf, requireUser, store } from "../lib/portal";
+import { accountsReady, activity, connectGateForRa, gateForRa, operatorOf, requireUser, store } from "../lib/portal";
 import { keyedLimiter } from "../lib/security";
 
 // Per-PC registration limiter, on top of the global throttle: bounds how fast
@@ -106,11 +106,16 @@ router.get("/inbox", requireUser(), (req, res) => {
   const user = req.account!;
   res.json(GetMsfwrInboxResponse.parse({raId: user.raId, company: user.displayName, ...store.inbox(user.raId)}));
 });
-router.post("/accept", requireUser(), (req, res) => {
+router.post("/accept", requireUser(), async (req, res) => {
   if (tooManyJoins()) { res.status(429).json({error: "Too many attempts. Try again in a minute."}); return; }
   const body = AcceptMsfwrRequestBody.safeParse(req.body);
   if (!body.success) { res.status(400).json({error: "Invalid request."}); return; }
   const user = req.account!;
+  // Enforce this company's subscription at the moment a session starts, so a
+  // company that is inactive, expired, suspended or over its quota cannot open
+  // a new session even while a PC is still registered.
+  const gate = await connectGateForRa(user.raId);
+  if (!gate.ok) { res.status(402).json({error: gate.message, subStatus: gate.status, reason: gate.reason}); return; }
   const result = store.accept(body.data.id, operatorOf(user));
   if (!result.viewer) {
     res.status(result.error === "accepted" ? 409 : 404).json({error: result.error === "accepted"
@@ -121,11 +126,13 @@ router.post("/accept", requireUser(), (req, res) => {
   activity.add("accept", `${user.displayName} (${formatRaId(user.raId)}) accepted a request and connected`, user.username);
   res.json(AcceptMsfwrRequestResponse.parse(result.viewer));
 });
-router.post("/connect", requireUser(), (req, res) => {
+router.post("/connect", requireUser(), async (req, res) => {
   if (tooManyJoins()) { res.status(429).json({error: "Too many attempts. Try again in a minute."}); return; }
   const body = ConnectMsfwrPcBody.safeParse(req.body);
   if (!body.success) { res.status(400).json({error: "Invalid request."}); return; }
   const user = req.account!;
+  const gate = await connectGateForRa(user.raId);
+  if (!gate.ok) { res.status(402).json({error: gate.message, subStatus: gate.status, reason: gate.reason}); return; }
   const viewer = store.connectPc(body.data.pc, operatorOf(user));
   if (!viewer) { res.status(404).json({error: "That PC is not available right now. It may be offline, locked, or already in a session."}); return; }
   activity.add("connect", `${user.displayName} (${formatRaId(user.raId)}) connected to a PC`, user.username);
@@ -178,10 +185,17 @@ router.get("/link/info", (req, res) => {
   if (!info) { res.status(404).json({error: "This remote access URL expired or was cleared on the PC."}); return; }
   res.json(GetMsfwrLinkInfoResponse.parse(info));
 });
-router.post("/link/join", (req, res) => {
+router.post("/link/join", async (req, res) => {
   if (tooManyLinkJoins()) { res.status(429).json({error: "Too many attempts. Try again in a minute."}); return; }
   const body = JoinMsfwrLinkBody.safeParse({...req.body, code: String(req.body?.code ?? "").toUpperCase()});
   if (!body.success) { res.status(400).json({error: "Enter the access code that came with the link."}); return; }
+  // Enforce the PC's company subscription before opening a session through the
+  // link, so an inactive or over-quota company's shared URLs stop working too.
+  const ra = store.linkHostRa(body.data.code);
+  if (ra) {
+    const gate = await connectGateForRa(ra);
+    if (!gate.ok) { res.status(402).json({error: gate.message, subStatus: gate.status, reason: gate.reason}); return; }
+  }
   const result = store.linkJoin(body.data.code, body.data.pin);
   if (!result.viewer) {
     const answers = {
@@ -199,11 +213,13 @@ router.post("/link/join", (req, res) => {
   activity.add("link-join", `Someone connected to ${result.name || "a PC"} through its remote access URL`);
   res.json(JoinMsfwrLinkResponse.parse(result.viewer));
 });
-router.post("/join", requireUser(), (req, res) => {
+router.post("/join", requireUser(), async (req, res) => {
   if (tooManyJoins()) { res.status(429).json({error: "Too many attempts. Try again in a minute."}); return; }
   const body = JoinMsfwrBody.safeParse(req.body);
   if (!body.success) { res.status(400).json({error: "Enter a 12-character code from the host."}); return; }
   const user = req.account!;
+  const gate = await connectGateForRa(user.raId);
+  if (!gate.ok) { res.status(402).json({error: gate.message, subStatus: gate.status, reason: gate.reason}); return; }
   const viewer = store.join(body.data.code, operatorOf(user));
   if (!viewer) { res.status(404).json({error: "Code not found, already used, or expired."}); return; }
   activity.add("join", `${user.displayName} connected with ${viewer.preapproved ? "an unattended access code" : "a one-time code"}`, user.username);

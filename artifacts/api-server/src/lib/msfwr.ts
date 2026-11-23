@@ -482,6 +482,14 @@ export function createMsfwrStore(clock = Date.now, hooks: StoreHooks = {}) {
         viewers: shared ? s.viewers.size : 0, expiresAt: link.expiresAt,
       };
     },
+    // The RA ID of the PC behind a link code, so the route can enforce that
+    // company's subscription before opening a session. Undefined when the
+    // link or its online PC is gone.
+    linkHostRa(code: string) {
+      const link = findLink(code);
+      if (!link) return undefined;
+      return linkHost(link)?.ra;
+    },
     // Opens a session through a link once the access code matches.
     linkJoin(code: string, pin: string) {
       const link = findLink(code);

@@ -41100,6 +41100,14 @@ function createMsfwrStore(clock = Date.now, hooks = {}) {
         expiresAt: link.expiresAt
       };
     },
+    // The RA ID of the PC behind a link code, so the route can enforce that
+    // company's subscription before opening a session. Undefined when the
+    // link or its online PC is gone.
+    linkHostRa(code) {
+      const link = findLink(code);
+      if (!link) return void 0;
+      return linkHost(link)?.ra;
+    },
     // Opens a session through a link once the access code matches.
     linkJoin(code, pin) {
       const link = findLink(code);
@@ -42133,6 +42141,21 @@ async function gateForRa(raId, license) {
     return { ok: true, status: "none" };
   }
 }
+async function connectGateForRa(raId) {
+  if (!raId) return { ok: true, status: "none" };
+  try {
+    const account = (await accountsReady()).findRa(raId);
+    if (!account) return { ok: true, status: "none" };
+    const billing = await billingReady();
+    if (!billing.getSubscription(account.id)) return { ok: true, status: "none" };
+    const gate = billing.canStartSession(account.id);
+    if (gate.ok) return { ok: true, status: gate.entitlement.status };
+    return { ok: false, status: gate.entitlement.status, reason: gate.reason, message: subBlockMessage(gate.reason) };
+  } catch (err) {
+    logger.error({ err }, "Billing connect-gate check failed; allowing session");
+    return { ok: true, status: "none" };
+  }
+}
 function readCookie(req, name) {
   const header = req.headers.cookie;
   if (!header) return void 0;
@@ -42373,7 +42396,7 @@ router2.get("/inbox", requireUser(), (req, res) => {
   const user = req.account;
   res.json(GetMsfwrInboxResponse.parse({ raId: user.raId, company: user.displayName, ...store.inbox(user.raId) }));
 });
-router2.post("/accept", requireUser(), (req, res) => {
+router2.post("/accept", requireUser(), async (req, res) => {
   if (tooManyJoins()) {
     res.status(429).json({ error: "Too many attempts. Try again in a minute." });
     return;
@@ -42384,6 +42407,11 @@ router2.post("/accept", requireUser(), (req, res) => {
     return;
   }
   const user = req.account;
+  const gate = await connectGateForRa(user.raId);
+  if (!gate.ok) {
+    res.status(402).json({ error: gate.message, subStatus: gate.status, reason: gate.reason });
+    return;
+  }
   const result = store.accept(body.data.id, operatorOf(user));
   if (!result.viewer) {
     res.status(result.error === "accepted" ? 409 : 404).json({ error: result.error === "accepted" ? "This request was already accepted." : "This request is no longer open. The PC may have gone offline or the request timed out." });
@@ -42392,7 +42420,7 @@ router2.post("/accept", requireUser(), (req, res) => {
   activity.add("accept", `${user.displayName} (${formatRaId(user.raId)}) accepted a request and connected`, user.username);
   res.json(AcceptMsfwrRequestResponse.parse(result.viewer));
 });
-router2.post("/connect", requireUser(), (req, res) => {
+router2.post("/connect", requireUser(), async (req, res) => {
   if (tooManyJoins()) {
     res.status(429).json({ error: "Too many attempts. Try again in a minute." });
     return;
@@ -42403,6 +42431,11 @@ router2.post("/connect", requireUser(), (req, res) => {
     return;
   }
   const user = req.account;
+  const gate = await connectGateForRa(user.raId);
+  if (!gate.ok) {
+    res.status(402).json({ error: gate.message, subStatus: gate.status, reason: gate.reason });
+    return;
+  }
   const viewer = store.connectPc(body.data.pc, operatorOf(user));
   if (!viewer) {
     res.status(404).json({ error: "That PC is not available right now. It may be offline, locked, or already in a session." });
@@ -42496,7 +42529,7 @@ router2.get("/link/info", (req, res) => {
   }
   res.json(GetMsfwrLinkInfoResponse.parse(info));
 });
-router2.post("/link/join", (req, res) => {
+router2.post("/link/join", async (req, res) => {
   if (tooManyLinkJoins()) {
     res.status(429).json({ error: "Too many attempts. Try again in a minute." });
     return;
@@ -42505,6 +42538,14 @@ router2.post("/link/join", (req, res) => {
   if (!body.success) {
     res.status(400).json({ error: "Enter the access code that came with the link." });
     return;
+  }
+  const ra = store.linkHostRa(body.data.code);
+  if (ra) {
+    const gate = await connectGateForRa(ra);
+    if (!gate.ok) {
+      res.status(402).json({ error: gate.message, subStatus: gate.status, reason: gate.reason });
+      return;
+    }
   }
   const result = store.linkJoin(body.data.code, body.data.pin);
   if (!result.viewer) {
@@ -42523,7 +42564,7 @@ router2.post("/link/join", (req, res) => {
   activity.add("link-join", `Someone connected to ${result.name || "a PC"} through its remote access URL`);
   res.json(JoinMsfwrLinkResponse.parse(result.viewer));
 });
-router2.post("/join", requireUser(), (req, res) => {
+router2.post("/join", requireUser(), async (req, res) => {
   if (tooManyJoins()) {
     res.status(429).json({ error: "Too many attempts. Try again in a minute." });
     return;
@@ -42534,6 +42575,11 @@ router2.post("/join", requireUser(), (req, res) => {
     return;
   }
   const user = req.account;
+  const gate = await connectGateForRa(user.raId);
+  if (!gate.ok) {
+    res.status(402).json({ error: gate.message, subStatus: gate.status, reason: gate.reason });
+    return;
+  }
   const viewer = store.join(body.data.code, operatorOf(user));
   if (!viewer) {
     res.status(404).json({ error: "Code not found, already used, or expired." });
