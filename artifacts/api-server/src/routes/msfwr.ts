@@ -7,7 +7,7 @@ import {
   GetMsfwrInboxResponse, AcceptMsfwrRequestBody, AcceptMsfwrRequestResponse, ConnectMsfwrPcBody, ConnectMsfwrPcResponse,
 } from "@workspace/api-zod";
 import { formatRaId, normalizeRaId } from "../lib/msfwr";
-import { accountsReady, activity, connectGateForRa, gateForRa, operatorOf, requireUser, store } from "../lib/portal";
+import { accountsReady, activity, connectGateForRa, gateForRa, linkLogReady, linkRegister, operatorOf, requireUser, sendError, store } from "../lib/portal";
 import { keyedLimiter } from "../lib/security";
 
 // Per-PC registration limiter, on top of the global throttle: bounds how fast
@@ -102,9 +102,15 @@ router.post("/call", async (req, res) => {
   res.sendStatus(204);
 });
 // --- Signed-in companies: requests and PCs for their RA ID ---
-router.get("/inbox", requireUser(), (req, res) => {
+router.get("/inbox", requireUser(), async (req, res) => {
   const user = req.account!;
-  res.json(GetMsfwrInboxResponse.parse({raId: user.raId, company: user.displayName, ...store.inbox(user.raId), links: store.companyLinks(user.raId)}));
+  try {
+    // The company's current Access PIN (a new one every few minutes until it
+    // is used) and the remote access URLs it has authored.
+    const pin = store.companyPin({id: user.id, name: user.displayName, raId: user.raId});
+    const links = await linkRegister({accountId: user.id});
+    res.json(GetMsfwrInboxResponse.parse({raId: user.raId, company: user.displayName, ...store.inbox(user.raId), accessPin: pin, links}));
+  } catch (err) { sendError(res, err); }
 });
 router.post("/accept", requireUser(), async (req, res) => {
   if (tooManyJoins()) { res.status(429).json({error: "Too many attempts. Try again in a minute."}); return; }
@@ -189,13 +195,16 @@ router.post("/link/join", async (req, res) => {
   if (tooManyLinkJoins()) { res.status(429).json({error: "Too many attempts. Try again in a minute."}); return; }
   const body = JoinMsfwrLinkBody.safeParse({...req.body, code: String(req.body?.code ?? "").toUpperCase()});
   if (!body.success) { res.status(400).json({error: "Enter the access code that came with the link."}); return; }
-  // Access PINs come from the accounts' persistent secret; make sure it is loaded.
-  try { await accountsReady(); } catch { res.status(503).json({error: "The relay is starting. Try again in a moment."}); return; }
-  // Enforce the PC's company subscription before opening a session through the
-  // link, so an inactive or over-quota company's shared URLs stop working too.
-  const ra = store.linkHostRa(body.data.code);
-  if (ra) {
-    const gate = await connectGateForRa(ra);
+  // URL claims are restored from the register; make sure it is loaded.
+  let accounts;
+  try { accounts = await accountsReady(); await linkLogReady(); } catch { res.status(503).json({error: "The relay is starting. Try again in a moment."}); return; }
+  // The company whose PIN this is authors the session, so its account must be
+  // enabled and its subscription is what the session counts against.
+  const author = store.linkAuthor(body.data.code, body.data.accessPin);
+  if (author) {
+    const account = accounts.get(author.accountId);
+    if (!account || account.disabled) { res.status(403).json({error: "The company that issued this Access PIN can no longer authorize sessions."}); return; }
+    const gate = await connectGateForRa(author.raId);
     if (!gate.ok) { res.status(402).json({error: gate.message, subStatus: gate.status, reason: gate.reason}); return; }
   }
   const result = store.linkJoin(body.data.code, body.data.pin, body.data.accessPin);
@@ -204,8 +213,8 @@ router.post("/link/join", async (req, res) => {
       missing: [404, "This remote access URL expired or was cleared on the PC."],
       locked: [429, "Too many wrong access codes. This link is locked for 15 minutes."],
       pin: [403, "That access code is not correct."],
-      "access-pin-required": [403, "Enter the 4-digit Access PIN. Ask the company that manages this PC for it."],
-      "access-pin": [403, "That Access PIN is not correct. Ask the company that manages this PC for the current PIN."],
+      "access-pin-required": [403, "Enter the 4-digit Access PIN from the company that is supporting you."],
+      "access-pin": [403, "That Access PIN is not correct or has expired. Ask the company for its current PIN."],
       blocked: [423, "Too many wrong Access PINs. This URL no longer works. Ask the person at the PC to create a new one."],
       offline: [409, "The PC is offline or locked right now. Try again when it is on and signed in."],
       busy: [409, "Someone is already connected to this PC. Try again when that session ends."],
@@ -215,7 +224,8 @@ router.post("/link/join", async (req, res) => {
     res.status(status).json({error});
     return;
   }
-  activity.add("link-join", `Someone connected to ${result.name || "a PC"} through its remote access URL`);
+  if (result.claimed) activity.add("link-claim", `${result.claim.company} (${formatRaId(result.claim.raId)}) authorized the remote access URL of ${result.name || "a PC"} with PIN ${result.claim.pin}`);
+  activity.add("link-join", `Someone connected to ${result.name || "a PC"} through its remote access URL, authorized by ${result.claim.company}`);
   res.json(JoinMsfwrLinkResponse.parse(result.viewer));
 });
 router.post("/join", requireUser(), async (req, res) => {

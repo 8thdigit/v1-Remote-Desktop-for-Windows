@@ -5,7 +5,8 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import type { MsfwrRaLink } from './msfwrRaLink';
+import type { MsfwrCompanyPin } from './msfwrCompanyPin';
+import type { MsfwrLinkRecord } from './msfwrLinkRecord';
 import type { MsfwrRaPc } from './msfwrRaPc';
 import type { MsfwrRequest } from './msfwrRequest';
 
@@ -14,6 +15,7 @@ export interface MsfwrInbox {
   company: string;
   requests: MsfwrRequest[];
   pcs: MsfwrRaPc[];
-  /** Active remote access URLs of PCs pointed to this RA ID, with their Access PINs */
-  links?: MsfwrRaLink[];
+  accessPin?: MsfwrCompanyPin;
+  /** Remote access URLs this company authorized with its PIN */
+  links?: MsfwrLinkRecord[];
 }

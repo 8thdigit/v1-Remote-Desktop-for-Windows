@@ -6,9 +6,9 @@ import LiveSession from '@/LiveSession';
 import { errorText, statusOf } from '@/lib/auth';
 
 // The page a remote access URL opens (https://…/r/L0123456789A#123456).
-// Whoever has the URL and its six-digit access code, and also the four-digit
-// Access PIN from the company that manages the PC, connects to the PC that
-// created it. The PC shares the URL with the code after the #, which browsers
+// Whoever has the URL and its six-digit access code, and also a four-digit
+// Access PIN from a company, connects to the PC that created it. The first
+// company PIN entered authorizes the URL for that company. The PC shares the URL with the code after the #, which browsers
 // never send to a server; the Access PIN is never part of the URL, so knowing
 // the URL alone is not enough. Several people can be connected through the
 // same URL at once. No sign-in is needed.
@@ -140,14 +140,16 @@ export default function LinkPage({ code }: { code: string }) {
               </label>
             )}
             <label htmlFor="link-access-pin" className="mt-6 block">
-              <span className="mb-1.5 block text-xs font-semibold text-muted-foreground">Access PIN (4 digits, from the company that manages this PC)</span>
+              <span className="mb-1.5 block text-xs font-semibold text-muted-foreground">Access PIN (4 digits, from the company supporting you)</span>
               <span className="flex items-center gap-2 rounded-xl border bg-background px-3 focus-within:ring-2 focus-within:ring-primary/40">
                 <LockKeyhole className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <input id="link-access-pin" value={accessPin} onChange={(e) => { setAccessPin(e.target.value.replace(/\D/g, '').slice(0, 4)); setError(null); }}
                   type="password" inputMode="numeric" autoComplete="one-time-code" placeholder="••••" required autoFocus data-testid="input-link-access-pin"
                   className="min-w-0 flex-1 bg-transparent py-2.5 font-mono text-lg tracking-[0.5em] outline-none" />
               </span>
-              <span className="mt-1.5 block text-xs text-muted-foreground">The URL alone does not connect. The company shares this PIN with you separately.</span>
+              <span className="mt-1.5 block text-xs text-muted-foreground">
+                {info?.claimed ? 'A company has already authorized this URL. Enter the same PIN it gave you.' : 'The URL alone does not connect. The company gives you this PIN separately.'}
+              </span>
             </label>
             {error && <p role="alert" data-testid="text-link-error" className="mt-4 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
             {notice && <p className="mt-4 rounded-lg bg-accent/60 px-3 py-2 text-sm">{notice}</p>}

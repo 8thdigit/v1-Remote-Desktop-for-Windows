@@ -241,7 +241,7 @@ func linkSummary(l *savedLink, now time.Time) string {
 	if l == nil {
 		return "No remote access URL. Choose how long it stays valid, then Create."
 	}
-	return "Valid until " + time.UnixMilli(l.ExpiresAt).Format("Mon 15:04") + " (" + timeLeft(l.ExpiresAt, now) + "). Opening it also needs the 4-digit Access PIN that your company (RA ID) sees and shares separately; several people can connect at once."
+	return "Valid until " + time.UnixMilli(l.ExpiresAt).Format("Mon 15:04") + " (" + timeLeft(l.ExpiresAt, now) + "). Opening it also needs a 4-digit Access PIN from the supporting company; several people can connect at once."
 }
 
 // linksPathFor returns where the remote access URL lives next to the

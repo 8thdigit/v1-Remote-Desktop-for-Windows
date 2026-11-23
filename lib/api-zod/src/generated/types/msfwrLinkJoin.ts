@@ -12,7 +12,7 @@ export interface MsfwrLinkJoin {
   /** @maxLength 12 */
   pin: string;
   /**
-     * The 4-digit Access PIN from the company that manages the PC
+     * The 4-digit Access PIN from the company that authorizes the session
      * @maxLength 12
      */
   accessPin?: string;

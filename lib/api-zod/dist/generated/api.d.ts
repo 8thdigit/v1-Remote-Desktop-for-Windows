@@ -188,6 +188,7 @@ export declare const GetMsfwrLinkInfoResponse: zod.ZodObject<{
     expiresAt: zod.ZodNumber;
     accessPinRequired: zod.ZodOptional<zod.ZodBoolean>;
     blocked: zod.ZodOptional<zod.ZodBoolean>;
+    claimed: zod.ZodOptional<zod.ZodBoolean>;
 }, zod.z.core.$strip>;
 /**
  * Open a session through a shared remote access URL. The viewer gives the link's access code; the PC connects without a prompt.
@@ -208,8 +209,7 @@ export declare const JoinMsfwrLinkResponse: zod.ZodObject<{
 /**
  * For the signed-in company: Initiate requests sent to its RA ID and the PCs whose remote access points to its RA ID.
  */
-export declare const getMsfwrInboxResponseLinksItemAccessPinRegExp: RegExp;
-export declare const getMsfwrInboxResponseLinksItemSessionsMin = 0;
+export declare const getMsfwrInboxResponseAccessPinPinRegExp: RegExp;
 export declare const GetMsfwrInboxResponse: zod.ZodObject<{
     raId: zod.ZodString;
     company: zod.ZodString;
@@ -235,17 +235,41 @@ export declare const GetMsfwrInboxResponse: zod.ZodObject<{
             busy: "busy";
         }>;
     }, zod.z.core.$strip>>;
+    accessPin: zod.ZodOptional<zod.ZodObject<{
+        pin: zod.ZodString;
+        issuedAt: zod.ZodNumber;
+        expiresAt: zod.ZodNumber;
+    }, zod.z.core.$strip>>;
     links: zod.ZodOptional<zod.ZodArray<zod.ZodObject<{
-        id: zod.ZodString;
-        name: zod.ZodString;
-        accessPin: zod.ZodString;
+        code: zod.ZodString;
+        pcName: zod.ZodString;
+        pcRa: zod.ZodOptional<zod.ZodString>;
         createdAt: zod.ZodNumber;
         expiresAt: zod.ZodNumber;
-        sessions: zod.ZodInt;
+        ttlHours: zod.ZodNumber;
+        revokedAt: zod.ZodOptional<zod.ZodNumber>;
+        claim: zod.ZodOptional<zod.ZodObject<{
+            accountId: zod.ZodString;
+            company: zod.ZodString;
+            raId: zod.ZodString;
+            pin: zod.ZodString;
+            at: zod.ZodNumber;
+        }, zod.z.core.$strip>>;
+        sessions: zod.ZodArray<zod.ZodObject<{
+            startedAt: zod.ZodNumber;
+            endedAt: zod.ZodNumber;
+            durationMs: zod.ZodNumber;
+            viewers: zod.ZodInt;
+        }, zod.z.core.$strip>>;
+        status: zod.ZodEnum<{
+            active: "active";
+            expired: "expired";
+            cleared: "cleared";
+        }>;
         online: zod.ZodBoolean;
+        viewers: zod.ZodInt;
         locked: zod.ZodBoolean;
         blocked: zod.ZodBoolean;
-        ra: zod.ZodOptional<zod.ZodString>;
     }, zod.z.core.$strip>>>;
 }, zod.z.core.$strip>;
 export declare const acceptMsfwrRequestBodyIdMax = 64;
@@ -393,8 +417,6 @@ export declare const DeleteUserParams: zod.ZodObject<{
 export declare const DeleteUserResponse: zod.ZodVoid;
 export declare const getAdminOverviewResponseLiveItemViewersMin = 0;
 export declare const getAdminOverviewResponsePcsItemViewersMin = 0;
-export declare const getAdminOverviewResponseLinksItemAccessPinRegExp: RegExp;
-export declare const getAdminOverviewResponseLinksItemSessionsMin = 0;
 export declare const GetAdminOverviewResponse: zod.ZodObject<{
     live: zod.ZodArray<zod.ZodObject<{
         id: zod.ZodString;
@@ -456,16 +478,35 @@ export declare const GetAdminOverviewResponse: zod.ZodObject<{
     }, zod.z.core.$strip>>;
     storage: zod.ZodString;
     links: zod.ZodOptional<zod.ZodArray<zod.ZodObject<{
-        id: zod.ZodString;
-        name: zod.ZodString;
-        accessPin: zod.ZodString;
+        code: zod.ZodString;
+        pcName: zod.ZodString;
+        pcRa: zod.ZodOptional<zod.ZodString>;
         createdAt: zod.ZodNumber;
         expiresAt: zod.ZodNumber;
-        sessions: zod.ZodInt;
+        ttlHours: zod.ZodNumber;
+        revokedAt: zod.ZodOptional<zod.ZodNumber>;
+        claim: zod.ZodOptional<zod.ZodObject<{
+            accountId: zod.ZodString;
+            company: zod.ZodString;
+            raId: zod.ZodString;
+            pin: zod.ZodString;
+            at: zod.ZodNumber;
+        }, zod.z.core.$strip>>;
+        sessions: zod.ZodArray<zod.ZodObject<{
+            startedAt: zod.ZodNumber;
+            endedAt: zod.ZodNumber;
+            durationMs: zod.ZodNumber;
+            viewers: zod.ZodInt;
+        }, zod.z.core.$strip>>;
+        status: zod.ZodEnum<{
+            active: "active";
+            expired: "expired";
+            cleared: "cleared";
+        }>;
         online: zod.ZodBoolean;
+        viewers: zod.ZodInt;
         locked: zod.ZodBoolean;
         blocked: zod.ZodBoolean;
-        ra: zod.ZodOptional<zod.ZodString>;
     }, zod.z.core.$strip>>>;
 }, zod.z.core.$strip>;
 export declare const joinMsfwrBodyCodeRegExp: RegExp;

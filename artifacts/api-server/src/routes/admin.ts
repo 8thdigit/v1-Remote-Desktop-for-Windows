@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { CreateUserBody, UpdateUserBody } from "@workspace/api-zod";
 import { formatRaId } from "../lib/msfwr";
-import { accountsReady, activity, requireUser, sendError, store } from "../lib/portal";
+import { accountsReady, activity, linkRegister, requireUser, sendError, store } from "../lib/portal";
 
 // The admin console: accounts, live sessions, requests and activity.
 const router = Router();
@@ -37,7 +37,7 @@ router.patch("/users/:id", async (req, res) => {
     if (!body.success) { res.status(400).json({ error: "Invalid change." }); return; }
     const before = accounts.get(req.params.id);
     const user = await accounts.update(req.params.id, body.data, req.account!.id);
-    if (user.disabled) store.endOperator(user.id);
+    if (user.disabled) { store.endOperator(user.id); store.dropCompanyPin(user.id); }
     const changes = [
       body.data.password !== undefined && "reset the password",
       before && body.data.role !== undefined && before.role !== user.role && `made them ${user.role === "admin" ? "an admin" : "a company"}`,
@@ -55,6 +55,7 @@ router.delete("/users/:id", async (req, res) => {
     const accounts = await accountsReady();
     const user = await accounts.remove(req.params.id, req.account!.id);
     store.endOperator(user.id);
+    store.dropCompanyPin(user.id);
     activity.add("user-deleted", `${req.account!.displayName} deleted ${user.displayName} (${formatRaId(user.raId)})`, req.account!.username);
     res.sendStatus(204);
   } catch (err) { sendError(res, err); }
@@ -63,7 +64,8 @@ router.delete("/users/:id", async (req, res) => {
 router.get("/overview", async (_req, res) => {
   try {
     const accounts = await accountsReady();
-    res.json({ ...store.overview(), activity: activity.list(150), storage: accounts.backend });
+    const { links: _live, ...overview } = store.overview();
+    res.json({ ...overview, links: await linkRegister(), activity: activity.list(150), storage: accounts.backend });
   } catch (err) { sendError(res, err); }
 });
 

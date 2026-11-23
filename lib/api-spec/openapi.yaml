@@ -482,15 +482,16 @@ components:
         busy: {type: boolean}
         viewers: {type: integer, minimum: 0, description: People connected through this URL right now}
         expiresAt: {type: number}
-        accessPinRequired: {type: boolean, description: Viewers must also enter the 4-digit Access PIN the company sees}
+        accessPinRequired: {type: boolean, description: Viewers must also enter a company's 4-digit Access PIN}
         blocked: {type: boolean, description: Too many wrong Access PINs; the link no longer works}
+        claimed: {type: boolean, description: A company has already authorized this URL with its PIN}
     MsfwrLinkJoin:
       type: object
       required: [code, pin]
       properties:
         code: {type: string, pattern: '^L[0-9A-F]{11}$'}
         pin: {type: string, maxLength: 12}
-        accessPin: {type: string, maxLength: 12, description: The 4-digit Access PIN from the company that manages the PC}
+        accessPin: {type: string, maxLength: 12, description: The 4-digit Access PIN from the company that authorizes the session}
     MsfwrRequest:
       type: object
       required: [id, name, at, until, status]
@@ -522,24 +523,54 @@ components:
         pcs:
           type: array
           items: {$ref: "#/components/schemas/MsfwrRaPc"}
+        accessPin: {$ref: "#/components/schemas/MsfwrCompanyPin"}
         links:
           type: array
-          description: Active remote access URLs of PCs pointed to this RA ID, with their Access PINs
-          items: {$ref: "#/components/schemas/MsfwrRaLink"}
-    MsfwrRaLink:
+          description: Remote access URLs this company authorized with its PIN
+          items: {$ref: "#/components/schemas/MsfwrLinkRecord"}
+    MsfwrCompanyPin:
       type: object
-      required: [id, name, accessPin, createdAt, expiresAt, sessions, online, locked, blocked]
+      required: [pin, issuedAt, expiresAt]
       properties:
-        id: {type: string}
-        name: {type: string}
-        accessPin: {type: string, pattern: '^[0-9]{4}$'}
+        pin: {type: string, pattern: '^[0-9]{4}$'}
+        issuedAt: {type: number}
+        expiresAt: {type: number, description: A new PIN is issued after this unless this one is used first}
+    MsfwrLinkClaim:
+      type: object
+      required: [accountId, company, raId, pin, at]
+      properties:
+        accountId: {type: string}
+        company: {type: string}
+        raId: {type: string}
+        pin: {type: string}
+        at: {type: number}
+    MsfwrLinkRecord:
+      type: object
+      required: [code, pcName, createdAt, expiresAt, ttlHours, sessions, status, online, viewers, locked, blocked]
+      properties:
+        code: {type: string, description: The URL is /r/<code>}
+        pcName: {type: string}
+        pcRa: {type: string}
         createdAt: {type: number}
         expiresAt: {type: number}
-        sessions: {type: integer, minimum: 0}
+        ttlHours: {type: number}
+        revokedAt: {type: number}
+        claim: {$ref: "#/components/schemas/MsfwrLinkClaim"}
+        sessions:
+          type: array
+          items:
+            type: object
+            required: [startedAt, endedAt, durationMs, viewers]
+            properties:
+              startedAt: {type: number}
+              endedAt: {type: number}
+              durationMs: {type: number}
+              viewers: {type: integer}
+        status: {type: string, enum: [active, expired, cleared]}
         online: {type: boolean}
-        locked: {type: boolean, description: Locked for 15 minutes after wrong codes or PINs}
-        blocked: {type: boolean, description: Too many wrong Access PINs; the PC must create a new URL}
-        ra: {type: string, description: Admin console only; the RA ID the PC points to}
+        viewers: {type: integer}
+        locked: {type: boolean}
+        blocked: {type: boolean}
     MsfwrAccept:
       type: object
       required: [id]
@@ -642,8 +673,8 @@ components:
         storage: {type: string}
         links:
           type: array
-          description: Active remote access URLs on this relay with their Access PINs
-          items: {$ref: "#/components/schemas/MsfwrRaLink"}
+          description: Every remote access URL created on this relay, with the company that authorized it
+          items: {$ref: "#/components/schemas/MsfwrLinkRecord"}
     MsfwrLinkStatus:
       type: object
       required: [link, online, busy]

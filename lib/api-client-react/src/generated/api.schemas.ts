@@ -210,10 +210,12 @@ export interface MsfwrLinkInfo {
      */
   viewers?: number;
   expiresAt: number;
-  /** Viewers must also enter the 4-digit Access PIN the company sees */
+  /** Viewers must also enter a company's 4-digit Access PIN */
   accessPinRequired?: boolean;
   /** Too many wrong Access PINs; the link no longer works */
   blocked?: boolean;
+  /** A company has already authorized this URL with its PIN */
+  claimed?: boolean;
 }
 
 export interface MsfwrLinkJoin {
@@ -222,7 +224,7 @@ export interface MsfwrLinkJoin {
   /** @maxLength 12 */
   pin: string;
   /**
-     * The 4-digit Access PIN from the company that manages the PC
+     * The 4-digit Access PIN from the company that authorizes the session
      * @maxLength 12
      */
   accessPin?: string;
@@ -262,22 +264,54 @@ export interface MsfwrRaPc {
   state: MsfwrRaPcState;
 }
 
-export interface MsfwrRaLink {
-  id: string;
-  name: string;
+export interface MsfwrCompanyPin {
   /** @pattern ^[0-9]{4}$ */
-  accessPin: string;
+  pin: string;
+  issuedAt: number;
+  /** A new PIN is issued after this unless this one is used first */
+  expiresAt: number;
+}
+
+export interface MsfwrLinkClaim {
+  accountId: string;
+  company: string;
+  raId: string;
+  pin: string;
+  at: number;
+}
+
+export type MsfwrLinkRecordStatus = typeof MsfwrLinkRecordStatus[keyof typeof MsfwrLinkRecordStatus];
+
+
+export const MsfwrLinkRecordStatus = {
+  active: 'active',
+  expired: 'expired',
+  cleared: 'cleared',
+} as const;
+
+export type MsfwrLinkRecordSessionsItem = {
+  startedAt: number;
+  endedAt: number;
+  durationMs: number;
+  viewers: number;
+};
+
+export interface MsfwrLinkRecord {
+  /** The URL is /r/<code> */
+  code: string;
+  pcName: string;
+  pcRa?: string;
   createdAt: number;
   expiresAt: number;
-  /** @minimum 0 */
-  sessions: number;
+  ttlHours: number;
+  revokedAt?: number;
+  claim?: MsfwrLinkClaim;
+  sessions: MsfwrLinkRecordSessionsItem[];
+  status: MsfwrLinkRecordStatus;
   online: boolean;
-  /** Locked for 15 minutes after wrong codes or PINs */
+  viewers: number;
   locked: boolean;
-  /** Too many wrong Access PINs; the PC must create a new URL */
   blocked: boolean;
-  /** Admin console only; the RA ID the PC points to */
-  ra?: string;
 }
 
 export interface MsfwrInbox {
@@ -285,8 +319,9 @@ export interface MsfwrInbox {
   company: string;
   requests: MsfwrRequest[];
   pcs: MsfwrRaPc[];
-  /** Active remote access URLs of PCs pointed to this RA ID, with their Access PINs */
-  links?: MsfwrRaLink[];
+  accessPin?: MsfwrCompanyPin;
+  /** Remote access URLs this company authorized with its PIN */
+  links?: MsfwrLinkRecord[];
 }
 
 export interface MsfwrAccept {
@@ -427,8 +462,8 @@ export interface AdminOverview {
   requests: MsfwrRequest[];
   activity: AdminOverviewActivityItem[];
   storage: string;
-  /** Active remote access URLs on this relay with their Access PINs */
-  links?: MsfwrRaLink[];
+  /** Every remote access URL created on this relay, with the company that authorized it */
+  links?: MsfwrLinkRecord[];
 }
 
 export interface MsfwrLinkStatus {

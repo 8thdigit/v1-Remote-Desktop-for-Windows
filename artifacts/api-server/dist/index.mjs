@@ -15252,11 +15252,11 @@ var require_mime_types = __commonJS({
       }
       return exts[0];
     }
-    function lookup(path4) {
-      if (!path4 || typeof path4 !== "string") {
+    function lookup(path5) {
+      if (!path5 || typeof path5 !== "string") {
         return false;
       }
-      var extension2 = extname("x." + path4).toLowerCase().slice(1);
+      var extension2 = extname("x." + path5).toLowerCase().slice(1);
       if (!extension2) {
         return false;
       }
@@ -19014,13 +19014,13 @@ var require_view = __commonJS({
   "../../node_modules/.pnpm/express@5.3.0/node_modules/express/lib/view.js"(exports, module) {
     "use strict";
     var debug = require_src()("express:view");
-    var path4 = __require("node:path");
+    var path5 = __require("node:path");
     var fs = __require("node:fs");
-    var dirname = path4.dirname;
-    var basename = path4.basename;
-    var extname = path4.extname;
-    var join = path4.join;
-    var resolve = path4.resolve;
+    var dirname = path5.dirname;
+    var basename = path5.basename;
+    var extname = path5.extname;
+    var join = path5.join;
+    var resolve = path5.resolve;
     module.exports = View;
     function View(name, options) {
       var opts = options || {};
@@ -19049,17 +19049,17 @@ var require_view = __commonJS({
       this.path = this.lookup(fileName);
     }
     View.prototype.lookup = function lookup(name) {
-      var path5;
+      var path6;
       var roots = [].concat(this.root);
       debug('lookup "%s"', name);
-      for (var i = 0; i < roots.length && !path5; i++) {
+      for (var i = 0; i < roots.length && !path6; i++) {
         var root = roots[i];
         var loc = resolve(root, name);
         var dir = dirname(loc);
         var file = basename(loc);
-        path5 = this.resolve(dir, file);
+        path6 = this.resolve(dir, file);
       }
-      return path5;
+      return path6;
     };
     View.prototype.render = function render(options, callback) {
       var sync = true;
@@ -19081,21 +19081,21 @@ var require_view = __commonJS({
     };
     View.prototype.resolve = function resolve2(dir, file) {
       var ext = this.ext;
-      var path5 = join(dir, file);
-      var stat = tryStat(path5);
+      var path6 = join(dir, file);
+      var stat = tryStat(path6);
       if (stat && stat.isFile()) {
-        return path5;
+        return path6;
       }
-      path5 = join(dir, basename(file, ext), "index" + ext);
-      stat = tryStat(path5);
+      path6 = join(dir, basename(file, ext), "index" + ext);
+      stat = tryStat(path6);
       if (stat && stat.isFile()) {
-        return path5;
+        return path6;
       }
     };
-    function tryStat(path5) {
-      debug('stat "%s"', path5);
+    function tryStat(path6) {
+      debug('stat "%s"', path6);
       try {
-        return fs.statSync(path5);
+        return fs.statSync(path6);
       } catch (e) {
         return void 0;
       }
@@ -20247,15 +20247,15 @@ var require_dist2 = __commonJS({
       let index = 0;
       function consumeUntil(end) {
         const output = [];
-        let path4 = "";
+        let path5 = "";
         function writePath() {
-          if (!path4)
+          if (!path5)
             return;
           output.push({
             type: "text",
-            value: encodePath(path4)
+            value: encodePath(path5)
           });
-          path4 = "";
+          path5 = "";
         }
         while (index < chars.length) {
           const value = chars[index++];
@@ -20267,7 +20267,7 @@ var require_dist2 = __commonJS({
             if (index === chars.length) {
               throw new PathError(`Unexpected end after \\ at index ${index}`, str);
             }
-            path4 += chars[index++];
+            path5 += chars[index++];
             continue;
           }
           if (value === ":" || value === "*") {
@@ -20311,7 +20311,7 @@ var require_dist2 = __commonJS({
           if (value === "}" || value === "(" || value === ")" || value === "[" || value === "]" || value === "+" || value === "?" || value === "!") {
             throw new PathError(`Unexpected ${value} at index ${index - 1}`, str);
           }
-          path4 += value;
+          path5 += value;
         }
         if (end) {
           throw new PathError(`Unexpected end at index ${index}, expected ${end}`, str);
@@ -20321,17 +20321,17 @@ var require_dist2 = __commonJS({
       }
       return new TokenData(consumeUntil(""), str);
     }
-    function compile(path4, options = {}) {
+    function compile(path5, options = {}) {
       const { encode: encode2 = encodeURIComponent, delimiter = DEFAULT_DELIMITER } = options;
-      const data = typeof path4 === "object" ? path4 : parse2(path4, options);
+      const data = typeof path5 === "object" ? path5 : parse2(path5, options);
       const fn = tokensToFunction(data.tokens, delimiter, encode2);
-      return function path5(params = {}) {
+      return function path6(params = {}) {
         const missing = [];
-        const path6 = fn(params, missing);
+        const path7 = fn(params, missing);
         if (missing.length) {
           throw new TypeError(`Missing parameters: ${missing.join(", ")}`);
         }
-        return path6;
+        return path7;
       };
     }
     function tokensToFunction(tokens, delimiter, encode2) {
@@ -20393,9 +20393,9 @@ var require_dist2 = __commonJS({
         return encodeValue(value);
       };
     }
-    function match(path4, options = {}) {
+    function match(path5, options = {}) {
       const { decode: decode2 = decodeURIComponent, delimiter = DEFAULT_DELIMITER } = options;
-      const { regexp, keys } = pathToRegexp(path4, options);
+      const { regexp, keys } = pathToRegexp(path5, options);
       const decoders = keys.map((key) => {
         if (decode2 === false)
           return NOOP_VALUE;
@@ -20407,7 +20407,7 @@ var require_dist2 = __commonJS({
         const m = regexp.exec(input);
         if (!m)
           return false;
-        const path5 = m[0];
+        const path6 = m[0];
         const params = /* @__PURE__ */ Object.create(null);
         for (let i = 1; i < m.length; i++) {
           if (m[i] === void 0)
@@ -20416,21 +20416,21 @@ var require_dist2 = __commonJS({
           const decoder = decoders[i - 1];
           params[key.name] = decoder(m[i]);
         }
-        return { path: path5, params };
+        return { path: path6, params };
       };
     }
-    function pathToRegexp(path4, options = {}) {
+    function pathToRegexp(path5, options = {}) {
       const { delimiter = DEFAULT_DELIMITER, end = true, sensitive = false, trailing = true } = options;
       const keys = [];
       let source = "";
       let combinations = 0;
-      function process2(path5) {
-        if (Array.isArray(path5)) {
-          for (const p of path5)
+      function process2(path6) {
+        if (Array.isArray(path6)) {
+          for (const p of path6)
             process2(p);
           return;
         }
-        const data = typeof path5 === "object" ? path5 : parse2(path5, options);
+        const data = typeof path6 === "object" ? path6 : parse2(path6, options);
         flatten(data.tokens, 0, [], (tokens) => {
           if (combinations >= 256) {
             throw new PathError("Too many path combinations", data.originalPath);
@@ -20441,7 +20441,7 @@ var require_dist2 = __commonJS({
           combinations++;
         });
       }
-      process2(path4);
+      process2(path5);
       let pattern = `^(?:${source})`;
       if (trailing)
         pattern += "(?:" + escape2(delimiter) + "$)?";
@@ -20581,18 +20581,18 @@ var require_layer = __commonJS({
     var TRAILING_SLASH_REGEXP = /\/+$/;
     var MATCHING_GROUP_REGEXP = /\((?:\?<(.*?)>)?(?!\?)/g;
     module.exports = Layer;
-    function Layer(path4, options, fn) {
+    function Layer(path5, options, fn) {
       if (!(this instanceof Layer)) {
-        return new Layer(path4, options, fn);
+        return new Layer(path5, options, fn);
       }
-      debug("new %o", path4);
+      debug("new %o", path5);
       const opts = options || {};
       this.handle = fn;
       this.keys = [];
       this.name = fn.name || "<anonymous>";
       this.params = void 0;
       this.path = void 0;
-      this.slash = path4 === "/" && opts.end === false;
+      this.slash = path5 === "/" && opts.end === false;
       function matcher(_path) {
         if (_path instanceof RegExp) {
           const keys = [];
@@ -20631,7 +20631,7 @@ var require_layer = __commonJS({
           decode: decodeParam
         });
       }
-      this.matchers = Array.isArray(path4) ? path4.map(matcher) : [matcher(path4)];
+      this.matchers = Array.isArray(path5) ? path5.map(matcher) : [matcher(path5)];
     }
     Layer.prototype.handleError = function handleError(error2, req, res, next) {
       const fn = this.handle;
@@ -20671,9 +20671,9 @@ var require_layer = __commonJS({
         next(err);
       }
     };
-    Layer.prototype.match = function match(path4) {
+    Layer.prototype.match = function match(path5) {
       let match2;
-      if (path4 != null) {
+      if (path5 != null) {
         if (this.slash) {
           this.params = {};
           this.path = "";
@@ -20681,7 +20681,7 @@ var require_layer = __commonJS({
         }
         let i = 0;
         while (!match2 && i < this.matchers.length) {
-          match2 = this.matchers[i](path4);
+          match2 = this.matchers[i](path5);
           i++;
         }
       }
@@ -20709,13 +20709,13 @@ var require_layer = __commonJS({
         throw err;
       }
     }
-    function loosen(path4) {
-      if (path4 instanceof RegExp || path4 === "/") {
-        return path4;
+    function loosen(path5) {
+      if (path5 instanceof RegExp || path5 === "/") {
+        return path5;
       }
-      return Array.isArray(path4) ? path4.map(function(p) {
+      return Array.isArray(path5) ? path5.map(function(p) {
         return loosen(p);
-      }) : String(path4).replace(TRAILING_SLASH_REGEXP, "");
+      }) : String(path5).replace(TRAILING_SLASH_REGEXP, "");
     }
   }
 });
@@ -20731,9 +20731,9 @@ var require_route = __commonJS({
     var flatten = Array.prototype.flat;
     var methods = METHODS.map((method) => method.toLowerCase());
     module.exports = Route;
-    function Route(path4) {
-      debug("new %o", path4);
-      this.path = path4;
+    function Route(path5) {
+      debug("new %o", path5);
+      this.path = path5;
       this.stack = [];
       this.methods = /* @__PURE__ */ Object.create(null);
     }
@@ -20941,8 +20941,8 @@ var require_router = __commonJS({
         if (++sync > 100) {
           return setImmediate(next, err);
         }
-        const path4 = getPathname(req);
-        if (path4 == null) {
+        const path5 = getPathname(req);
+        if (path5 == null) {
           return done(layerError);
         }
         let layer;
@@ -20950,7 +20950,7 @@ var require_router = __commonJS({
         let route;
         while (match !== true && idx < stack.length) {
           layer = stack[idx++];
-          match = matchLayer(layer, path4);
+          match = matchLayer(layer, path5);
           route = layer.route;
           if (typeof match !== "boolean") {
             layerError = layerError || match;
@@ -20988,18 +20988,18 @@ var require_router = __commonJS({
           } else if (route) {
             layer.handleRequest(req, res, next);
           } else {
-            trimPrefix(layer, layerError, layerPath, path4);
+            trimPrefix(layer, layerError, layerPath, path5);
           }
           sync = 0;
         });
       }
-      function trimPrefix(layer, layerError, layerPath, path4) {
+      function trimPrefix(layer, layerError, layerPath, path5) {
         if (layerPath.length !== 0) {
-          if (layerPath !== path4.substring(0, layerPath.length)) {
+          if (layerPath !== path5.substring(0, layerPath.length)) {
             next(layerError);
             return;
           }
-          const c = path4[layerPath.length];
+          const c = path5[layerPath.length];
           if (c && c !== "/") {
             next(layerError);
             return;
@@ -21023,7 +21023,7 @@ var require_router = __commonJS({
     };
     Router7.prototype.use = function use(handler) {
       let offset = 0;
-      let path4 = "/";
+      let path5 = "/";
       if (typeof handler !== "function") {
         let arg = handler;
         while (Array.isArray(arg) && arg.length !== 0) {
@@ -21031,7 +21031,7 @@ var require_router = __commonJS({
         }
         if (typeof arg !== "function") {
           offset = 1;
-          path4 = handler;
+          path5 = handler;
         }
       }
       const callbacks = flatten.call(slice.call(arguments, offset), Infinity);
@@ -21043,8 +21043,8 @@ var require_router = __commonJS({
         if (typeof fn !== "function") {
           throw new TypeError("argument handler must be a function");
         }
-        debug("use %o %s", path4, fn.name || "<anonymous>");
-        const layer = new Layer(path4, {
+        debug("use %o %s", path5, fn.name || "<anonymous>");
+        const layer = new Layer(path5, {
           sensitive: this.caseSensitive,
           strict: false,
           end: false
@@ -21054,9 +21054,9 @@ var require_router = __commonJS({
       }
       return this;
     };
-    Router7.prototype.route = function route(path4) {
-      const route2 = new Route(path4);
-      const layer = new Layer(path4, {
+    Router7.prototype.route = function route(path5) {
+      const route2 = new Route(path5);
+      const layer = new Layer(path5, {
         sensitive: this.caseSensitive,
         strict: this.strict,
         end: true
@@ -21069,8 +21069,8 @@ var require_router = __commonJS({
       return route2;
     };
     methods.concat("all").forEach(function(method) {
-      Router7.prototype[method] = function(path4) {
-        const route = this.route(path4);
+      Router7.prototype[method] = function(path5) {
+        const route = this.route(path5);
         route[method].apply(route, slice.call(arguments, 1));
         return this;
       };
@@ -21099,9 +21099,9 @@ var require_router = __commonJS({
       const fqdnIndex = url.substring(0, pathLength).indexOf("://");
       return fqdnIndex !== -1 ? url.substring(0, url.indexOf("/", 3 + fqdnIndex)) : void 0;
     }
-    function matchLayer(layer, path4) {
+    function matchLayer(layer, path5) {
       try {
-        return layer.match(path4);
+        return layer.match(path5);
       } catch (err) {
         return err;
       }
@@ -21329,7 +21329,7 @@ var require_application = __commonJS({
     };
     app2.use = function use(fn) {
       var offset = 0;
-      var path4 = "/";
+      var path5 = "/";
       if (typeof fn !== "function") {
         var arg = fn;
         while (Array.isArray(arg) && arg.length !== 0) {
@@ -21337,7 +21337,7 @@ var require_application = __commonJS({
         }
         if (typeof arg !== "function") {
           offset = 1;
-          path4 = fn;
+          path5 = fn;
         }
       }
       var fns = flatten.call(slice.call(arguments, offset), Infinity);
@@ -21347,12 +21347,12 @@ var require_application = __commonJS({
       var router7 = this.router;
       fns.forEach(function(fn2) {
         if (!fn2 || !fn2.handle || !fn2.set) {
-          return router7.use(path4, fn2);
+          return router7.use(path5, fn2);
         }
-        debug(".use app under %s", path4);
-        fn2.mountpath = path4;
+        debug(".use app under %s", path5);
+        fn2.mountpath = path5;
         fn2.parent = this;
-        router7.use(path4, function mounted_app(req, res, next) {
+        router7.use(path5, function mounted_app(req, res, next) {
           var orig = req.app;
           fn2.handle(req, res, function(err) {
             Object.setPrototypeOf(req, orig.request);
@@ -21364,8 +21364,8 @@ var require_application = __commonJS({
       }, this);
       return this;
     };
-    app2.route = function route(path4) {
-      return this.router.route(path4);
+    app2.route = function route(path5) {
+      return this.router.route(path5);
     };
     app2.engine = function engine(ext, fn) {
       if (typeof fn !== "function") {
@@ -21408,7 +21408,7 @@ var require_application = __commonJS({
       }
       return this;
     };
-    app2.path = function path4() {
+    app2.path = function path5() {
       return this.parent ? this.parent.path() + this.mountpath : "";
     };
     app2.enabled = function enabled(setting) {
@@ -21424,17 +21424,17 @@ var require_application = __commonJS({
       return this.set(setting, false);
     };
     methods.forEach(function(method) {
-      app2[method] = function(path4) {
+      app2[method] = function(path5) {
         if (method === "get" && arguments.length === 1) {
-          return this.set(path4);
+          return this.set(path5);
         }
-        var route = this.route(path4);
+        var route = this.route(path5);
         route[method].apply(route, slice.call(arguments, 1));
         return this;
       };
     });
-    app2.all = function all(path4) {
-      var route = this.route(path4);
+    app2.all = function all(path5) {
+      var route = this.route(path5);
       var args = slice.call(arguments, 1);
       for (var i = 0; i < methods.length; i++) {
         route[methods[i]].apply(route, args);
@@ -22280,7 +22280,7 @@ var require_request = __commonJS({
       var subdomains2 = !isIP(hostname) ? hostname.split(".").reverse() : [hostname];
       return subdomains2.slice(offset);
     });
-    defineGetter(req, "path", function path4() {
+    defineGetter(req, "path", function path5() {
       return parse2(this).pathname;
     });
     defineGetter(req, "host", function host() {
@@ -22818,27 +22818,27 @@ var require_send = __commonJS({
     var ms = require_ms();
     var onFinished = require_on_finished();
     var parseRange = require_range_parser();
-    var path4 = __require("path");
+    var path5 = __require("path");
     var statuses = require_statuses();
     var Stream = __require("stream");
     var util = __require("util");
-    var extname = path4.extname;
-    var join = path4.join;
-    var normalize = path4.normalize;
-    var resolve = path4.resolve;
-    var sep = path4.sep;
+    var extname = path5.extname;
+    var join = path5.join;
+    var normalize = path5.normalize;
+    var resolve = path5.resolve;
+    var sep = path5.sep;
     var BYTES_RANGE_REGEXP = /^ *bytes=/;
     var MAX_MAXAGE = 60 * 60 * 24 * 365 * 1e3;
     var UP_PATH_REGEXP = /(?:^|[\\/])\.\.(?:[\\/]|$)/;
     module.exports = send;
-    function send(req, path5, options) {
-      return new SendStream(req, path5, options);
+    function send(req, path6, options) {
+      return new SendStream(req, path6, options);
     }
-    function SendStream(req, path5, options) {
+    function SendStream(req, path6, options) {
       Stream.call(this);
       var opts = options || {};
       this.options = opts;
-      this.path = path5;
+      this.path = path6;
       this.req = req;
       this._acceptRanges = opts.acceptRanges !== void 0 ? Boolean(opts.acceptRanges) : true;
       this._cacheControl = opts.cacheControl !== void 0 ? Boolean(opts.cacheControl) : true;
@@ -22952,10 +22952,10 @@ var require_send = __commonJS({
       var lastModified = this.res.getHeader("Last-Modified");
       return parseHttpDate(lastModified) <= parseHttpDate(ifRange);
     };
-    SendStream.prototype.redirect = function redirect(path5) {
+    SendStream.prototype.redirect = function redirect(path6) {
       var res = this.res;
       if (hasListeners(this, "directory")) {
-        this.emit("directory", res, path5);
+        this.emit("directory", res, path6);
         return;
       }
       if (this.hasTrailingSlash()) {
@@ -22975,38 +22975,38 @@ var require_send = __commonJS({
     SendStream.prototype.pipe = function pipe2(res) {
       var root = this._root;
       this.res = res;
-      var path5 = decode2(this.path);
-      if (path5 === -1) {
+      var path6 = decode2(this.path);
+      if (path6 === -1) {
         this.error(400);
         return res;
       }
-      if (~path5.indexOf("\0")) {
+      if (~path6.indexOf("\0")) {
         this.error(400);
         return res;
       }
       var parts;
       if (root !== null) {
-        if (path5) {
-          path5 = normalize("." + sep + path5);
+        if (path6) {
+          path6 = normalize("." + sep + path6);
         }
-        if (UP_PATH_REGEXP.test(path5)) {
-          debug('malicious path "%s"', path5);
+        if (UP_PATH_REGEXP.test(path6)) {
+          debug('malicious path "%s"', path6);
           this.error(403);
           return res;
         }
-        parts = path5.split(sep);
-        path5 = normalize(join(root, path5));
+        parts = path6.split(sep);
+        path6 = normalize(join(root, path6));
       } else {
-        if (UP_PATH_REGEXP.test(path5)) {
-          debug('malicious path "%s"', path5);
+        if (UP_PATH_REGEXP.test(path6)) {
+          debug('malicious path "%s"', path6);
           this.error(403);
           return res;
         }
-        parts = normalize(path5).split(sep);
-        path5 = resolve(path5);
+        parts = normalize(path6).split(sep);
+        path6 = resolve(path6);
       }
       if (containsDotFile(parts)) {
-        debug('%s dotfile "%s"', this._dotfiles, path5);
+        debug('%s dotfile "%s"', this._dotfiles, path6);
         switch (this._dotfiles) {
           case "allow":
             break;
@@ -23020,13 +23020,13 @@ var require_send = __commonJS({
         }
       }
       if (this._index.length && this.hasTrailingSlash()) {
-        this.sendIndex(path5);
+        this.sendIndex(path6);
         return res;
       }
-      this.sendFile(path5);
+      this.sendFile(path6);
       return res;
     };
-    SendStream.prototype.send = function send2(path5, stat) {
+    SendStream.prototype.send = function send2(path6, stat) {
       var len = stat.size;
       var options = this.options;
       var opts = {};
@@ -23038,9 +23038,9 @@ var require_send = __commonJS({
         this.headersAlreadySent();
         return;
       }
-      debug('pipe "%s"', path5);
-      this.setHeader(path5, stat);
-      this.type(path5);
+      debug('pipe "%s"', path6);
+      this.setHeader(path6, stat);
+      this.type(path6);
       if (this.isConditionalGET()) {
         if (this.isPreconditionFailure()) {
           this.error(412);
@@ -23089,28 +23089,28 @@ var require_send = __commonJS({
         res.end();
         return;
       }
-      this.stream(path5, opts);
+      this.stream(path6, opts);
     };
-    SendStream.prototype.sendFile = function sendFile(path5) {
+    SendStream.prototype.sendFile = function sendFile(path6) {
       var i = 0;
       var self = this;
-      debug('stat "%s"', path5);
-      fs.stat(path5, function onstat(err, stat) {
-        var pathEndsWithSep = path5[path5.length - 1] === sep;
-        if (err && err.code === "ENOENT" && !extname(path5) && !pathEndsWithSep) {
+      debug('stat "%s"', path6);
+      fs.stat(path6, function onstat(err, stat) {
+        var pathEndsWithSep = path6[path6.length - 1] === sep;
+        if (err && err.code === "ENOENT" && !extname(path6) && !pathEndsWithSep) {
           return next(err);
         }
         if (err) return self.onStatError(err);
-        if (stat.isDirectory()) return self.redirect(path5);
+        if (stat.isDirectory()) return self.redirect(path6);
         if (pathEndsWithSep) return self.error(404);
-        self.emit("file", path5, stat);
-        self.send(path5, stat);
+        self.emit("file", path6, stat);
+        self.send(path6, stat);
       });
       function next(err) {
         if (self._extensions.length <= i) {
           return err ? self.onStatError(err) : self.error(404);
         }
-        var p = path5 + "." + self._extensions[i++];
+        var p = path6 + "." + self._extensions[i++];
         debug('stat "%s"', p);
         fs.stat(p, function(err2, stat) {
           if (err2) return next(err2);
@@ -23120,7 +23120,7 @@ var require_send = __commonJS({
         });
       }
     };
-    SendStream.prototype.sendIndex = function sendIndex(path5) {
+    SendStream.prototype.sendIndex = function sendIndex(path6) {
       var i = -1;
       var self = this;
       function next(err) {
@@ -23128,7 +23128,7 @@ var require_send = __commonJS({
           if (err) return self.onStatError(err);
           return self.error(404);
         }
-        var p = join(path5, self._index[i]);
+        var p = join(path6, self._index[i]);
         debug('stat "%s"', p);
         fs.stat(p, function(err2, stat) {
           if (err2) return next(err2);
@@ -23139,10 +23139,10 @@ var require_send = __commonJS({
       }
       next();
     };
-    SendStream.prototype.stream = function stream(path5, options) {
+    SendStream.prototype.stream = function stream(path6, options) {
       var self = this;
       var res = this.res;
-      var stream2 = fs.createReadStream(path5, options);
+      var stream2 = fs.createReadStream(path6, options);
       this.emit("stream", stream2);
       stream2.pipe(res);
       function cleanup() {
@@ -23157,17 +23157,17 @@ var require_send = __commonJS({
         self.emit("end");
       });
     };
-    SendStream.prototype.type = function type(path5) {
+    SendStream.prototype.type = function type(path6) {
       var res = this.res;
       if (res.getHeader("Content-Type")) return;
-      var ext = extname(path5);
+      var ext = extname(path6);
       var type2 = mime.contentType(ext) || "application/octet-stream";
       debug("content-type %s", type2);
       res.setHeader("Content-Type", type2);
     };
-    SendStream.prototype.setHeader = function setHeader(path5, stat) {
+    SendStream.prototype.setHeader = function setHeader(path6, stat) {
       var res = this.res;
-      this.emit("headers", res, path5, stat);
+      this.emit("headers", res, path6, stat);
       if (this._acceptRanges && !res.getHeader("Accept-Ranges")) {
         debug("accept ranges");
         res.setHeader("Accept-Ranges", "bytes");
@@ -23225,9 +23225,9 @@ var require_send = __commonJS({
       }
       return err instanceof Error ? createError(status, err, { expose: false }) : createError(status, err);
     }
-    function decode2(path5) {
+    function decode2(path6) {
       try {
-        return decodeURIComponent(path5);
+        return decodeURIComponent(path6);
       } catch (err) {
         return -1;
       }
@@ -23371,7 +23371,7 @@ var require_response = __commonJS({
     var http = __require("node:http");
     var onFinished = require_on_finished();
     var mime = require_mime_types();
-    var path4 = __require("node:path");
+    var path5 = __require("node:path");
     var pathIsAbsolute = __require("node:path").isAbsolute;
     var statuses = require_statuses();
     var sign = require_cookie_signature().sign;
@@ -23380,9 +23380,9 @@ var require_response = __commonJS({
     var setCharset = require_utils3().setCharset;
     var cookie = require_cookie();
     var send = require_send();
-    var extname = path4.extname;
-    var resolve = path4.resolve;
-    var basename = path4.basename;
+    var extname = path5.extname;
+    var resolve = path5.resolve;
+    var basename = path5.basename;
     var vary = require_vary();
     var { Buffer: Buffer2 } = __require("node:buffer");
     var res = Object.create(http.ServerResponse.prototype);
@@ -23526,26 +23526,26 @@ var require_response = __commonJS({
       this.type("txt");
       return this.send(body);
     };
-    res.sendFile = function sendFile(path5, options, callback) {
+    res.sendFile = function sendFile(path6, options, callback) {
       var done = callback;
       var req = this.req;
       var res2 = this;
       var next = req.next;
       var opts = options || {};
-      if (!path5) {
+      if (!path6) {
         throw new TypeError("path argument is required to res.sendFile");
       }
-      if (typeof path5 !== "string") {
+      if (typeof path6 !== "string") {
         throw new TypeError("path must be a string to res.sendFile");
       }
       if (typeof options === "function") {
         done = options;
         opts = {};
       }
-      if (!opts.root && !pathIsAbsolute(path5)) {
+      if (!opts.root && !pathIsAbsolute(path6)) {
         throw new TypeError("path must be absolute or specify root to res.sendFile");
       }
-      var pathname = encodeURI(path5);
+      var pathname = encodeURI(path6);
       opts.etag = this.app.enabled("etag");
       var file = send(req, pathname, opts);
       sendfile(res2, file, opts, function(err) {
@@ -23556,7 +23556,7 @@ var require_response = __commonJS({
         }
       });
     };
-    res.download = function download(path5, filename, options, callback) {
+    res.download = function download(path6, filename, options, callback) {
       var done = callback;
       var name = filename;
       var opts = options || null;
@@ -23573,7 +23573,7 @@ var require_response = __commonJS({
         opts = filename;
       }
       var headers = {
-        "Content-Disposition": contentDisposition.create(basename(name || path5))
+        "Content-Disposition": contentDisposition.create(basename(name || path6))
       };
       if (opts && opts.headers) {
         var keys = Object.keys(opts.headers);
@@ -23586,7 +23586,7 @@ var require_response = __commonJS({
       }
       opts = Object.create(opts);
       opts.headers = headers;
-      var fullPath = !opts.root ? resolve(path5) : path5;
+      var fullPath = !opts.root ? resolve(path6) : path6;
       return this.sendFile(fullPath, opts, done);
     };
     res.contentType = res.type = function contentType(type) {
@@ -23870,11 +23870,11 @@ var require_serve_static = __commonJS({
         }
         var forwardError = !fallthrough;
         var originalUrl = parseUrl.original(req);
-        var path4 = parseUrl(req).pathname;
-        if (path4 === "/" && originalUrl.pathname.substr(-1) !== "/") {
-          path4 = "";
+        var path5 = parseUrl(req).pathname;
+        if (path5 === "/" && originalUrl.pathname.substr(-1) !== "/") {
+          path5 = "";
         }
-        var stream = send(req, path4, opts);
+        var stream = send(req, path5, opts);
         stream.on("directory", onDirectory);
         if (setHeaders) {
           stream.on("headers", setHeaders);
@@ -24522,8 +24522,8 @@ var require_req = __commonJS({
       if (req.originalUrl) {
         _req.url = req.originalUrl;
       } else {
-        const path4 = req.path;
-        _req.url = typeof path4 === "string" ? path4 : req.url ? req.url.path || req.url : void 0;
+        const path5 = req.path;
+        _req.url = typeof path5 === "string" ? path5 : req.url ? req.url.path || req.url : void 0;
       }
       if (req.query) {
         _req.query = req.query;
@@ -24688,14 +24688,14 @@ var require_redact = __commonJS({
       }
       return obj;
     }
-    function parsePath(path4) {
+    function parsePath(path5) {
       const parts = [];
       let current = "";
       let inBrackets = false;
       let inQuotes = false;
       let quoteChar = "";
-      for (let i = 0; i < path4.length; i++) {
-        const char = path4[i];
+      for (let i = 0; i < path5.length; i++) {
+        const char = path5[i];
         if (!inBrackets && char === ".") {
           if (current) {
             parts.push(current);
@@ -24826,10 +24826,10 @@ var require_redact = __commonJS({
       return current;
     }
     function redactPaths(obj, paths, censor, remove = false) {
-      for (const path4 of paths) {
-        const parts = parsePath(path4);
+      for (const path5 of paths) {
+        const parts = parsePath(path5);
         if (parts.includes("*")) {
-          redactWildcardPath(obj, parts, censor, path4, remove);
+          redactWildcardPath(obj, parts, censor, path5, remove);
         } else {
           if (remove) {
             removeKey(obj, parts);
@@ -24914,8 +24914,8 @@ var require_redact = __commonJS({
           }
         } else {
           if (afterWildcard.includes("*")) {
-            const wrappedCensor = typeof censor === "function" ? (value, path4) => {
-              const fullPath = [...pathArray.slice(0, pathLength), ...path4];
+            const wrappedCensor = typeof censor === "function" ? (value, path5) => {
+              const fullPath = [...pathArray.slice(0, pathLength), ...path5];
               return censor(value, fullPath);
             } : censor;
             redactWildcardPath(current, afterWildcard, wrappedCensor, originalPath, remove);
@@ -24950,8 +24950,8 @@ var require_redact = __commonJS({
         return null;
       }
       const pathStructure = /* @__PURE__ */ new Map();
-      for (const path4 of pathsToClone) {
-        const parts = parsePath(path4);
+      for (const path5 of pathsToClone) {
+        const parts = parsePath(path5);
         let current = pathStructure;
         for (let i = 0; i < parts.length; i++) {
           const part = parts[i];
@@ -25003,24 +25003,24 @@ var require_redact = __commonJS({
       }
       return cloneSelectively(obj, pathStructure);
     }
-    function validatePath(path4) {
-      if (typeof path4 !== "string") {
+    function validatePath(path5) {
+      if (typeof path5 !== "string") {
         throw new Error("Paths must be (non-empty) strings");
       }
-      if (path4 === "") {
+      if (path5 === "") {
         throw new Error("Invalid redaction path ()");
       }
-      if (path4.includes("..")) {
-        throw new Error(`Invalid redaction path (${path4})`);
+      if (path5.includes("..")) {
+        throw new Error(`Invalid redaction path (${path5})`);
       }
-      if (path4.includes(",")) {
-        throw new Error(`Invalid redaction path (${path4})`);
+      if (path5.includes(",")) {
+        throw new Error(`Invalid redaction path (${path5})`);
       }
       let bracketCount = 0;
       let inQuotes = false;
       let quoteChar = "";
-      for (let i = 0; i < path4.length; i++) {
-        const char = path4[i];
+      for (let i = 0; i < path5.length; i++) {
+        const char = path5[i];
         if ((char === '"' || char === "'") && bracketCount > 0) {
           if (!inQuotes) {
             inQuotes = true;
@@ -25034,20 +25034,20 @@ var require_redact = __commonJS({
         } else if (char === "]" && !inQuotes) {
           bracketCount--;
           if (bracketCount < 0) {
-            throw new Error(`Invalid redaction path (${path4})`);
+            throw new Error(`Invalid redaction path (${path5})`);
           }
         }
       }
       if (bracketCount !== 0) {
-        throw new Error(`Invalid redaction path (${path4})`);
+        throw new Error(`Invalid redaction path (${path5})`);
       }
     }
     function validatePaths(paths) {
       if (!Array.isArray(paths)) {
         throw new TypeError("paths must be an array");
       }
-      for (const path4 of paths) {
-        validatePath(path4);
+      for (const path5 of paths) {
+        validatePath(path5);
       }
     }
     function slowRedact(options = {}) {
@@ -25215,8 +25215,8 @@ var require_redaction = __commonJS({
         if (shape[k] === null) {
           o[k] = (value) => topCensor(value, [k]);
         } else {
-          const wrappedCensor = typeof censor === "function" ? (value, path4) => {
-            return censor(value, [k, ...path4]);
+          const wrappedCensor = typeof censor === "function" ? (value, path5) => {
+            return censor(value, [k, ...path5]);
           } : censor;
           o[k] = Redact({
             paths: shape[k],
@@ -25437,7 +25437,7 @@ var require_sonic_boom = __commonJS({
     var fs = __require("fs");
     var EventEmitter = __require("events");
     var inherits = __require("util").inherits;
-    var path4 = __require("path");
+    var path5 = __require("path");
     var sleep = require_atomic_sleep();
     var assert2 = __require("assert");
     var BUSY_WRITE_TIMEOUT = 100;
@@ -25491,7 +25491,7 @@ var require_sonic_boom = __commonJS({
       const mode = sonic.mode;
       if (sonic.sync) {
         try {
-          if (sonic.mkdir) fs.mkdirSync(path4.dirname(file), { recursive: true });
+          if (sonic.mkdir) fs.mkdirSync(path5.dirname(file), { recursive: true });
           const fd = fs.openSync(file, flags, mode);
           fileOpened(null, fd);
         } catch (err) {
@@ -25499,7 +25499,7 @@ var require_sonic_boom = __commonJS({
           throw err;
         }
       } else if (sonic.mkdir) {
-        fs.mkdir(path4.dirname(file), { recursive: true }, (err) => {
+        fs.mkdir(path5.dirname(file), { recursive: true }, (err) => {
           if (err) return fileOpened(err);
           fs.open(file, flags, mode, fileOpened);
         });
@@ -25511,7 +25511,7 @@ var require_sonic_boom = __commonJS({
       if (!(this instanceof SonicBoom)) {
         return new SonicBoom(opts);
       }
-      let { fd, dest, minLength, maxLength, maxWrite, periodicFlush, sync, append = true, mkdir: mkdir3, retryEAGAIN, fsync, contentMode, mode } = opts || {};
+      let { fd, dest, minLength, maxLength, maxWrite, periodicFlush, sync, append = true, mkdir: mkdir4, retryEAGAIN, fsync, contentMode, mode } = opts || {};
       fd = fd || dest;
       this._len = 0;
       this.fd = -1;
@@ -25536,7 +25536,7 @@ var require_sonic_boom = __commonJS({
       this.append = append || false;
       this.mode = mode;
       this.retryEAGAIN = retryEAGAIN || (() => true);
-      this.mkdir = mkdir3 || false;
+      this.mkdir = mkdir4 || false;
       let fsWriteSync;
       let fsWrite;
       if (contentMode === kContentModeBuffer) {
@@ -28359,9 +28359,9 @@ var require_pino = __commonJS({
   "../../node_modules/.pnpm/pino@9.14.0/node_modules/pino/pino.js"(exports, module) {
     function pinoBundlerAbsolutePath(p) {
       try {
-        const path4 = __require("path");
+        const path5 = __require("path");
         const outputDir = "/home/user/Remote-Desktop-for-Windows/artifacts/api-server/dist";
-        return path4.resolve(outputDir, p.replace(/^\.\//, ""));
+        return path5.resolve(outputDir, p.replace(/^\.\//, ""));
       } catch (e) {
         const f = new Function("p", "return new URL(p, import.meta.url).pathname");
         return f(p);
@@ -32267,7 +32267,7 @@ var require_split2 = __commonJS({
 var require_helper = __commonJS({
   "../../node_modules/.pnpm/pgpass@1.0.5/node_modules/pgpass/lib/helper.js"(exports, module) {
     "use strict";
-    var path4 = __require("path");
+    var path5 = __require("path");
     var Stream = __require("stream").Stream;
     var split = require_split2();
     var util = __require("util");
@@ -32306,7 +32306,7 @@ var require_helper = __commonJS({
     };
     module.exports.getFileName = function(rawEnv) {
       var env = rawEnv || process.env;
-      var file = env.PGPASSFILE || (isWin ? path4.join(env.APPDATA || "./", "postgresql", "pgpass.conf") : path4.join(env.HOME || "./", ".pgpass"));
+      var file = env.PGPASSFILE || (isWin ? path5.join(env.APPDATA || "./", "postgresql", "pgpass.conf") : path5.join(env.HOME || "./", ".pgpass"));
       return file;
     };
     module.exports.usePgPass = function(stats, fname) {
@@ -32438,7 +32438,7 @@ var require_helper = __commonJS({
 var require_lib4 = __commonJS({
   "../../node_modules/.pnpm/pgpass@1.0.5/node_modules/pgpass/lib/index.js"(exports, module) {
     "use strict";
-    var path4 = __require("path");
+    var path5 = __require("path");
     var fs = __require("fs");
     var helper = require_helper();
     module.exports = function(connInfo, cb) {
@@ -34416,10 +34416,10 @@ function mergeDefs(...defs) {
 function cloneDef(schema) {
   return mergeDefs(schema._zod.def);
 }
-function getElementAtPath(obj, path4) {
-  if (!path4)
+function getElementAtPath(obj, path5) {
+  if (!path5)
     return obj;
-  return path4.reduce((acc, key) => acc?.[key], obj);
+  return path5.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -34759,11 +34759,11 @@ function explicitlyAborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path4, issues) {
+function prefixIssues(path5, issues) {
   return issues.map((iss) => {
     var _a3;
     (_a3 = iss).path ?? (_a3.path = []);
-    iss.path.unshift(path4);
+    iss.path.unshift(path5);
     return iss;
   });
 }
@@ -35221,16 +35221,16 @@ function flattenError(error2, mapper = (issue2) => issue2.message) {
 }
 function formatError(error2, mapper = (issue2) => issue2.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error3, path4 = []) => {
+  const processError = (error3, path5 = []) => {
     for (const issue2 of error3.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path4, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path5, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path4, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path5, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path4, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path5, ...issue2.path]);
       } else {
-        const fullpath = [...path4, ...issue2.path];
+        const fullpath = [...path5, ...issue2.path];
         if (fullpath.length === 0) {
           fieldErrors._errors.push(mapper(issue2));
         } else {
@@ -40445,8 +40445,9 @@ var GetMsfwrLinkInfoResponse = object({
   "busy": boolean2(),
   "viewers": int().min(getMsfwrLinkInfoResponseViewersMin).optional().describe("People connected through this URL right now"),
   "expiresAt": number2(),
-  "accessPinRequired": boolean2().optional().describe("Viewers must also enter the 4-digit Access PIN the company sees"),
-  "blocked": boolean2().optional().describe("Too many wrong Access PINs; the link no longer works")
+  "accessPinRequired": boolean2().optional().describe("Viewers must also enter a company's 4-digit Access PIN"),
+  "blocked": boolean2().optional().describe("Too many wrong Access PINs; the link no longer works"),
+  "claimed": boolean2().optional().describe("A company has already authorized this URL with its PIN")
 });
 var joinMsfwrLinkBodyCodeRegExp = new RegExp("^L[0-9A-F]{11}$");
 var joinMsfwrLinkBodyPinMax = 12;
@@ -40454,15 +40455,14 @@ var joinMsfwrLinkBodyAccessPinMax = 12;
 var JoinMsfwrLinkBody = object({
   "code": string2().regex(joinMsfwrLinkBodyCodeRegExp),
   "pin": string2().max(joinMsfwrLinkBodyPinMax),
-  "accessPin": string2().max(joinMsfwrLinkBodyAccessPinMax).optional().describe("The 4-digit Access PIN from the company that manages the PC")
+  "accessPin": string2().max(joinMsfwrLinkBodyAccessPinMax).optional().describe("The 4-digit Access PIN from the company that authorizes the session")
 });
 var JoinMsfwrLinkResponse = object({
   "token": string2(),
   "verification": string2(),
   "preapproved": boolean2()
 });
-var getMsfwrInboxResponseLinksItemAccessPinRegExp = new RegExp("^[0-9]{4}$");
-var getMsfwrInboxResponseLinksItemSessionsMin = 0;
+var getMsfwrInboxResponseAccessPinPinRegExp = new RegExp("^[0-9]{4}$");
 var GetMsfwrInboxResponse = object({
   "raId": string2(),
   "company": string2(),
@@ -40481,18 +40481,38 @@ var GetMsfwrInboxResponse = object({
     "name": string2(),
     "state": _enum(["online", "busy"])
   })),
+  "accessPin": object({
+    "pin": string2().regex(getMsfwrInboxResponseAccessPinPinRegExp),
+    "issuedAt": number2(),
+    "expiresAt": number2().describe("A new PIN is issued after this unless this one is used first")
+  }).optional(),
   "links": array(object({
-    "id": string2(),
-    "name": string2(),
-    "accessPin": string2().regex(getMsfwrInboxResponseLinksItemAccessPinRegExp),
+    "code": string2().describe("The URL is /r/<code>"),
+    "pcName": string2(),
+    "pcRa": string2().optional(),
     "createdAt": number2(),
     "expiresAt": number2(),
-    "sessions": int().min(getMsfwrInboxResponseLinksItemSessionsMin),
+    "ttlHours": number2(),
+    "revokedAt": number2().optional(),
+    "claim": object({
+      "accountId": string2(),
+      "company": string2(),
+      "raId": string2(),
+      "pin": string2(),
+      "at": number2()
+    }).optional(),
+    "sessions": array(object({
+      "startedAt": number2(),
+      "endedAt": number2(),
+      "durationMs": number2(),
+      "viewers": int()
+    })),
+    "status": _enum(["active", "expired", "cleared"]),
     "online": boolean2(),
-    "locked": boolean2().describe("Locked for 15 minutes after wrong codes or PINs"),
-    "blocked": boolean2().describe("Too many wrong Access PINs; the PC must create a new URL"),
-    "ra": string2().optional().describe("Admin console only; the RA ID the PC points to")
-  })).optional().describe("Active remote access URLs of PCs pointed to this RA ID, with their Access PINs")
+    "viewers": int(),
+    "locked": boolean2(),
+    "blocked": boolean2()
+  })).optional().describe("Remote access URLs this company authorized with its PIN")
 });
 var acceptMsfwrRequestBodyIdMax = 64;
 var AcceptMsfwrRequestBody = object({
@@ -40615,8 +40635,6 @@ var DeleteUserParams = object({
 var DeleteUserResponse = _void2();
 var getAdminOverviewResponseLiveItemViewersMin = 0;
 var getAdminOverviewResponsePcsItemViewersMin = 0;
-var getAdminOverviewResponseLinksItemAccessPinRegExp = new RegExp("^[0-9]{4}$");
-var getAdminOverviewResponseLinksItemSessionsMin = 0;
 var GetAdminOverviewResponse = object({
   "live": array(object({
     "id": string2(),
@@ -40658,17 +40676,32 @@ var GetAdminOverviewResponse = object({
   })),
   "storage": string2(),
   "links": array(object({
-    "id": string2(),
-    "name": string2(),
-    "accessPin": string2().regex(getAdminOverviewResponseLinksItemAccessPinRegExp),
+    "code": string2().describe("The URL is /r/<code>"),
+    "pcName": string2(),
+    "pcRa": string2().optional(),
     "createdAt": number2(),
     "expiresAt": number2(),
-    "sessions": int().min(getAdminOverviewResponseLinksItemSessionsMin),
+    "ttlHours": number2(),
+    "revokedAt": number2().optional(),
+    "claim": object({
+      "accountId": string2(),
+      "company": string2(),
+      "raId": string2(),
+      "pin": string2(),
+      "at": number2()
+    }).optional(),
+    "sessions": array(object({
+      "startedAt": number2(),
+      "endedAt": number2(),
+      "durationMs": number2(),
+      "viewers": int()
+    })),
+    "status": _enum(["active", "expired", "cleared"]),
     "online": boolean2(),
-    "locked": boolean2().describe("Locked for 15 minutes after wrong codes or PINs"),
-    "blocked": boolean2().describe("Too many wrong Access PINs; the PC must create a new URL"),
-    "ra": string2().optional().describe("Admin console only; the RA ID the PC points to")
-  })).optional().describe("Active remote access URLs on this relay with their Access PINs")
+    "viewers": int(),
+    "locked": boolean2(),
+    "blocked": boolean2()
+  })).optional().describe("Every remote access URL created on this relay, with the company that authorized it")
 });
 var joinMsfwrBodyCodeRegExp = new RegExp("^[A-F0-9]{12}$");
 var JoinMsfwrBody = object({
@@ -40740,7 +40773,7 @@ var health_default = router;
 var import_express2 = __toESM(require_express2(), 1);
 
 // src/lib/msfwr.ts
-import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 var inviteTTL = 3 * 6e4;
 var sessionTTL = 30 * 6e4;
 var peerTTL = 2e4;
@@ -40750,6 +40783,7 @@ var linkTTLs = [1, 2, 4, 5, 8, 12, 24, 48, 72, 120];
 var linkTries = 8;
 var linkViewers = 10;
 var lockMs = 15 * 6e4;
+var companyPinTTL = 3 * 6e4;
 var accessPinTries = 5;
 var accessPinLimit = 20;
 var maxRecords = 400;
@@ -40779,12 +40813,14 @@ function publicLink(link) {
   const { key: _key, failures: _f, lockedUntil: _l, ra: _ra, pinFailures: _pf, pinFailuresTotal: _pt, ...rest } = link;
   return rest;
 }
-function accessPinFor(secret, link) {
-  const digest = createHmac("sha256", secret).update("msfwr-access-pin:" + link.key + ":" + link.id).digest();
-  return String(digest.readUIntBE(0, 6) % 1e4).padStart(4, "0");
-}
 function createMsfwrStore(clock = Date.now, hooks = {}) {
-  let pinSecret = randomBytes(32).toString("base64url");
+  const companyPins = /* @__PURE__ */ new Map();
+  const claims = /* @__PURE__ */ new Map();
+  const activePins = () => {
+    const now = clock();
+    for (const [id, p] of companyPins) if (p.expiresAt <= now) companyPins.delete(id);
+    return companyPins;
+  };
   const codes = /* @__PURE__ */ new Map();
   const peers = /* @__PURE__ */ new Map();
   const standings = /* @__PURE__ */ new Map();
@@ -40808,6 +40844,7 @@ function createMsfwrStore(clock = Date.now, hooks = {}) {
       hooks.onEnd({
         raId: s.ra ?? "",
         pcName: s.name || s.call?.name || "",
+        link: s.linkCode,
         mode: s.via === "link" ? "link" : s.preapproved ? "unattended" : "attended",
         operator: s.operator?.name ?? "",
         operatorId: s.operator?.id,
@@ -40924,29 +40961,64 @@ function createMsfwrStore(clock = Date.now, hooks = {}) {
     const s = standings.get(standingCode(link.key));
     return s && !expired(s) ? s : void 0;
   };
-  const accessPin = (link) => accessPinFor(pinSecret, link);
-  const linkRa = (link) => linkHost(link)?.ra ?? link.ra;
   const blocked = (link) => link.pinFailuresTotal >= accessPinLimit;
-  const companyLink = (link) => {
+  const pinOwner = (pin) => {
+    for (const p of activePins().values()) if (samePin(pin, p.pin)) return p.company;
+    return void 0;
+  };
+  const linkStatusOf = (link) => {
     const s = linkHost(link);
+    const shared = !!s && s.state === "live" && s.via === "link";
     return {
-      id: pcId(link.code),
-      name: link.name || s?.name || "",
-      accessPin: accessPin(link),
-      createdAt: link.createdAt,
-      expiresAt: link.expiresAt,
-      sessions: link.sessions,
       online: !!s,
+      viewers: shared ? s.viewers.size : 0,
       locked: link.lockedUntil > clock(),
       blocked: blocked(link),
-      ra: linkRa(link)
+      sessions: link.sessions,
+      active: true
     };
   };
   const store2 = {
     sweep,
     end,
-    setPinSecret(secret) {
-      if (secret) pinSecret = secret;
+    // The company's current PIN, issued on first ask and replaced once it is
+    // used or companyPinTTL passes.
+    companyPin(company) {
+      const pins = activePins();
+      const current = pins.get(company.id);
+      if (current) {
+        current.company = company;
+        return { pin: current.pin, issuedAt: current.issuedAt, expiresAt: current.expiresAt };
+      }
+      const taken = new Set([...pins.values()].map((p) => p.pin));
+      let pin;
+      do {
+        pin = String(randomInt(0, 1e4)).padStart(4, "0");
+      } while (taken.has(pin));
+      const now = clock();
+      const issued = { pin, issuedAt: now, expiresAt: now + companyPinTTL, company };
+      pins.set(company.id, issued);
+      return { pin, issuedAt: now, expiresAt: issued.expiresAt };
+    },
+    // Drops a company's current PIN (account disabled or removed).
+    dropCompanyPin(accountId) {
+      companyPins.delete(accountId);
+    },
+    // Claims recorded before a restart.
+    restoreClaims(list) {
+      for (const { code, claim: claim2 } of list) if (!claims.has(code)) claims.set(code, claim2);
+    },
+    claimOf(code) {
+      return claims.get(code.toUpperCase());
+    },
+    // Live state of the given link codes, for the URL register views.
+    linkStates(codes2) {
+      const out = /* @__PURE__ */ new Map();
+      for (const code of codes2) {
+        const link = findLink(code);
+        if (link) out.set(code, linkStatusOf(link));
+      }
+      return out;
     },
     invite() {
       sweep();
@@ -41106,6 +41178,10 @@ function createMsfwrStore(clock = Date.now, hooks = {}) {
         pinFailuresTotal: 0
       };
       links.set(link.code, link);
+      try {
+        hooks.onLinkCreated?.({ code: link.code, name: link.name, ra: link.ra, createdAt: link.createdAt, expiresAt: link.expiresAt, ttlHours: link.ttlHours });
+      } catch {
+      }
       return publicLink(link);
     },
     // The PC re-sends its saved link each time it registers, so a link
@@ -41150,6 +41226,10 @@ function createMsfwrStore(clock = Date.now, hooks = {}) {
       const link = linkFor(id, key);
       if (!link) return false;
       links.delete(link.code);
+      try {
+        hooks.onLinkRevoked?.(link.code, clock());
+      } catch {
+      }
       return true;
     },
     // What the link page shows before the access code is entered.
@@ -41166,14 +41246,21 @@ function createMsfwrStore(clock = Date.now, hooks = {}) {
         viewers: shared ? s.viewers.size : 0,
         expiresAt: link.expiresAt,
         accessPinRequired: true,
-        blocked: blocked(link)
+        blocked: blocked(link),
+        claimed: claims.has(link.code)
       };
     },
-    // Active links of PCs that point to this RA ID, with their Access PINs,
-    // for the company's own view.
-    companyLinks(raId) {
-      sweep();
-      return [...links.values()].filter((l) => linkRa(l) === raId).map(companyLink).map(({ ra: _ra, ...rest }) => rest).sort((a, b) => b.createdAt - a.createdAt);
+    // The company a PIN would author (or has authored) this link for, without
+    // changing anything, so the route can check that company's subscription
+    // before connecting.
+    linkAuthor(code, pin) {
+      const link = findLink(code);
+      const given = String(pin ?? "").replace(/\D/g, "");
+      if (!link || given.length !== 4) return void 0;
+      const claim2 = claims.get(link.code);
+      if (claim2) return samePin(given, claim2.pin) ? { accountId: claim2.accountId, raId: claim2.raId } : void 0;
+      const owner = pinOwner(given);
+      return owner ? { accountId: owner.id, raId: owner.raId } : void 0;
     },
     // The RA ID of the PC behind a link code, so the route can enforce that
     // company's subscription before opening a session. Undefined when the
@@ -41183,8 +41270,9 @@ function createMsfwrStore(clock = Date.now, hooks = {}) {
       if (!link) return void 0;
       return linkHost(link)?.ra;
     },
-    // Opens a session through a link once its access code and its Access PIN
-    // (from the company) both match.
+    // Opens a session through a link once its access code and a company's
+    // Access PIN both match. The first company PIN used authors the link for
+    // that company; afterwards only the same PIN opens it.
     linkJoin(code, pin, accessPinValue) {
       const link = findLink(code);
       if (!link) return { error: "missing" };
@@ -41202,7 +41290,9 @@ function createMsfwrStore(clock = Date.now, hooks = {}) {
       link.failures = 0;
       const given = String(accessPinValue ?? "").replace(/\D/g, "");
       if (!given) return { error: "access-pin-required" };
-      if (!samePin(given, accessPin(link))) {
+      let claim2 = claims.get(link.code);
+      const owner = claim2 ? void 0 : given.length === 4 ? pinOwner(given) : void 0;
+      if (claim2 ? !samePin(given, claim2.pin) : !owner) {
         link.pinFailures += 1;
         link.pinFailuresTotal += 1;
         if (blocked(link)) return { error: "blocked" };
@@ -41215,16 +41305,29 @@ function createMsfwrStore(clock = Date.now, hooks = {}) {
       link.pinFailures = 0;
       const s = linkHost(link);
       if (!s) return { error: "offline" };
-      if (s.state === "live" && s.via === "link") {
-        if (s.viewers.size >= linkViewers) return { error: "full" };
-        link.sessions += 1;
-        return { viewer: { token: addViewer(s), verification: "", preapproved: true }, name: s.name ?? link.name };
+      const busy = s.state === "live" && s.via === "link" ? s.viewers.size >= linkViewers : s.state !== "waiting";
+      if (busy) return { error: s.state === "live" && s.via === "link" ? "full" : "busy" };
+      let claimed = false;
+      if (!claim2 && owner) {
+        claim2 = { accountId: owner.id, company: owner.name, raId: owner.raId, pin: given, at: now };
+        claims.set(link.code, claim2);
+        companyPins.delete(owner.id);
+        claimed = true;
+        try {
+          hooks.onLinkClaimed?.(link.code, claim2);
+        } catch {
+        }
       }
-      if (s.state !== "waiting") return { error: "busy" };
-      const viewer = store2.join(s.code, void 0, "link");
+      const operator = { id: claim2.accountId, name: claim2.company, raId: claim2.raId };
+      if (s.state === "live" && s.via === "link") {
+        link.sessions += 1;
+        return { viewer: { token: addViewer(s), verification: "", preapproved: true }, name: s.name ?? link.name, claim: claim2, claimed };
+      }
+      const viewer = store2.join(s.code, operator, "link");
       if (!viewer) return { error: "offline" };
+      s.linkCode = link.code;
       link.sessions += 1;
-      return { viewer, name: s.name ?? link.name };
+      return { viewer, name: s.name ?? link.name, claim: claim2, claimed };
     },
     authenticate(header, role) {
       const token = /^Bearer ([\w-]{43})$/.exec(header ?? "")?.[1];
@@ -41291,7 +41394,7 @@ function createMsfwrStore(clock = Date.now, hooks = {}) {
         live: list.filter((s) => s.state !== "waiting").map(view),
         pcs: [...standings.values()].filter((s) => !expired(s)).map(view),
         requests: records.slice(0, 100).map(publicRecord),
-        links: [...links.values()].map(companyLink).sort((a, b) => b.createdAt - a.createdAt).slice(0, 200)
+        links: [...links.values()].map((l) => ({ code: l.code, ...linkStatusOf(l) }))
       };
     },
     endById(id) {
@@ -41312,10 +41415,10 @@ function createMsfwrStore(clock = Date.now, hooks = {}) {
 }
 
 // src/lib/portal.ts
-import path3 from "node:path";
+import path4 from "node:path";
 
 // src/lib/accounts.ts
-import { createHmac as createHmac2, randomBytes as randomBytes2, randomInt as randomInt2, scrypt as scryptCb, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
+import { createHmac, randomBytes as randomBytes2, randomInt as randomInt2, scrypt as scryptCb, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -41415,15 +41518,10 @@ async function createAccounts(backend, options = {}) {
     return id;
   }
   const roleError = "Choose the admin or company role.";
-  const sign = (body) => createHmac2("sha256", secret).update(body).digest("base64url");
+  const sign = (body) => createHmac("sha256", secret).update(body).digest("base64url");
   const activeAdmins = () => users.filter((u) => u.role === "admin" && !u.disabled);
   return {
     backend: backend.describe,
-    // A key for one purpose, derived from the persistent secret, so other
-    // parts of the relay get stable secrets without seeing this one.
-    derive(purpose) {
-      return createHmac2("sha256", secret).update("msfwr-derive:" + purpose).digest("base64url");
-    },
     get empty() {
       return users.length === 0;
     },
@@ -41585,7 +41683,7 @@ function createActivityLog(limit = 300, clock = Date.now) {
 }
 
 // src/lib/billing.ts
-import { createHmac as createHmac3, randomBytes as randomBytes3, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
+import { createHmac as createHmac2, randomBytes as randomBytes3, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
 import { mkdir as mkdir2, readFile as readFile2, rename as rename2, writeFile as writeFile2 } from "node:fs/promises";
 import path2 from "node:path";
 var INTERVALS = ["monthly", "quarterly", "annual"];
@@ -41757,7 +41855,7 @@ function createBilling(backend, options = {}) {
       requireLicense: !!sub.requireLicense
     };
   }
-  const sign = (body) => createHmac3("sha256", secret()).update(body).digest("base64url");
+  const sign = (body) => createHmac2("sha256", secret()).update(body).digest("base64url");
   function issueLicense(accountId, raId) {
     const sub = subByAccount(accountId);
     const version2 = sub?.licenseVersion ?? 1;
@@ -42101,6 +42199,105 @@ function createBilling(backend, options = {}) {
   return { init: init(), api };
 }
 
+// src/lib/linklog.ts
+import { mkdir as mkdir3, readFile as readFile3, rename as rename3, writeFile as writeFile3 } from "node:fs/promises";
+import path3 from "node:path";
+var MAX_RECORDS = 2e3;
+var MAX_SESSIONS = 50;
+function fileLinkLogBackend(dir) {
+  const file = path3.join(dir, "links.json");
+  return {
+    async load() {
+      try {
+        return JSON.parse(await readFile3(file, "utf8"));
+      } catch (e) {
+        if (e.code === "ENOENT") return void 0;
+        throw e;
+      }
+    },
+    async save(data) {
+      await mkdir3(dir, { recursive: true, mode: 448 });
+      const tmp = `${file}.${process.pid}.tmp`;
+      await writeFile3(tmp, JSON.stringify(data), { mode: 384 });
+      await rename3(tmp, file);
+    }
+  };
+}
+async function postgresLinkLogBackend(url) {
+  const { default: pg2 } = await Promise.resolve().then(() => (init_esm(), esm_exports));
+  const pool = new pg2.Pool({ connectionString: url, max: 2 });
+  await pool.query("CREATE TABLE IF NOT EXISTS msfwr_state (id text PRIMARY KEY, data jsonb NOT NULL)");
+  return {
+    async load() {
+      const r = await pool.query("SELECT data FROM msfwr_state WHERE id = 'links'");
+      return r.rows[0]?.data;
+    },
+    async save(data) {
+      await pool.query(
+        "INSERT INTO msfwr_state (id, data) VALUES ('links', $1) ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data",
+        [JSON.stringify(data)]
+      );
+    }
+  };
+}
+async function createLinkLog(backend) {
+  const loaded = await backend.load();
+  const records = Array.isArray(loaded?.links) ? loaded.links : [];
+  let writing = Promise.resolve();
+  const persist = () => {
+    const snapshot = { links: structuredClone(records) };
+    writing = writing.then(() => backend.save(snapshot)).catch(() => {
+    });
+    return writing;
+  };
+  const find = (code) => records.find((r) => r.code === code);
+  return {
+    created(input) {
+      if (find(input.code)) return persist();
+      records.unshift({
+        code: input.code,
+        pcName: input.name,
+        pcRa: input.ra,
+        createdAt: input.createdAt,
+        expiresAt: input.expiresAt,
+        ttlHours: input.ttlHours,
+        sessions: []
+      });
+      if (records.length > MAX_RECORDS) records.length = MAX_RECORDS;
+      return persist();
+    },
+    claimed(code, claim2) {
+      const r = find(code);
+      if (!r) return persist();
+      r.claim = { ...claim2 };
+      return persist();
+    },
+    revoked(code, at) {
+      const r = find(code);
+      if (!r) return persist();
+      r.revokedAt = at;
+      return persist();
+    },
+    session(code, session) {
+      const r = find(code);
+      if (!r) return persist();
+      r.sessions.unshift(session);
+      if (r.sessions.length > MAX_SESSIONS) r.sessions.length = MAX_SESSIONS;
+      return persist();
+    },
+    // Claims of URLs that have not expired yet, to restore after a restart.
+    activeClaims(now) {
+      return records.filter((r) => r.claim && r.expiresAt > now && !r.revokedAt).map((r) => ({ code: r.code, claim: r.claim }));
+    },
+    list(filter = {}, limit = 300) {
+      return records.filter((r) => !filter.accountId || r.claim?.accountId === filter.accountId).slice(0, limit).map((r) => structuredClone(r));
+    },
+    flush() {
+      return writing;
+    }
+  };
+}
+
 // src/lib/logger.ts
 var import_pino = __toESM(require_pino(), 1);
 var isProduction = process.env.NODE_ENV === "production";
@@ -42122,7 +42319,7 @@ var logger = (0, import_pino.default)({
 // src/lib/portal.ts
 var store = createMsfwrStore(Date.now, {
   onLive(session) {
-    const ra = session.ra;
+    const ra = session.operator?.raId ?? session.ra;
     if (!ra) return;
     void (async () => {
       try {
@@ -42136,7 +42333,16 @@ var store = createMsfwrStore(Date.now, {
   onEnd(ended) {
     void (async () => {
       try {
-        const account = ended.raId ? (await accountsReady()).findRa(ended.raId) : void 0;
+        const accounts = await accountsReady();
+        const account = (ended.operatorId ? accounts.get(ended.operatorId) : void 0) ?? (ended.raId ? accounts.findRa(ended.raId) : void 0);
+        if (ended.link) {
+          await (await linkLogReady()).session(ended.link, {
+            startedAt: ended.startedAt,
+            endedAt: ended.endedAt,
+            durationMs: ended.durationMs,
+            viewers: ended.viewers
+          });
+        }
         await (await billingReady()).recordSession({
           accountId: account?.id ?? null,
           raId: ended.raId,
@@ -42152,6 +42358,16 @@ var store = createMsfwrStore(Date.now, {
         logger.warn({ err }, "Could not record session history");
       }
     })();
+  },
+  // The remote access URL register: creation, the authoring company, clearing.
+  onLinkCreated(link) {
+    void linkLogReady().then((log) => log.created(link)).catch((err) => logger.warn({ err }, "Could not record a new remote access URL"));
+  },
+  onLinkClaimed(code, claim2) {
+    void linkLogReady().then((log) => log.claimed(code, claim2)).catch((err) => logger.warn({ err }, "Could not record a URL claim"));
+  },
+  onLinkRevoked(code, at) {
+    void linkLogReady().then((log) => log.revoked(code, at)).catch((err) => logger.warn({ err }, "Could not record a cleared URL"));
   }
 });
 setInterval(store.sweep, 5e3).unref();
@@ -42164,12 +42380,11 @@ async function open2() {
   if (url) {
     backend = await postgresBackend(url);
   } else {
-    const dir = process.env["MSFWR_DATA_DIR"] || path3.resolve(process.cwd(), ".data");
+    const dir = process.env["MSFWR_DATA_DIR"] || path4.resolve(process.cwd(), ".data");
     backend = fileBackend(dir);
   }
   const accounts = await createAccounts(backend, { secret: process.env["SESSION_SECRET"] });
   logger.info({ storage: accounts.backend, users: accounts.list().length }, "Login accounts loaded");
-  store.setPinSecret(accounts.derive("link-access-pin"));
   if (accounts.empty) {
     const username = (process.env["ADMIN_USERNAME"] || "admin").toLowerCase();
     const password = process.env["ADMIN_PASSWORD"];
@@ -42188,7 +42403,7 @@ function accountsReady() {
 }
 async function openBilling() {
   const url = process.env["DATABASE_URL"];
-  const backend = url ? await postgresBillingBackend(url) : fileBillingBackend(process.env["MSFWR_DATA_DIR"] || path3.resolve(process.cwd(), ".data"));
+  const backend = url ? await postgresBillingBackend(url) : fileBillingBackend(process.env["MSFWR_DATA_DIR"] || path4.resolve(process.cwd(), ".data"));
   const secret = process.env["BILLING_SECRET"] || process.env["SESSION_SECRET"];
   const { init, api } = createBilling(backend, { secret });
   await init;
@@ -42202,6 +42417,39 @@ function billingReady() {
     throw err;
   });
   return openingBilling;
+}
+async function openLinkLog() {
+  const url = process.env["DATABASE_URL"];
+  const backend = url ? await postgresLinkLogBackend(url) : fileLinkLogBackend(process.env["MSFWR_DATA_DIR"] || path4.resolve(process.cwd(), ".data"));
+  const log = await createLinkLog(backend);
+  store.restoreClaims(log.activeClaims(Date.now()));
+  return log;
+}
+var openingLinkLog;
+function linkLogReady() {
+  openingLinkLog ??= openLinkLog().catch((err) => {
+    openingLinkLog = void 0;
+    throw err;
+  });
+  return openingLinkLog;
+}
+async function linkRegister(filter = {}) {
+  const log = await linkLogReady();
+  const list = log.list(filter);
+  const states = store.linkStates(list.map((r) => r.code));
+  const now = Date.now();
+  return list.map((r) => {
+    const live = states.get(r.code);
+    const status = r.revokedAt ? "cleared" : r.expiresAt <= now || !live ? "expired" : "active";
+    return {
+      ...r,
+      status,
+      online: live?.online ?? false,
+      viewers: live?.viewers ?? 0,
+      locked: live?.locked ?? false,
+      blocked: live?.blocked ?? false
+    };
+  });
 }
 function subBlockMessage(reason) {
   switch (reason) {
@@ -42489,9 +42737,15 @@ router2.post("/call", async (req, res) => {
   if (fresh) activity.add("request", `${s.call?.name || "A PC"} asked IT to connect${ra ? ` (${formatRaId(ra)})` : ""}`);
   res.sendStatus(204);
 });
-router2.get("/inbox", requireUser(), (req, res) => {
+router2.get("/inbox", requireUser(), async (req, res) => {
   const user = req.account;
-  res.json(GetMsfwrInboxResponse.parse({ raId: user.raId, company: user.displayName, ...store.inbox(user.raId), links: store.companyLinks(user.raId) }));
+  try {
+    const pin = store.companyPin({ id: user.id, name: user.displayName, raId: user.raId });
+    const links = await linkRegister({ accountId: user.id });
+    res.json(GetMsfwrInboxResponse.parse({ raId: user.raId, company: user.displayName, ...store.inbox(user.raId), accessPin: pin, links }));
+  } catch (err) {
+    sendError(res, err);
+  }
 });
 router2.post("/accept", requireUser(), async (req, res) => {
   if (tooManyJoins()) {
@@ -42636,15 +42890,22 @@ router2.post("/link/join", async (req, res) => {
     res.status(400).json({ error: "Enter the access code that came with the link." });
     return;
   }
+  let accounts;
   try {
-    await accountsReady();
+    accounts = await accountsReady();
+    await linkLogReady();
   } catch {
     res.status(503).json({ error: "The relay is starting. Try again in a moment." });
     return;
   }
-  const ra = store.linkHostRa(body.data.code);
-  if (ra) {
-    const gate = await connectGateForRa(ra);
+  const author = store.linkAuthor(body.data.code, body.data.accessPin);
+  if (author) {
+    const account = accounts.get(author.accountId);
+    if (!account || account.disabled) {
+      res.status(403).json({ error: "The company that issued this Access PIN can no longer authorize sessions." });
+      return;
+    }
+    const gate = await connectGateForRa(author.raId);
     if (!gate.ok) {
       res.status(402).json({ error: gate.message, subStatus: gate.status, reason: gate.reason });
       return;
@@ -42656,8 +42917,8 @@ router2.post("/link/join", async (req, res) => {
       missing: [404, "This remote access URL expired or was cleared on the PC."],
       locked: [429, "Too many wrong access codes. This link is locked for 15 minutes."],
       pin: [403, "That access code is not correct."],
-      "access-pin-required": [403, "Enter the 4-digit Access PIN. Ask the company that manages this PC for it."],
-      "access-pin": [403, "That Access PIN is not correct. Ask the company that manages this PC for the current PIN."],
+      "access-pin-required": [403, "Enter the 4-digit Access PIN from the company that is supporting you."],
+      "access-pin": [403, "That Access PIN is not correct or has expired. Ask the company for its current PIN."],
       blocked: [423, "Too many wrong Access PINs. This URL no longer works. Ask the person at the PC to create a new one."],
       offline: [409, "The PC is offline or locked right now. Try again when it is on and signed in."],
       busy: [409, "Someone is already connected to this PC. Try again when that session ends."],
@@ -42667,7 +42928,8 @@ router2.post("/link/join", async (req, res) => {
     res.status(status).json({ error: error2 });
     return;
   }
-  activity.add("link-join", `Someone connected to ${result.name || "a PC"} through its remote access URL`);
+  if (result.claimed) activity.add("link-claim", `${result.claim.company} (${formatRaId(result.claim.raId)}) authorized the remote access URL of ${result.name || "a PC"} with PIN ${result.claim.pin}`);
+  activity.add("link-join", `Someone connected to ${result.name || "a PC"} through its remote access URL, authorized by ${result.claim.company}`);
   res.json(JoinMsfwrLinkResponse.parse(result.viewer));
 });
 router2.post("/join", requireUser(), async (req, res) => {
@@ -42882,7 +43144,10 @@ router4.patch("/users/:id", async (req, res) => {
     }
     const before = accounts.get(req.params.id);
     const user = await accounts.update(req.params.id, body.data, req.account.id);
-    if (user.disabled) store.endOperator(user.id);
+    if (user.disabled) {
+      store.endOperator(user.id);
+      store.dropCompanyPin(user.id);
+    }
     const changes = [
       body.data.password !== void 0 && "reset the password",
       before && body.data.role !== void 0 && before.role !== user.role && `made them ${user.role === "admin" ? "an admin" : "a company"}`,
@@ -42901,6 +43166,7 @@ router4.delete("/users/:id", async (req, res) => {
     const accounts = await accountsReady();
     const user = await accounts.remove(req.params.id, req.account.id);
     store.endOperator(user.id);
+    store.dropCompanyPin(user.id);
     activity.add("user-deleted", `${req.account.displayName} deleted ${user.displayName} (${formatRaId(user.raId)})`, req.account.username);
     res.sendStatus(204);
   } catch (err) {
@@ -42910,7 +43176,8 @@ router4.delete("/users/:id", async (req, res) => {
 router4.get("/overview", async (_req, res) => {
   try {
     const accounts = await accountsReady();
-    res.json({ ...store.overview(), activity: activity.list(150), storage: accounts.backend });
+    const { links: _live, ...overview } = store.overview();
+    res.json({ ...overview, links: await linkRegister(), activity: activity.list(150), storage: accounts.backend });
   } catch (err) {
     sendError(res, err);
   }
@@ -43320,6 +43587,7 @@ app_default.listen(port, (err) => {
   }
   logger.info({ port }, "Server listening");
   accountsReady().catch((err2) => logger.error({ err: err2 }, "Could not load login accounts"));
+  linkLogReady().catch((err2) => logger.error({ err: err2 }, "Could not load the remote access URL register"));
 });
 /*! Bundled license information:
 
