@@ -154,10 +154,14 @@ The build writes the installer to
 The viewer's download button links to the installer on the latest GitHub
 release:
 `https://github.com/mailbhrp-1/Remote-Desktop-for-Windows/releases/latest/download/msfwr-Setup-x64.exe`.
-To publish a new one, run the **Release installer** workflow from the Actions
-tab with a new tag (for example `v0.2.0`), or push that tag. The workflow runs
-the Go tests, builds the installer with the same `build.sh`, and attaches it to
-the release. Keep the asset name `msfwr-Setup-x64.exe` so the link stays valid. Keep the API and viewer on the same origin,
+Publishing is automatic: when a change under `windows-host/` is merged to
+`main`, the **Release installer** workflow runs the Go tests, builds the
+installer with the same `build.sh`, and attaches it to a new release, so the
+site's Download button serves it straight away. The version comes from
+`windows-host/VERSION`; once that version is released, later merges bump the
+patch number (0.6.0, 0.6.1, ...). Change `VERSION` to start a new line such as
+0.7.0. You can still run the workflow from the Actions tab with a tag, or push
+a tag such as `v0.7.0`. Keep the asset name `msfwr-Setup-x64.exe` so the link stays valid. Keep the API and viewer on the same origin,
 with `/api/msfwr/` routed to the API service behind HTTPS. On Windows,
 verify install/uninstall, pairing on two devices, streaming, remote input,
 display scaling, Ctrl+2, F12, and locking Windows before distributing this preview.
