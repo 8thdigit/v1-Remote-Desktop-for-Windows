@@ -524,7 +524,7 @@ export default function LiveSession({ token, verification, preapproved = false, 
           <ShieldCheck className="mx-auto text-primary" size={36} />
           <h1 className="mt-5 text-4xl font-bold tracking-tight">Verify with the host</h1>
           <p className="mx-auto mt-4 max-w-md text-muted-foreground">
-            Read this number to the person at the Windows PC. They must type it into WINRSS.net to approve the connection.
+            Read this number to the person at the Windows PC. They must type it into Connect.AI to approve the connection.
           </p>
           <div className="mt-7 rounded-xl bg-foreground px-3 py-6 text-background">
             <p className="font-mono text-xs uppercase tracking-widest text-background/65">Verification number</p>

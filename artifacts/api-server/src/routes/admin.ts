@@ -15,7 +15,7 @@ router.use((_req, res, next) => {
 });
 router.use(requireUser("admin"));
 
-// Creating a WINRSS admin account (or making an account an admin) needs the
+// Creating a Connect.AI admin account (or making an account an admin) needs the
 // six-digit admin creation PIN. It is a secret kept in the relay's
 // environment (ADMIN_CREATION_PIN), never in the code or the browser.
 const adminPinTries = limiter(5, 15 * 60_000);

@@ -22,7 +22,7 @@ export type SiteSettings = {
 export const DEFAULT_SITE: SiteSettings = {
   tabs: { pcs: true, connect: true, download: true },
   signIn: { requestAccess: true, downloadLink: true },
-  og: { title: 'WINRSS.net', description: '' },
+  og: { title: 'Connect.AI', description: '' },
   pages: {
     disclaimer: { enabled: false, title: 'Disclaimer', body: '' },
     privacy: { enabled: true, title: 'Privacy', body: '' },

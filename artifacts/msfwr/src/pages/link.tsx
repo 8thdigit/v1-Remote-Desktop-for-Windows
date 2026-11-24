@@ -55,7 +55,7 @@ export default function LinkPage({ code }: { code: string }) {
   }, [upper, session]);
 
   useEffect(() => {
-    document.title = session ? 'WINRSS.net — Connected session' : `${info?.name || 'Remote access'} — WINRSS.net`;
+    document.title = session ? 'Connect.AI — Connected session' : `${info?.name || 'Remote access'} — Connect.AI`;
   }, [info?.name, session]);
 
   async function join() {

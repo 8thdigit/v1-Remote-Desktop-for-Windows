@@ -107,12 +107,12 @@ func setAutostart(on bool) error {
 }
 
 func ask(window uintptr, text string) bool {
-	r, _, _ := messageBox.Call(window, uintptr(unsafe.Pointer(textPtr(text))), uintptr(unsafe.Pointer(textPtr("WINRSS.net"))), 0x24) // MB_YESNO|MB_ICONQUESTION
+	r, _, _ := messageBox.Call(window, uintptr(unsafe.Pointer(textPtr(text))), uintptr(unsafe.Pointer(textPtr("Connect.AI"))), 0x24) // MB_YESNO|MB_ICONQUESTION
 	return r == 6
 }
 
 func warn(window uintptr, text string) {
-	messageBox.Call(window, uintptr(unsafe.Pointer(textPtr(text))), uintptr(unsafe.Pointer(textPtr("WINRSS.net"))), 0x30) // MB_ICONWARNING
+	messageBox.Call(window, uintptr(unsafe.Pointer(textPtr(text))), uintptr(unsafe.Pointer(textPtr("Connect.AI"))), 0x30) // MB_ICONWARNING
 }
 
 type iconInfo struct {
@@ -237,15 +237,15 @@ func runUnattended(configPath string, config unattendedConfig, announce, openWin
 	current := func() look {
 		switch state {
 		case "connected":
-			return look{green, "WINRSS.net — " + connectStatus(connections)}
+			return look{green, "Connect.AI — " + connectStatus(connections)}
 		case "calling":
-			return look{blue, "WINRSS.net — Request sent, waiting for IT"}
+			return look{blue, "Connect.AI — Request sent, waiting for IT"}
 		case "offline":
-			return look{amber, "WINRSS.net — Cannot reach the relay"}
+			return look{amber, "Connect.AI — Cannot reach the relay"}
 		case "locked":
-			return look{blue, "WINRSS.net — PC locked"}
+			return look{blue, "Connect.AI — PC locked"}
 		}
-		return look{blue, "WINRSS.net — Ready"}
+		return look{blue, "Connect.AI — Ready"}
 	}
 	// Msfwr keeps no visible presence at all: no taskbar button and no
 	// notification-area (tray) icon. setTray and notify, which both drive the
@@ -310,7 +310,7 @@ func runUnattended(configPath string, config unattendedConfig, announce, openWin
 		if state == "connected" {
 			headline = connectStatus(connections) + " — IT is connected"
 		}
-		item(mfString|0x1000, openItem, "Open WINRSS.net") // MF_DEFAULT: shown in bold
+		item(mfString|0x1000, openItem, "Open Connect.AI") // MF_DEFAULT: shown in bold
 		item(mfSeparator, 0, "")
 		item(mfGrayed, 0, headline)
 		item(mfGrayed, 0, detail)
@@ -373,7 +373,7 @@ func runUnattended(configPath string, config unattendedConfig, announce, openWin
 			if panel != nil {
 				panel.show()
 			} else {
-				notify("WINRSS.net is already running", "Unattended access runs from this icon. Click it for the status, the access code, or Initiate.")
+				notify("Connect.AI is already running", "Unattended access runs from this icon. Click it for the status, the access code, or Initiate.")
 			}
 			return 0
 		case 0x0010: // WM_CLOSE: keep running in the notification area; Exit quits.
@@ -485,7 +485,7 @@ func runUnattended(configPath string, config unattendedConfig, announce, openWin
 					destroyWindow.Call(window)
 				}
 			case exitItem:
-				if ask(owner(window), "Exit WINRSS.net?\n\nAny remote session ends. Unattended access stays on and starts again the next time you sign in.") {
+				if ask(owner(window), "Exit Connect.AI?\n\nAny remote session ends. Unattended access stays on and starts again the next time you sign in.") {
 					destroyWindow.Call(window)
 				}
 			}
@@ -548,7 +548,7 @@ func runUnattended(configPath string, config unattendedConfig, announce, openWin
 	// A hidden top-level window that is never shown: it only receives the
 	// notification-area icon and menu messages, so there is no taskbar button.
 	// WS_EX_TOOLWINDOW plus WS_POPUP, and ShowWindow is never called for it.
-	window, _, _ := createWindow.Call(0x80, uintptr(unsafe.Pointer(className)), uintptr(unsafe.Pointer(textPtr("WINRSS.net"))), // WS_EX_TOOLWINDOW
+	window, _, _ := createWindow.Call(0x80, uintptr(unsafe.Pointer(className)), uintptr(unsafe.Pointer(textPtr("Connect.AI"))), // WS_EX_TOOLWINDOW
 		0x80000000, 0, 0, 0, 0, 0, 0, instance, 0) // WS_POPUP
 	if window == 0 {
 		return windowError
@@ -560,7 +560,7 @@ func runUnattended(configPath string, config unattendedConfig, announce, openWin
 	tray.window = window
 	setTray(0) // NIM_ADD
 	if announce {
-		notify("WINRSS.net", "Unattended access is on. Click this icon to open WINRSS.net: status, access code, connections and controls.")
+		notify("Connect.AI", "Unattended access is on. Click this icon to open Connect.AI: status, access code, connections and controls.")
 	}
 	// The Msfwr window: opened from Start, by clicking the icon, or with
 	// "Open Msfwr" in the icon menu. If it cannot be created, the icon menu
@@ -580,7 +580,7 @@ func runUnattended(configPath string, config unattendedConfig, announce, openWin
 			pcName:   hostName,
 			relay:    config.Relay,
 			active:   sessions.activeText(now),
-			count:    "Connections since WINRSS.net started: " + twoDigits(connections),
+			count:    "Connections since Connect.AI started: " + twoDigits(connections),
 			history:  sessions.lines(now),
 			ra:       formatRA(raOf()),
 			raText:   raStatusText(raOf(), raStatus, raName),

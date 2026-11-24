@@ -1,4 +1,4 @@
-# WINRSS.net security and licensing model
+# Connect.AI security and licensing model
 
 This document describes how the subscription/license system is enforced and
 how the client is hardened. The guiding principle is **server-authoritative
@@ -113,7 +113,7 @@ client as defence-in-depth:
 - Set `ADMIN_PASSWORD`, `SESSION_SECRET`, and (optionally) `BILLING_SECRET` in
   the relay environment; keep them stable.
 - Set `ADMIN_CREATION_PIN` (six digits) in the relay environment. The admin
-  console asks for it before creating a WINRSS admin account or making an
+  console asks for it before creating a Connect.AI admin account or making an
   account an admin; without it, admin creation is refused. Five wrong PINs
   lock that admin out of the check for 15 minutes.
 - Use a persistent disk (`MSFWR_DATA_DIR`) or `DATABASE_URL` so accounts,
