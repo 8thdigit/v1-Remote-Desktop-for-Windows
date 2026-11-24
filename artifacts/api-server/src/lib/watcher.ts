@@ -56,6 +56,8 @@ export type WatcherWatch = {
   lastSeen: string;
   notes: string;
   updatedAt: number;
+  // titles of the documents stored in the repo when this watch completed
+  storedDocs?: string[];
 };
 
 export type RepoDoc = {
@@ -605,13 +607,16 @@ export function createWatcherEngine(backend: WatcherBackend, options: { clock?: 
           `_${q.explanation}${q.refs.length ? ` Sources: ${q.refs.join("; ")}` : ""}_ (status: ${q.status}, confidence ${(q.confidence * 100) | 0}%)`,
         ].join("\n")),
       ].join("\n\n");
+      const stored: string[] = [];
       const addDoc = (title: string, text: string) => {
         const now = clock();
         docs.unshift({ id: newId(), title, category: "exam-captures", text, mime: "text/markdown", bytes: Buffer.byteLength(text), uploadedBy: "inspect-buddy", uploadedAt: now });
         if (docs.length > MAX_DOCS) docs.length = MAX_DOCS;
+        stored.push(title);
       };
       addDoc(`${titleBase} — Questions (${stamp})`, questionsDoc);
       addDoc(`${titleBase} — Questions & Answers (${stamp})`, answersDoc);
+      w.storedDocs = stored;
       w.notes = `${w.notes ? w.notes + "\n" : ""}Completed (${reason}): ${qs.length} question(s), ${qs.filter((q) => q.status === "pending").length} unanswered. Documents stored in repository category “exam-captures”.`;
     },
 
@@ -672,6 +677,10 @@ export function createWatcherEngine(backend: WatcherBackend, options: { clock?: 
       await persistNow();
       return { ...q };
     },
+
+    // Inspect Buddy settings (master switch, AI, web search) — used by the
+    // admin console and to guard enabling watchers / forwarding captures.
+    getSettings() { return { ...settings }; },
 
     flush() { return persistNow(); },
   };

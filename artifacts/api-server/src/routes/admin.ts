@@ -1,10 +1,13 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import { Router, type Request, type Response } from "express";
 import { CreateUserBody, UpdateUserBody } from "@workspace/api-zod";
 import { formatRaId } from "../lib/msfwr";
 import { DAY } from "../lib/billing";
 import type { AssetKind } from "../lib/site";
-import { accountsReady, activity, billingReady, buddyReady, limiter, linkRegister, requireUser, sendError, siteReady, store } from "../lib/portal";
+import type { WatcherWatch, WatcherQuestion } from "../lib/watcher";
+import { accountsReady, activity, billingReady, buddyReady, limiter, linkRegister, requireUser, sendError, siteReady, store, watcherImageDir, watcherReady } from "../lib/portal";
 
 // The admin console: accounts, live sessions, requests and activity.
 const router = Router();
@@ -346,6 +349,189 @@ router.patch("/buddy/kb/:id", async (req, res) => {
 
 router.delete("/buddy/kb/:id", async (req, res) => {
   try { await (await buddyReady()).removeKb(req.params.id); res.sendStatus(204); } catch (err) { sendError(res, err); }
+});
+
+// --- Inspect Buddy: the question-watcher control room ---
+// Ongoing remote sessions with per-session watcher state, the captured
+// questions for one session, enabling/disabling a watcher, accepting or
+// correcting a recommended answer, and the categorized document repository.
+
+// The live sessions as the control room lists them: PC, company, helper,
+// viewers, uptime, plus what AI Buddy last read off the screen.
+router.get("/buddy/sessions", async (_req, res) => {
+  try {
+    const [accounts, buddy] = await Promise.all([accountsReady(), buddyReady()]);
+    const byRa = new Map(accounts.list().map((u) => [u.raId, u.displayName]));
+    const notes = buddy.sessionsIndex();
+    const rows = store.overview().live.filter((s) => s.state === "live").map((s) => {
+      const b = notes.get(s.id);
+      const lastText = b && Array.isArray(b.captures) && b.captures.length ? String((b.captures as { text?: string }[])[b.captures.length - 1]?.text ?? "") : "";
+      return {
+        sessionId: s.id,
+        pcName: s.name || "",
+        mode: s.mode,
+        company: (s.ra && byRa.get(s.ra)) || "",
+        operator: s.operator ?? "",
+        startedAt: s.liveAt ?? s.createdAt,
+        viewers: s.viewers,
+        captureCount: b?.captureCount ?? 0,
+        lastSeenText: lastText.slice(0, 300),
+      };
+    });
+    res.json({ sessions: rows });
+  } catch (err) { sendError(res, err); }
+});
+
+// Engine watch record -> the shape the control-room page renders.
+function watcherView(w: WatcherWatch | undefined, imageUrl: ((name: string) => string) | undefined) {
+  if (!w) return null;
+  const status = !w.enabled || w.phase === "idle"
+    ? "off"
+    : w.phase === "watching" ? "watching" : w.phase === "in-exam" ? "exam-detected" : "completed";
+  const questions = w.questions.map((q: WatcherQuestion) => ({
+    index: q.n,
+    at: q.at,
+    text: q.text,
+    screenshotUrl: q.image && imageUrl ? imageUrl(q.image) : null,
+    // A pending question inside a live exam is still being researched.
+    state: q.status === "pending" ? (status === "exam-detected" ? "researching" : "pending")
+      : q.status === "answered" ? "recommended" : q.status,
+    answer: q.answer,
+    explanation: q.explanation,
+    confidence: q.confidence,
+    source: q.source || "ai",
+    sources: q.refs,
+    correctedAnswer: q.status === "corrected" ? q.answer : "",
+  }));
+  return {
+    sessionId: w.sessionId,
+    enabled: w.enabled,
+    status,
+    startedAt: w.startedAt ?? null,
+    completedAt: w.endedAt ?? null,
+    questions,
+    documentsStored: w.phase === "completed" ? w.storedDocs ?? [] : [],
+    error: null,
+    lastSeenText: w.lastSeen.slice(0, 300),
+    examTitle: w.examTitle,
+    notes: w.notes,
+  };
+}
+
+router.get("/buddy/watchers/:id", async (req, res) => {
+  try {
+    const engine = await watcherReady();
+    const view = watcherView(engine.watch(req.params.id), (n) => `/api/admin/buddy/img/${encodeURIComponent(n)}`);
+    if (!view) { res.status(404).json({ error: "No question watcher has run on that session yet." }); return; }
+    res.json(view);
+  } catch (err) { sendError(res, err); }
+});
+
+router.post("/buddy/watchers/:id", async (req, res) => {
+  try {
+    const engine = await watcherReady();
+    const live = store.overview().live.find((s) => s.id === req.params.id && s.state === "live");
+    const accounts = await accountsReady();
+    const ra = live?.ra ?? "";
+    const meta = {
+      pcName: live?.name || engine.watch(req.params.id)?.pcName || "Windows PC",
+      raId: ra,
+      operator: live?.operator || accounts.findRa(ra)?.displayName || "",
+    };
+    const w = await engine.enable(req.params.id, meta);
+    activity.add("inspect-buddy", `${req.account!.displayName} enabled the Question Watcher on ${meta.pcName}`, req.account!.username);
+    res.json(watcherView(engine.watch(req.params.id) ?? ({ ...w, questions: [] } as unknown as WatcherWatch), (n) => `/api/admin/buddy/img/${encodeURIComponent(n)}`));
+  } catch (err) { sendError(res, err); }
+});
+
+router.delete("/buddy/watchers/:id", async (req, res) => {
+  try {
+    const engine = await watcherReady();
+    await engine.disable(req.params.id);
+    activity.add("inspect-buddy", `${req.account!.displayName} disabled the Question Watcher`, req.account!.username);
+    res.json(watcherView(engine.watch(req.params.id), (n) => `/api/admin/buddy/img/${encodeURIComponent(n)}`));
+  } catch (err) { sendError(res, err); }
+});
+
+// Accept or correct one recommended answer. Body for "correct": { answer }.
+router.post("/buddy/watchers/:id/questions/:n/:action(accept|correct)", async (req, res) => {
+  try {
+    const n = Number.parseInt(req.params.n, 10);
+    if (!Number.isFinite(n)) { res.status(400).json({ error: "Which question number?" }); return; }
+    const engine = await watcherReady();
+    const q = await engine.review(req.params.id, n, {
+      action: req.params.action as "accept" | "correct",
+      answer: (req.body as { answer?: unknown } | undefined)?.answer,
+      by: req.account!.displayName,
+    });
+    res.json({ ...q, index: q.n, screenshotUrl: q.image ? `/api/admin/buddy/img/${encodeURIComponent(q.image)}` : null, state: q.status === "answered" ? "recommended" : q.status, sources: q.refs, correctedAnswer: q.status === "corrected" ? q.answer : "" });
+  } catch (err) { sendError(res, err); }
+});
+
+// Re-run the research for one question (repository + online).
+router.post("/buddy/watchers/:id/questions/:n/research", async (req, res) => {
+  try {
+    const n = Number.parseInt(req.params.n, 10);
+    if (!Number.isFinite(n)) { res.status(400).json({ error: "Which question number?" }); return; }
+    const engine = await watcherReady();
+    const q = await engine.reResearch(req.params.id, n);
+    res.json({ ...q, index: q.n, state: q.status === "answered" ? "recommended" : q.status, sources: q.refs });
+  } catch (err) { sendError(res, err); }
+});
+
+// --- Document repository (categories + auto-stored exam materials) ---
+router.get("/buddy/repo/documents", async (req, res) => {
+  try {
+    const engine = await watcherReady();
+    const category = typeof req.query.category === "string" && req.query.category ? req.query.category.toLowerCase() : undefined;
+    const docs = engine.listDocs(category).map((d) => ({
+      id: d.id, title: d.title, category: d.category, filename: d.fileName ?? `${d.title}.txt`,
+      bytes: d.bytes, uploadedBy: d.uploadedBy, uploadedAt: d.uploadedAt,
+      origin: d.uploadedBy === "inspect-buddy" ? "auto" : "upload", preview: d.preview,
+    }));
+    res.json({ documents: docs, categories: engine.categories().map((c) => c.name) });
+  } catch (err) { sendError(res, err); }
+});
+
+router.post("/buddy/repo/documents", async (req, res) => {
+  try {
+    const doc = await (await watcherReady()).uploadDoc(req.body, req.account!.displayName);
+    activity.add("inspect-buddy", `${req.account!.displayName} uploaded “${doc.title}” to the document repository`, req.account!.username);
+    res.status(201).json(doc);
+  } catch (err) { sendError(res, err); }
+});
+
+router.delete("/buddy/repo/documents/:id", async (req, res) => {
+  try {
+    await (await watcherReady()).removeDoc(req.params.id);
+    res.sendStatus(204);
+  } catch (err) { sendError(res, err); }
+});
+
+// Screenshots saved by the question watcher (admin-authenticated).
+router.get("/buddy/img/:name", (req, res) => {
+  try {
+    const name = path.basename(req.params.name);
+    if (!/^[\w.-]+\.(jpe?g|png|webp)$/i.test(name)) { res.sendStatus(400); return; }
+    const file = path.join(watcherImageDir(), name);
+    if (!fs.existsSync(file)) { res.status(404).json({ error: "That screenshot no longer exists." }); return; }
+    res.type(path.extname(name).toLowerCase() === ".png" ? "image/png" : path.extname(name).toLowerCase() === ".webp" ? "image/webp" : "image/jpeg");
+    res.set("Cache-Control", "private, max-age=3600");
+    fs.createReadStream(file).pipe(res);
+  } catch (err) { sendError(res, err); }
+});
+
+// Inspect Buddy settings: master switch, Claude use, web search fallback.
+router.get("/buddy/inspect/settings", async (_req, res) => {
+  try { res.json((await watcherReady()).settings()); } catch (err) { sendError(res, err); }
+});
+
+router.patch("/buddy/inspect/settings", async (req, res) => {
+  try {
+    const settings = await (await watcherReady()).updateSettings(req.body);
+    activity.add("inspect-buddy", `${req.account!.displayName} changed the Inspect Buddy settings`, req.account!.username);
+    res.json(settings);
+  } catch (err) { sendError(res, err); }
 });
 
 export default router;
