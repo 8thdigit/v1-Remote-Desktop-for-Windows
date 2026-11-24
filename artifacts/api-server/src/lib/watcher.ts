@@ -432,6 +432,8 @@ export function createWatcherEngine(backend: WatcherBackend, options: { clock?: 
 
   const api = {
     init,
+    // A session ended: mark its watcher completed and store the documents.
+    async endSession(sessionId: string) { await api.complete(sessionId, "session ended"); },
     // --- Settings ---
     settings() { return { ...settings, apiKeySet: !!apiKey, envKeySet: !!envKey(), aiReady: aiReady() }; },
     async updateSettings(input: unknown) {
@@ -481,8 +483,14 @@ export function createWatcherEngine(backend: WatcherBackend, options: { clock?: 
     },
 
     // One settled screen from the control-room monitor for this session.
-    async capture(sessionId: string, meta: { pcName: string; raId: string; operator: string }, rawText: unknown, image?: Buffer) {
-      const w = find(sessionId);
+    async capture(sessionId: string, meta: { pcName?: string; raId?: string; operator?: string } = {}, rawText: unknown, image?: Buffer) {
+      let w = find(sessionId);
+      if (!w && settings.enabled) {
+        // The engine knows a live session that has no watcher record yet.
+        w = { sessionId, pcName: meta.pcName ?? "", raId: meta.raId ?? "", operator: meta.operator ?? "", enabled: false, startedAt: clock(), phase: "idle", examTitle: "", questions: [], lastSeen: "", notes: "", updatedAt: clock() };
+        watches.unshift(w);
+        if (watches.length > MAX_WATCHES) watches.length = MAX_WATCHES;
+      }
       if (!w || !w.enabled) return { watching: false };
       if (w.phase === "completed") return { watching: true, phase: w.phase };
       const text = cleanScreenText(rawText);
@@ -624,7 +632,10 @@ export function createWatcherEngine(backend: WatcherBackend, options: { clock?: 
       const title = line(body.title, 200);
       const category = (line(body.category, 80) || "general").toLowerCase();
       let text = multi(body.text, 400_000);
-      const dataUrl = typeof body.dataUrl === "string" ? body.dataUrl : "";
+      const dataUrl = typeof body.dataUrl === "string" ? body.dataUrl
+        : typeof body.dataBase64 === "string" && (body.mime || body.filename)
+          ? `data:${String(body.mime || guessMime(String(body.filename)))};base64,${body.dataBase64}`
+          : "";
       const fileName = line(body.fileName, 200);
       if (!text && dataUrl) {
         const m = dataUrl.match(/^data:([\w/+.-]+);base64,(.+)$/s);
@@ -672,6 +683,19 @@ function extractJson(raw: string): Record<string, unknown> | null {
   const m = raw.match(/\{[\s\S]*\}/);
   if (!m) return null;
   try { return JSON.parse(m[0]) as Record<string, unknown>; } catch { return null; }
+}
+
+// Best-effort MIME type from a file name, used when the uploader sent raw
+// base64 without an explicit content type.
+function guessMime(name: string) {
+  const ext = name.toLowerCase().split(".").pop() ?? "";
+  const map: Record<string, string> = {
+    pdf: "application/pdf", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", zip: "application/zip",
+    html: "text/html", htm: "text/html", xml: "application/xml", txt: "text/plain", md: "text/markdown",
+    pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation", csv: "text/csv",
+  };
+  return map[ext] ?? "text/plain";
 }
 
 function pick(obj: Record<string, unknown>, keys: string[]) {

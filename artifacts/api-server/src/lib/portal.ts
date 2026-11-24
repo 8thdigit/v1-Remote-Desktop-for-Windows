@@ -11,6 +11,7 @@ import {
 import { createSite, fileSiteBackend, postgresSiteBackend, SiteError, type Site } from "./site";
 import { createMsfwrStore, type EndedSession, type Session } from "./msfwr";
 import { BuddyError, createBuddy, fileBuddyBackend, postgresBuddyBackend, type Buddy } from "./buddy";
+import { createWatcherEngine, fileWatcherBackend, postgresWatcherBackend, WatcherError, type WatcherEngine } from "./watcher";
 import { createLinkLog, fileLinkLogBackend, postgresLinkLogBackend, type LinkLog } from "./linklog";
 import { logger } from "./logger";
 
@@ -54,6 +55,7 @@ export const store = createMsfwrStore(Date.now, {
         if (ended.sessionId) {
           const sessionId = ended.sessionId;
           void buddyReady().then((b) => b.ended(sessionId, ended.endedAt)).catch((err) => logger.warn({ err }, "Could not close the AI Buddy record"));
+          void watcherReady().then((w) => w.complete(sessionId, "session ended")).catch((err) => logger.warn({ err }, "Could not close the Inspect Buddy watcher"));
         }
         await (await billingReady()).recordSession({
           sessionId: ended.sessionId,
@@ -361,7 +363,7 @@ export function requireUser(role?: "admin", options: { allowPasswordChange?: boo
 }
 
 export function sendError(res: Response, err: unknown) {
-  if (err instanceof AccountError || err instanceof BillingError || err instanceof SiteError || err instanceof BuddyError) { res.status(err.status).json({ error: err.message }); return; }
+  if (err instanceof AccountError || err instanceof BillingError || err instanceof SiteError || err instanceof BuddyError || err instanceof WatcherError) { res.status(err.status).json({ error: err.message }); return; }
   logger.error({ err }, "Portal request failed");
   res.status(500).json({ error: "Something went wrong on the relay. Try again." });
 }
@@ -407,4 +409,42 @@ export function buddyReady() {
     throw err;
   });
   return openingBuddy;
+}
+
+// Inspect Buddy: the question-watcher engine (control-room exam monitoring,
+// document repository). Same storage choice as AI Buddy: Postgres when
+// configured, otherwise a file in the relay's data directory. Screenshots are
+// always written to disk (watcher-imgs under the data dir) so the admin
+// console can stream them back, even when state lives in Postgres.
+async function openWatcher(): Promise<WatcherEngine> {
+  const dir = process.env["MSFWR_DATA_DIR"] || path.resolve(process.cwd(), ".data");
+  const imgDir = path.join(dir, "watcher-imgs");
+  const fs = await import("node:fs/promises");
+  const saveImage = async (name: string, buf: Buffer) => {
+    await fs.mkdir(imgDir, { recursive: true });
+    await fs.writeFile(path.join(imgDir, path.basename(name)), buf);
+    return name;
+  };
+  const url = process.env["DATABASE_URL"];
+  const backend = url ? await postgresWatcherBackend(url) : fileWatcherBackend(dir);
+  if (!backend.saveImage) backend.saveImage = saveImage;
+  else {
+    const inner = backend.saveImage.bind(backend);
+    backend.saveImage = async (name, buf) => { await saveImage(name, buf); return inner(name, buf); };
+  }
+  backend.imageUrl ??= (name) => `/api/admin/buddy/img/${encodeURIComponent(name)}`;
+  const { init, api } = createWatcherEngine(backend);
+  await init;
+  return api;
+}
+
+export const watcherImageDir = () => path.join(process.env["MSFWR_DATA_DIR"] || path.resolve(process.cwd(), ".data"), "watcher-imgs");
+
+let openingWatcher: Promise<WatcherEngine> | undefined;
+export function watcherReady() {
+  openingWatcher ??= openWatcher().catch((err) => {
+    openingWatcher = undefined;
+    throw err;
+  });
+  return openingWatcher;
 }
