@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { ArrowLeft, ArrowUpRight, BookOpen, Code2, FlaskConical, ShieldCheck } from 'lucide-react';
 import { Link } from 'wouter';
 
-const repository = 'https://github.com/mailbhrp-1/Remote-Desktop-for-Windows';
+const repository = 'https://github.com/8thdigit/v1-Remote-Desktop-for-Windows';
 const resources = [
   {
     title: 'Source repository',

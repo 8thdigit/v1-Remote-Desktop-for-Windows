@@ -34,7 +34,7 @@ function Shell({ children }: { children: ReactNode }) {
           Only signed-in companies can view or control PCs. Ask your admin for a login.
         </p>
         {site.signIn.downloadLink && <p className="mt-2 text-center text-xs">
-          <a href="https://github.com/mailbhrp-1/Remote-Desktop-for-Windows/releases/latest/download/msfwr-Setup-x64.exe" data-testid="link-download"
+          <a href="https://github.com/8thdigit/v1-Remote-Desktop-for-Windows/releases/latest/download/msfwr-Setup-x64.exe" data-testid="link-download"
             className="font-semibold text-foreground underline underline-offset-4">Download the Connect.AI app for the Windows PC</a>
         </p>}
         <nav aria-label="About this site" className="mt-2 flex flex-wrap justify-center gap-x-5 text-xs"><SiteLinks /></nav>

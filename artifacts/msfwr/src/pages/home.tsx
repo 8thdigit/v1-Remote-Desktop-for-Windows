@@ -104,7 +104,7 @@ export default function Home() {
   const [now, setNow] = useState(Date.now);
   const relay = typeof window !== 'undefined' && window.location.protocol === 'https:' ? window.location.origin : '';
   // Served from the latest GitHub release, published by .github/workflows/release.yml.
-  const installer = 'https://github.com/mailbhrp-1/Remote-Desktop-for-Windows/releases/latest/download/msfwr-Setup-x64.exe';
+  const installer = 'https://github.com/8thdigit/v1-Remote-Desktop-for-Windows/releases/latest/download/msfwr-Setup-x64.exe';
 
   // Refs hold the latest lists so updates compose synchronously across polls.
   const pcsRef = useRef(pcs);
@@ -1016,7 +1016,7 @@ function DownloadView({ installer, relay }: { installer: string; relay: string }
   const [published, setPublished] = useState<Date | null>(null);
   useEffect(() => {
     const ctrl = new AbortController();
-    fetch('https://api.github.com/repos/mailbhrp-1/Remote-Desktop-for-Windows/releases/latest', { signal: ctrl.signal })
+    fetch('https://api.github.com/repos/8thdigit/v1-Remote-Desktop-for-Windows/releases/latest', { signal: ctrl.signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((r) => {
         if (!r) return;

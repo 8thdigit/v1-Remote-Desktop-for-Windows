@@ -33,7 +33,7 @@ func (l savedLink) expired(now time.Time) bool {
 }
 
 // shareURL is the one-click address people open to connect, such as
-// https://msfwr.vercel.app/r/L0123456789A#042137. The access code after the
+// https://connect-ai-nine.vercel.app/r/L0123456789A#042137. The access code after the
 // # is read by the page in the browser and never sent to a server log.
 func (l savedLink) shareURL() string {
 	return l.pageURL() + "#" + l.Pin

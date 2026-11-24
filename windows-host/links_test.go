@@ -11,7 +11,7 @@ import (
 
 func testLink(now time.Time) savedLink {
 	return savedLink{ID: "abcdefgh", Code: "L0123456789A", Pin: "042137", Key: strings.Repeat("k", 43), Name: "PC",
-		Relay: "https://msfwr.vercel.app", CreatedAt: now.UnixMilli(), ExpiresAt: now.Add(24 * time.Hour).UnixMilli(), Hours: 24}
+		Relay: "https://connect-ai-nine.vercel.app", CreatedAt: now.UnixMilli(), ExpiresAt: now.Add(24 * time.Hour).UnixMilli(), Hours: 24}
 }
 
 func TestSavedLinkRoundTripAndClear(t *testing.T) {
@@ -28,10 +28,10 @@ func TestSavedLinkRoundTripAndClear(t *testing.T) {
 	if err != nil || got == nil || *got != want {
 		t.Fatalf("loadLink = %+v, %v", got, err)
 	}
-	if got.shareURL() != "https://msfwr.vercel.app/r/L0123456789A#042137" {
+	if got.shareURL() != "https://connect-ai-nine.vercel.app/r/L0123456789A#042137" {
 		t.Fatalf("shareURL = %s", got.shareURL())
 	}
-	if got.shareText() != "https://msfwr.vercel.app/r/L0123456789A#042137" {
+	if got.shareText() != "https://connect-ai-nine.vercel.app/r/L0123456789A#042137" {
 		t.Fatalf("shareText = %q", got.shareText())
 	}
 	if l, _ := loadLink(path, now.Add(25*time.Hour)); l != nil {

@@ -10,7 +10,7 @@ import (
 // Vercel site serves the viewer and proxies /api to the relay on Render, so
 // one origin works for the host, the viewer and shared links. Users can
 // replace it with any other relay and Save it.
-const defaultRelayAddress = "https://msfwr.vercel.app"
+const defaultRelayAddress = "https://connect-ai-nine.vercel.app"
 
 // Only the relay origin is saved. Pairing codes and session tokens are not
 // preferences and must never be written here.

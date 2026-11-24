@@ -9,10 +9,10 @@ If you installed the older Connect.AI preview, uninstall it separately from Wind
 
 ## Start a session
 
-1. Open the Connect.AI viewer in a browser at https://msfwr.vercel.app (or your
+1. Open the Connect.AI viewer in a browser at https://connect-ai-nine.vercel.app (or your
    own relay's HTTPS origin).
 2. On the Windows PC, download and run the installer, then open **Connect.AI**
-   from Start. The relay box is prefilled with `https://msfwr.vercel.app`.
+   from Start. The relay box is prefilled with `https://connect-ai-nine.vercel.app`.
    To use another relay, paste the HTTPS address displayed on its viewer page.
    Select **Save & Close** to remember just the address on your Windows account.
    Reopen the app to reuse it, or select **Clear saved relay** to go back to
@@ -153,7 +153,7 @@ The build writes the installer to
 
 The viewer's download button links to the installer on the latest GitHub
 release:
-`https://github.com/mailbhrp-1/Remote-Desktop-for-Windows/releases/latest/download/msfwr-Setup-x64.exe`.
+`https://github.com/8thdigit/v1-Remote-Desktop-for-Windows/releases/latest/download/msfwr-Setup-x64.exe`.
 Publishing is automatic: when a change under `windows-host/` is merged to
 `main`, the **Release installer** workflow runs the Go tests, builds the
 installer with the same `build.sh`, and attaches it to a new release, so the
