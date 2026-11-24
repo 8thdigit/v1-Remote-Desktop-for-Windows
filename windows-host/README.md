@@ -1,17 +1,17 @@
-# WINRSS.net Windows host
+# Connect.AI Windows host
 
-WINRSS.net is for attended support on Windows 10/11 x64, with an optional
+Connect.AI is for attended support on Windows 10/11 x64, with an optional
 unattended mode for designated company PCs (see below). The installer runs
 without administrator privileges and adds a Start menu shortcut and an
 uninstall entry for the current user. It is unsigned; follow your organization's
 software policy. There is no Windows service. Automatic startup is added only when unattended access is turned on.
-If you installed the older WINRSS.net preview, uninstall it separately from Windows Settings.
+If you installed the older Connect.AI preview, uninstall it separately from Windows Settings.
 
 ## Start a session
 
-1. Open the WINRSS.net viewer in a browser at https://msfwr.vercel.app (or your
+1. Open the Connect.AI viewer in a browser at https://msfwr.vercel.app (or your
    own relay's HTTPS origin).
-2. On the Windows PC, download and run the installer, then open **WINRSS.net**
+2. On the Windows PC, download and run the installer, then open **Connect.AI**
    from Start. The relay box is prefilled with `https://msfwr.vercel.app`.
    To use another relay, paste the HTTPS address displayed on its viewer page.
    Select **Save & Close** to remember just the address on your Windows account.
@@ -24,7 +24,7 @@ If you installed the older WINRSS.net preview, uninstall it separately from Wind
    to end the request. In this attended mode there is no automatic approval.
 4. The helper can enable remote input from the viewer. The Windows user can
    stop the session with **Ctrl+2**, **F12**, or **Stop sharing** on the
-   always-on-top indicator. WINRSS.net never shows a taskbar button: the setup
+   always-on-top indicator. Connect.AI never shows a taskbar button: the setup
    window is a tool window (WS_EX_TOOLWINDOW), so it only minimizes to the
    desktop, not the taskbar. Restore it from Alt+Tab, Task View (Win+Tab), or
    by launching the app again. While sharing is live the window title changes
@@ -38,9 +38,9 @@ If you installed the older WINRSS.net preview, uninstall it separately from Wind
 For PCs that IT supports without someone at the keyboard, the Windows user
 can turn on a saved, pre-approved access code:
 
-1. Open WINRSS.net, paste the relay address, and select **Unattended…**.
+1. Open Connect.AI, paste the relay address, and select **Unattended…**.
    Confirm the prompt. This is the only prompt; there is none during a session.
-2. WINRSS.net saves a random key in `%LOCALAPPDATA%\Msfwr\unattended.json`
+2. Connect.AI saves a random key in `%LOCALAPPDATA%\Msfwr\unattended.json`
    (not roaming) and adds itself to sign-in startup for this Windows user
    (`HKCU\...\CurrentVersion\Run`), so the same code works after restarts.
    The 12-character access code is derived from that key and shown in the
@@ -53,7 +53,7 @@ can turn on a saved, pre-approved access code:
 The PC can also ask IT to connect. In the viewer's **Unattended PCs** tab, IT
 saves the PC's access code (it stays in that browser only); a PC is also saved
 automatically the first time IT connects to it with its access code.
-On the PC, click the WINRSS.net icon and select **Initiate — ask IT to connect**
+On the PC, click the Connect.AI icon and select **Initiate — ask IT to connect**
 (select it again to resend). The relay shows the request, with the PC's name,
 to any viewer that saved that code, for two minutes. IT gets an Accept banner,
 a chime and, if allowed, a desktop alert; **Accept** starts the session at once.
@@ -63,10 +63,10 @@ The **Unattended PCs** tab also shows each saved PC as online, in a session or
 offline, lets IT label and connect to it directly, and keeps a history of new
 and previous requests (waiting, accepted, missed, dismissed) in that browser.
 
-### The WINRSS.net window
+### The Connect.AI window
 
-Open **WINRSS.net** from Start (or left-click the notification-area icon, or pick
-**Open WINRSS.net** in its menu) to see the WINRSS.net window while unattended access is
+Open **Connect.AI** from Start (or left-click the notification-area icon, or pick
+**Open Connect.AI** in its menu) to see the Connect.AI window while unattended access is
 on. It shows:
 
 - **Status**: ready, request sent, connected, offline or locked, with the
@@ -75,25 +75,25 @@ on. It shows:
 - **Controls**: **Initiate**, **Stop current session** and
   **Create remote access URL…**, plus **Turn off unattended…** and **Exit**.
 - **Connections**: whether IT is connected now and for how long, the number
-  of sessions since WINRSS.net started, a list of recent sessions (kept in memory
+  of sessions since Connect.AI started, a list of recent sessions (kept in memory
   only), and the active remote access URLs with **Copy URL** and **Revoke URL**.
-- **Version**, for example `WINRSS.net v0.3.2 · Windows x64`.
+- **Version**, for example `Connect.AI v0.3.2 · Windows x64`.
 
 Closing the window (or **Hide**) only hides it; unattended access keeps
-running from the icon. Like every WINRSS.net window it has no taskbar button and
-no minimize button; reopen it from the icon or from Start. When WINRSS.net starts at sign-in it stays in the
+running from the icon. Like every Connect.AI window it has no taskbar button and
+no minimize button; reopen it from the icon or from Start. When Connect.AI starts at sign-in it stays in the
 notification area and does not open the window. The relay does not report
 who the viewer is, so the window shows when a session started, not a name.
 
 ### No taskbar or notification-area presence
 
-WINRSS.net shows nothing while it is idle: no taskbar button and no
+Connect.AI shows nothing while it is idle: no taskbar button and no
 notification-area (tray) icon. Unattended access runs from a hidden window.
-Open the **WINRSS.net** window from its Start shortcut for the status, the access
+Open the **Connect.AI** window from its Start shortcut for the status, the access
 code, the connection count, **Copy access code**, **Initiate**, **Stop current
 session**, **Turn off unattended access…** (deletes the key and the startup
 entry), and **Exit** (unattended access starts again at next sign-in).
-Starting WINRSS.net again while it runs brings its existing window to the front
+Starting Connect.AI again while it runs brings its existing window to the front
 instead of starting a second copy.
 
 ### RA ID

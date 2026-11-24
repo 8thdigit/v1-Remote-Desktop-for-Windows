@@ -274,7 +274,7 @@ export function CompanyDashboardView({ onOpen }: { onOpen: (tab: 'pcs' | 'connec
                 <p className="mt-1 text-[11px] text-muted-foreground">{Math.round(periodPct * 100)}% of this billing period has passed</p>
               </div>
             ) : (
-              <p className="mt-3 max-w-md text-sm text-muted-foreground">Your company has no subscription plan on record, so nothing is limited. Ask your WINRSS.net provider about plans.</p>
+              <p className="mt-3 max-w-md text-sm text-muted-foreground">Your company has no subscription plan on record, so nothing is limited. Ask your Connect.AI provider about plans.</p>
             )}
           </div>
           <div className="flex items-center gap-5">

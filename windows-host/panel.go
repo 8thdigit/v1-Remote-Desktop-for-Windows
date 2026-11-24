@@ -19,7 +19,7 @@ func versionText() string {
 	if !versionFormat.MatchString(v) {
 		v = "dev"
 	}
-	return "WINRSS.net " + v + " · Windows x64"
+	return "Connect.AI " + v + " · Windows x64"
 }
 
 // stateLabel is the headline for an unattended state in the Msfwr window.

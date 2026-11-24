@@ -1,4 +1,4 @@
-// Vercel Routing Middleware for the WINRSS.net viewer.
+// Vercel Routing Middleware for the Connect.AI viewer.
 //
 // The viewer is a static single-page app, so the title, description, share
 // image and favicon an admin sets in /admin → Site settings are only applied

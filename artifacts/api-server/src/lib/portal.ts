@@ -224,11 +224,11 @@ export type { Entitlement, SubStatus };
 // the host endpoints that refuse registration for an inactive company.
 export function subBlockMessage(reason: Entitlement["reason"]): string {
   switch (reason) {
-    case "expired": return "This company's WINRSS.net subscription has expired. Contact your provider to renew it.";
-    case "suspended": return "This company's WINRSS.net subscription is suspended. Contact your provider.";
+    case "expired": return "This company's Connect.AI subscription has expired. Contact your provider to renew it.";
+    case "suspended": return "This company's Connect.AI subscription is suspended. Contact your provider.";
     case "quota": return "This company has reached its usage limit (remote access URLs and extra sessions) for the current billing period. Ask your provider to renew or extend it.";
     case "license": return "This client's license is missing, invalid or revoked. Reconfigure it from the admin console.";
-    default: return "This company's WINRSS.net subscription is not active.";
+    default: return "This company's Connect.AI subscription is not active.";
   }
 }
 

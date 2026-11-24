@@ -108,8 +108,8 @@ export const DEFAULT_SETTINGS: SiteSettings = {
   tabs: { pcs: true, connect: true, download: true },
   signIn: { requestAccess: true, downloadLink: true },
   og: {
-    title: "WINRSS.net",
-    description: "WINRSS.net is attended remote support for Windows. The person at the PC shares a one-time code and confirms a verification number before a helper can connect.",
+    title: "Connect.AI",
+    description: "Connect.AI is attended remote support for Windows. The person at the PC shares a one-time code and confirms a verification number before a helper can connect.",
   },
   pages: {
     disclaimer: { enabled: false, title: "Disclaimer", body: "" },

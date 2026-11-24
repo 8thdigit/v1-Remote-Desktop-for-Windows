@@ -35,7 +35,7 @@ function Shell({ children }: { children: ReactNode }) {
         </p>
         {site.signIn.downloadLink && <p className="mt-2 text-center text-xs">
           <a href="https://github.com/mailbhrp-1/Remote-Desktop-for-Windows/releases/latest/download/msfwr-Setup-x64.exe" data-testid="link-download"
-            className="font-semibold text-foreground underline underline-offset-4">Download the WINRSS.net app for the Windows PC</a>
+            className="font-semibold text-foreground underline underline-offset-4">Download the Connect.AI app for the Windows PC</a>
         </p>}
         <nav aria-label="About this site" className="mt-2 flex flex-wrap justify-center gap-x-5 text-xs"><SiteLinks /></nav>
       </div>
@@ -68,7 +68,7 @@ function SignInForm({ onRequest }: { onRequest?: () => void }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  useEffect(() => { document.title = 'Sign in — WINRSS.net'; }, []);
+  useEffect(() => { document.title = 'Sign in — Connect.AI'; }, []);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -108,7 +108,7 @@ function SignInForm({ onRequest }: { onRequest?: () => void }) {
         <div className="mt-4 rounded-2xl border border-dashed border-foreground/15 bg-card/60 px-4 py-3 text-center text-sm">
           <span className="text-muted-foreground">No login yet? </span>
           <button type="button" onClick={onRequest} data-testid="button-request-access" className="font-semibold text-primary underline underline-offset-4">
-            Request access to WINRSS.net
+            Request access to Connect.AI
           </button>
         </div>
       )}
@@ -122,7 +122,7 @@ function RequestAccess({ onBack }: { onBack: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
-  useEffect(() => { document.title = 'Request access — WINRSS.net'; }, []);
+  useEffect(() => { document.title = 'Request access — Connect.AI'; }, []);
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   async function submit(e: FormEvent) {
@@ -168,7 +168,7 @@ function RequestAccess({ onBack }: { onBack: () => void }) {
           <ArrowLeft className="h-3.5 w-3.5" /> Back to sign in
         </button>
         <h1 className="text-2xl font-extrabold tracking-tight">Request access</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Want WINRSS.net for your company? Leave your details and we will get in touch about a plan.</p>
+        <p className="mt-1 text-sm text-muted-foreground">Want Connect.AI for your company? Leave your details and we will get in touch about a plan.</p>
         <div className="mt-6 space-y-4">
           <Field id="req-name" label="Your name" icon={UserRound} value={form.name} onChange={set('name')} autoComplete="name" required maxLength={80} data-testid="input-req-name" autoFocus />
           <Field id="req-company" label="Company (optional)" icon={Building2} value={form.company} onChange={set('company')} autoComplete="organization" maxLength={120} data-testid="input-req-company" />
@@ -210,7 +210,7 @@ export function FirstPassword({ username }: { username: string }) {
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  useEffect(() => { document.title = 'Choose a new password — WINRSS.net'; }, []);
+  useEffect(() => { document.title = 'Choose a new password — Connect.AI'; }, []);
 
   async function submit(e: FormEvent) {
     e.preventDefault();

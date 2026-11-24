@@ -26,7 +26,7 @@ export function RaBadge({ compact = false }: { compact?: boolean }) {
   const { user } = useAuth();
   const [copied, setCopied] = useState(false);
   return (
-    <button type="button" data-testid="button-copy-ra" title="Copy your RA ID. Enter it in the WINRSS.net window on a PC so the PC and its requests come to you."
+    <button type="button" data-testid="button-copy-ra" title="Copy your RA ID. Enter it in the Connect.AI window on a PC so the PC and its requests come to you."
       onClick={() => { void navigator.clipboard.writeText(raLabel(user.raId)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }).catch(() => {}); }}
       className="flex items-center gap-2 rounded-xl border border-primary/25 bg-primary/8 px-3 py-1.5 font-mono text-xs font-bold text-primary hover:bg-primary/12">
       {!compact && <span className="font-sans text-[10px] font-semibold uppercase tracking-widest text-primary/75">Your RA ID</span>}

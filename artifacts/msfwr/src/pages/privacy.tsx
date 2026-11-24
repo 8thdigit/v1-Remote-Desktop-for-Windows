@@ -33,17 +33,17 @@ const sections = [
 function PageShell({ title, lead, children }: { title: string; lead?: string; children: React.ReactNode }) {
   useEffect(() => {
     const previousTitle = document.title;
-    document.title = `${title} — WINRSS.net`;
+    document.title = `${title} — Connect.AI`;
     return () => { document.title = previousTitle; };
   }, [title]);
   return (
     <main className="min-h-[100dvh] bg-background text-foreground">
       <div className="mx-auto max-w-3xl px-5 pb-16 pt-6 sm:px-8 sm:pt-10">
         <Link href="/" className="inline-flex min-h-11 items-center gap-2 rounded-md text-sm font-semibold text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary">
-          <ArrowLeft size={16} aria-hidden="true" /> Back to WINRSS.net
+          <ArrowLeft size={16} aria-hidden="true" /> Back to Connect.AI
         </Link>
         <header className="mt-7 border-b pb-7 sm:mt-10">
-          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">WINRSS.net · Attended remote support</p>
+          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Connect.AI · Attended remote support</p>
           <h1 className="mt-3 text-4xl font-extrabold tracking-tight sm:text-5xl" data-testid="text-page-title">{title}</h1>
           {lead && <p className="mt-4 max-w-prose text-lg text-muted-foreground">{lead}</p>}
         </header>
@@ -63,7 +63,7 @@ export default function Privacy() {
     return <PageShell title={page.title || 'Privacy'}><div className="py-6" data-testid="text-page-body"><PageText body={page.body} /></div></PageShell>;
   }
   return (
-    <PageShell title="Privacy" lead="What WINRSS.net handles when you visit the site or start a remote support session.">
+    <PageShell title="Privacy" lead="What Connect.AI handles when you visit the site or start a remote support session.">
       {sections.map(({ title, text }) => (
         <section key={title} className="border-b py-6 last:border-b-0">
           <h2 className="text-xl font-bold">{title}</h2>

@@ -27,7 +27,7 @@ const resources = [
 export default function Project() {
   useEffect(() => {
     const previousTitle = document.title;
-    document.title = 'Project status — WINRSS.net';
+    document.title = 'Project status — Connect.AI';
     return () => { document.title = previousTitle; };
   }, []);
 
@@ -35,14 +35,14 @@ export default function Project() {
     <main className="min-h-[100dvh] bg-background text-foreground">
       <div className="mx-auto max-w-4xl px-5 pb-16 pt-6 sm:px-8 sm:pt-10">
         <Link href="/" className="inline-flex min-h-11 items-center gap-2 rounded-md text-sm font-semibold text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary">
-          <ArrowLeft size={16} aria-hidden="true" /> Back to WINRSS.net
+          <ArrowLeft size={16} aria-hidden="true" /> Back to Connect.AI
         </Link>
 
         <header className="mt-7 border-b pb-8 sm:mt-10">
-          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">WINRSS.net · Early preview</p>
+          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Connect.AI · Early preview</p>
           <h1 className="mt-3 text-4xl font-extrabold tracking-tight sm:text-5xl">Project status</h1>
           <p className="mt-4 max-w-prose text-lg leading-relaxed text-muted-foreground">
-            WINRSS.net is an attended remote support tool for Windows. The person at the PC approves each connection and can stop sharing at any time.
+            Connect.AI is an attended remote support tool for Windows. The person at the PC approves each connection and can stop sharing at any time.
           </p>
         </header>
 

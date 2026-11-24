@@ -289,7 +289,7 @@ export function RegistrationsPanel({ onError, onCreateCompany }: { onError: (m: 
         ))}
       </div>
     }>
-      <p className="-mt-1 mb-2 text-xs text-muted-foreground">People who asked to buy WINRSS.net from the "Request access" form on the sign-in page. Accept or reject each one, keep an action plan and comments, and close it as converted to customer or query closed.</p>
+      <p className="-mt-1 mb-2 text-xs text-muted-foreground">People who asked to buy Connect.AI from the "Request access" form on the sign-in page. Accept or reject each one, keep an action plan and comments, and close it as converted to customer or query closed.</p>
       {q.isPending ? <Empty text="Loading…" /> : shown.length === 0 ? <Empty text={filter === 'pending' ? 'No pending requests.' : 'No requests here.'} /> : (
         <ul className="divide-y divide-foreground/8">
           {shown.map((r) => (
@@ -323,7 +323,7 @@ function RegistrationRow({ r, now, expanded, onToggle, onPatch, onComment, onRem
   const [busy, setBusy] = useState(false);
   useEffect(() => { setPlan(r.actionPlan); }, [r.actionPlan]);
   const [statusLabel, statusCls] = REG_STATUS[r.status];
-  const wa = whatsappLink(r.mobile, `Hi ${r.name}, this is WINRSS.net. Thank you for your interest in remote support for Windows.`);
+  const wa = whatsappLink(r.mobile, `Hi ${r.name}, this is Connect.AI. Thank you for your interest in remote support for Windows.`);
   const run = async (fn: () => Promise<boolean>) => { setBusy(true); try { return await fn(); } finally { setBusy(false); } };
   const btn = 'inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-semibold disabled:opacity-50';
   return (
@@ -559,7 +559,7 @@ export function SiteSettingsPanel({ onError }: { onError: (m: string | null) => 
             <ImageSlot kind="favicon" label="Favicon" hint="The browser tab icon. ICO, PNG or SVG, up to 256 KB." asset={draft.favicon}
               accept="image/x-icon,image/vnd.microsoft.icon,image/png,image/svg+xml" onChange={changeImage} />
           </div>
-          <p className="mt-3 text-xs text-muted-foreground">Remove an image to go back to the built-in WINRSS.net mark.</p>
+          <p className="mt-3 text-xs text-muted-foreground">Remove an image to go back to the built-in Connect.AI mark.</p>
         </Card>
       </div>
 
@@ -582,7 +582,7 @@ export function SiteSettingsPanel({ onError }: { onError: (m: string | null) => 
             </div>
             <div className="p-3">
               <p className="font-mono text-[10px] uppercase text-muted-foreground">{typeof window !== 'undefined' ? window.location.host : ''}</p>
-              <p className="truncate text-sm font-semibold">{draft.og.title || 'WINRSS.net'}</p>
+              <p className="truncate text-sm font-semibold">{draft.og.title || 'Connect.AI'}</p>
               <p className="line-clamp-2 text-xs text-muted-foreground">{draft.og.description}</p>
             </div>
           </div>
