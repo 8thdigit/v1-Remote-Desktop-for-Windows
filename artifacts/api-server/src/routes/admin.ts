@@ -390,37 +390,55 @@ async function cached<T>(key: string, ms: number, build: () => T | Promise<T>): 
   return value;
 }
 
+// A cache whose builder can never throw: on failure the previous value (or a
+// fallback) is returned, so Inspect Buddy enrichment errors are logged but
+// can never turn into "Could not load the ongoing sessions".
+async function safeCached<T>(key: string, ms: number, build: () => T | Promise<T>, fallback: T): Promise<T> {
+  const hit = enrichCache.get(key);
+  if (hit && Date.now() - hit.at < ms) return hit.value as T;
+  try {
+    const value = await build();
+    enrichCache.set(key, { at: Date.now(), value });
+    return value;
+  } catch (err) {
+    console.warn("Inspect Buddy: enrichment failed for", key, err);
+    return (hit?.value as T) ?? fallback;
+  }
+}
+
 router.get("/buddy/sessions", async (_req, res) => {
   try {
     // The core list comes straight from the relay's in-memory session table —
     // it cannot fail on any side-store. Everything else below only enriches
     // each row and is individually guarded.
-    const { live } = store.overview();
-    const sessions = live.filter((s) => s.state === "live");
+    let sessions: ReturnType<typeof store.overview>["live"] = [];
+    try {
+      const { live } = store.overview();
+      // Any session that has left "waiting" is an ongoing session — exactly
+      // what the Sessions tab counts. (A stricter state === "live" filter
+      // dropped freshly-accepted sessions and showed an empty control room.)
+      sessions = live.filter((s) => s.state !== "waiting");
+    } catch (err) {
+      console.warn("Inspect Buddy: session table unavailable", err);
+    }
 
-    const accounts = await cached("accounts", 5_000, async () => {
-      try { return await accountsReady(); } catch (err) { console.warn("Inspect Buddy: account directory unavailable", err); return undefined; }
-    }) as Awaited<ReturnType<typeof accountsReady>> | undefined;
+    const accounts = await safeCached("accounts", 5_000, () => accountsReady(), undefined as Awaited<ReturnType<typeof accountsReady>> | undefined);
 
-    const notes = await cached("buddy-notes", 2_000, async () => {
-      try { return (await buddyReady()).sessionsIndex(); } catch (err) { console.warn("Inspect Buddy: AI Buddy records unavailable", err); return undefined; }
-    }) as Map<string, { captureCount?: number }> | undefined;
+    const notes = await safeCached("buddy-notes", 2_000, async () => (await buddyReady()).sessionsIndex(), undefined as Map<string, { captureCount?: number }> | undefined);
 
-    const lastTexts = await cached("buddy-last-texts", 2_000, async () => {
+    const lastTexts = await safeCached("buddy-last-texts", 2_000, async () => {
       const map = new Map<string, string>();
-      try {
-        const buddy = await buddyReady();
-        for (const s of sessions) {
-          const full = buddy.session(s.id) as { captures?: { text?: string }[] } | null | undefined;
-          const caps = full && Array.isArray(full.captures) ? full.captures : [];
-          const t = String(caps[caps.length - 1]?.text ?? "");
-          if (t) map.set(s.id, t);
-        }
-      } catch { /* enrichment only */ }
+      const buddy = await buddyReady();
+      for (const s of sessions) {
+        const full = buddy.session(s.id) as { captures?: { text?: string }[] } | null | undefined;
+        const caps = full && Array.isArray(full.captures) ? full.captures : [];
+        const t = String(caps[caps.length - 1]?.text ?? "");
+        if (t) map.set(s.id, t);
+      }
       return map;
-    }) as Map<string, string>;
+    }, new Map<string, string>());
 
-    const watchers = await cached("watcher-states", 2_000, () => watcherStates());
+    const watchers = await safeCached("watcher-states", 2_000, () => watcherStates(), new Map<string, WatcherRow>());
 
     const byRa = new Map((accounts?.list() ?? []).map((u) => [u.raId, u.displayName]));
     const rows = sessions.map((s) => ({
@@ -500,6 +518,8 @@ router.get("/buddy/watchers/:id", async (req, res) => {
 
 router.post("/buddy/watchers/:id", async (req, res) => {
   try {
+    // watcherReady() resolves even when the state store failed to open (it
+    // falls back to an in-memory engine), so this can never hang the UI.
     const engine = await watcherReady();
     const live = store.overview().live.find((s) => s.id === req.params.id && s.state === "live");
     const accounts = await accountsReady();
