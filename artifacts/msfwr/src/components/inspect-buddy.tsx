@@ -22,6 +22,9 @@ const MODE_LABEL: Record<Mode, string> = { attended: 'Attended', unattended: 'Un
 export type WatcherSession = {
   sessionId: string; pcName: string; mode: Mode; company: string; operator: string; startedAt: number;
   viewers: number; captureCount: number; lastSeenText: string;
+  // The watcher state is embedded in the sessions payload by the server, so
+  // the control room loads with a single request and no per-session queries.
+  watcher?: WatcherView | null;
 };
 
 export type QuestionState = 'pending' | 'researching' | 'recommended' | 'accepted' | 'corrected';
@@ -94,28 +97,16 @@ export function InspectBuddyPanel({ onError }: { onError: (msg: string | null) =
   const [openSession, setOpenSession] = useState<string | null>(null);
   const [q, setQ] = useState('');
 
+  // One request loads every ongoing session together with its watcher state
+  // (embedded server-side), so a slow or failing watcher fetch can never
+  // blank the control room.
   const list = useQuery({ queryKey: ['buddy-sessions'], queryFn: () => api<{ sessions: WatcherSession[] }>('/buddy/sessions'), refetchInterval: 10_000 });
-  // Watcher states are fetched per session and must never block the session
-  // list: if any watcher fetch fails we fall back to the rows from the list
-  // query (watchers show as "off") instead of showing an empty control room.
-  const watchers = useQuery({
-    queryKey: ['buddy-watchers'],
-    queryFn: async () => {
-      const sessions = list.data?.sessions ?? (await api<{ sessions: WatcherSession[] }>('/buddy/sessions')).sessions ?? [];
-      const states = await Promise.all(sessions.map((s) =>
-        api<WatcherView>(`/buddy/watchers/${encodeURIComponent(s.sessionId)}`).catch(() => null)));
-      const map: Record<string, WatcherView | null> = {};
-      sessions.forEach((s, i) => { map[s.sessionId] = states[i]; });
-      return { sessions, map };
-    },
-    enabled: !list.error,
-    refetchInterval: 5_000,
-  });
 
   useEffect(() => { if (list.error) onError(errorText(list.error, 'Could not load the ongoing sessions.')); }, [list.error, onError]);
 
-  const rows = watchers.data?.sessions ?? list.data?.sessions ?? [];
-  const map = watchers.data?.map ?? {};
+  const rows = list.data?.sessions ?? [];
+  const map: Record<string, WatcherView | null> = {};
+  for (const r of rows) map[r.sessionId] = r.watcher ?? null;
   const needle = q.trim().toLowerCase();
   const filtered = useMemo(() => rows.filter((r) => !needle ||
     [r.pcName, r.company, r.operator].join(' ').toLowerCase().includes(needle)), [rows, needle]);
@@ -127,7 +118,7 @@ export function InspectBuddyPanel({ onError }: { onError: (msg: string | null) =
   async function toggle(sessionId: string, enable: boolean) {
     try {
       await send(`/buddy/watchers/${encodeURIComponent(sessionId)}`, enable ? 'POST' : 'DELETE');
-      await qc.invalidateQueries({ queryKey: ['buddy-watchers'] });
+      await qc.invalidateQueries({ queryKey: ['buddy-sessions'] });
     } catch (e) { onError(errorText(e, 'Could not change the watcher.')); }
   }
 
@@ -143,7 +134,7 @@ export function InspectBuddyPanel({ onError }: { onError: (msg: string | null) =
               className="inline-flex items-center gap-1.5 rounded-xl border border-foreground/15 px-3 py-1.5 text-xs font-semibold hover:bg-muted">
               <BookOpen className="h-3.5 w-3.5" /> Document repository
             </button>
-            <button type="button" onClick={() => void qc.invalidateQueries({ queryKey: ['buddy-watchers'] })}
+            <button type="button" onClick={() => void qc.invalidateQueries({ queryKey: ['buddy-sessions'] })}
               className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground">
               <RefreshLike /> Refresh
             </button>
@@ -163,7 +154,7 @@ export function InspectBuddyPanel({ onError }: { onError: (msg: string | null) =
             className="w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 pl-9 text-sm outline-none focus:border-primary" data-testid="input-inspect-search" />
         </label>
 
-        {list.isPending || (watchers.isPending && !rows.length) ? <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p> : filtered.length === 0 ? (
+        {list.isPending ? <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p> : filtered.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">{rows.length ? 'No session matches this search.' : 'No ongoing sessions right now. Sessions appear here live as soon as a helper connects.'}</p>
         ) : (
           <ul className="mt-3 divide-y divide-foreground/8">
@@ -245,7 +236,7 @@ function WatcherDetail({ sessionId, onClose, onError }: { sessionId: string; onC
       await send(`/buddy/watchers/${encodeURIComponent(sessionId)}/questions/${index}/${action}`, 'POST', answer ? { answer } : undefined);
       setMsg(action === 'accept' ? 'Answer accepted.' : 'Correction saved.');
       await qc.invalidateQueries({ queryKey: ['buddy-watcher', sessionId] });
-      await qc.invalidateQueries({ queryKey: ['buddy-watchers'] });
+      await qc.invalidateQueries({ queryKey: ['buddy-sessions'] });
     } catch (e) { onError(errorText(e, 'That decision did not go through.')); } finally { setBusy(null); }
   }
 

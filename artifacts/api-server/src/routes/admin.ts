@@ -358,10 +358,28 @@ router.delete("/buddy/kb/:id", async (req, res) => {
 
 // The live sessions as the control room lists them: PC, company, helper,
 // viewers, uptime, plus what AI Buddy last read off the screen.
+// One watcher state per session id, from the engine's own records. An engine
+// failure here must never blank the control room — every row just shows its
+// watcher as off instead.
+type WatcherRow = NonNullable<ReturnType<typeof watcherView>>;
+
+async function watcherStates(): Promise<Map<string, WatcherRow>> {
+  const map = new Map<string, WatcherRow>();
+  try {
+    const engine = await watcherReady();
+    for (const w of engine.list()) {
+      const v = watcherView(w, (n) => `/api/admin/buddy/img/${encodeURIComponent(n)}`);
+      if (v) map.set(w.sessionId, v);
+    }
+  } catch (err) { console.warn("Inspect Buddy: watcher states unavailable", err); }
+  return map;
+}
+
 router.get("/buddy/sessions", async (_req, res) => {
   try {
-    // The page must still list sessions even if AI Buddy's records or the
-    // account directory fail to open — those only enrich each row.
+    // The page must still list sessions even if AI Buddy's records, the
+    // account directory or the watcher engine fail to open — those only
+    // enrich each row.
     let accounts: Awaited<ReturnType<typeof accountsReady>> | undefined;
     let notes: Map<string, unknown> | undefined;
     try { accounts = await accountsReady(); } catch (err) { console.warn("Inspect Buddy: account directory unavailable", err); }
@@ -371,6 +389,7 @@ router.get("/buddy/sessions", async (_req, res) => {
       notes = buddy.sessionsIndex();
       buddyFull = (id: string) => buddy.session(id) as { captures?: { text?: string }[] } | null | undefined;
     } catch (err) { console.warn("Inspect Buddy: AI Buddy records unavailable", err); }
+    const watchers = await watcherStates();
     const byRa = new Map((accounts?.list() ?? []).map((u) => [u.raId, u.displayName]));
     const rows = store.overview().live.filter((s) => s.state === "live").map((s) => {
       const b = notes?.get(s.id) as { captureCount?: number; lastCaptureAt?: number } | undefined;
@@ -393,6 +412,7 @@ router.get("/buddy/sessions", async (_req, res) => {
         viewers: s.viewers,
         captureCount: b?.captureCount ?? 0,
         lastSeenText: lastText.slice(0, 300),
+        watcher: watchers.get(s.id) ?? null,
       };
     });
     res.json({ sessions: rows });
