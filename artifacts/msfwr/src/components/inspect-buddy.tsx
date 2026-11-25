@@ -50,16 +50,31 @@ export type RepoDoc = {
 };
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`/api/admin${path}`, {
-    credentials: 'same-origin',
-    headers: init?.body ? { 'content-type': 'application/json' } : undefined,
-    ...init,
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => null);
-    throw Object.assign(new Error('request failed'), { status: res.status, data });
+  let res: Response;
+  try {
+    res = await fetch(`/api/admin${path}`, {
+      credentials: 'same-origin',
+      headers: init?.body ? { 'content-type': 'application/json' } : undefined,
+      ...init,
+    });
+  } catch {
+    // Network-level failure (offline, DNS/TLS hiccup, server cold start).
+    // Surface it as a normal error object instead of an opaque TypeError.
+    throw Object.assign(new Error('Could not reach the relay server. Check your connection and try again.'), { status: 0, data: null });
   }
-  return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
+  if (!res.ok) {
+    // A non-JSON body (e.g. an HTML error page from a proxy or a cold-start
+    // relay) must not become "Failed to execute 'json'" — read it as text and
+    // pass a useful message along.
+    const data = res.status === 204 || res.headers.get('content-type')?.includes('json')
+      ? await res.json().catch(() => null)
+      : { error: (await res.text().catch(() => '')).slice(0, 200) || `Server responded with ${res.status}` };
+    throw Object.assign(new Error(String((data as { error?: string })?.error ?? `request failed (${res.status})`)), { status: res.status, data });
+  }
+  if (res.status === 204) return undefined as T;
+  const isJson = res.headers.get('content-type')?.includes('json');
+  if (!isJson) throw Object.assign(new Error('The relay returned an unexpected response (not JSON). It may still be starting up.'), { status: res.status, data: null });
+  return (await res.json()) as T;
 }
 const send = <T,>(path: string, method: string, body?: unknown) => api<T>(path, { method, body: JSON.stringify(body ?? {}) });
 

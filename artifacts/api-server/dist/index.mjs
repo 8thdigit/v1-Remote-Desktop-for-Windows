@@ -36315,9 +36315,9 @@ function getName(value, stripPath) {
 }
 function supportsFormData(fetchObject) {
   const fetch2 = typeof fetchObject === "function" ? fetchObject : fetchObject.fetch;
-  const cached2 = supportsFormDataMap.get(fetch2);
-  if (cached2)
-    return cached2;
+  const cached3 = supportsFormDataMap.get(fetch2);
+  if (cached3)
+    return cached3;
   const promise = (async () => {
     try {
       const FetchResponse = "Response" in fetch2 ? fetch2.Response : (await fetch2("data:,")).constructor;
@@ -41604,8 +41604,8 @@ async function walk(base, visit) {
     }
   }
 }
-function unchangedSinceHashed(cached2, st) {
-  return st.mtimeNs === cached2.mtimeNs && st.ctimeNs === cached2.ctimeNs && st.size === cached2.size;
+function unchangedSinceHashed(cached3, st) {
+  return st.mtimeNs === cached3.mtimeNs && st.ctimeNs === cached3.ctimeNs && st.size === cached3.size;
 }
 function oldEnoughToCache(st, walkStartNs) {
   const newestNs = st.mtimeNs > st.ctimeNs ? st.mtimeNs : st.ctimeNs;
@@ -41836,10 +41836,10 @@ var init_file_store = __esm({
           }
           if (!st.isFile())
             return null;
-          const cached2 = this.hashes.get(rel);
+          const cached3 = this.hashes.get(rel);
           let sha;
-          if (cached2 !== void 0 && unchangedSinceHashed(cached2, st)) {
-            sha = cached2.sha;
+          if (cached3 !== void 0 && unchangedSinceHashed(cached3, st)) {
+            sha = cached3.sha;
           } else {
             try {
               sha = await _internals.hashFile(full);
@@ -62964,21 +62964,21 @@ var init_token_cache = __esm({
       async getToken() {
         const force = this.nextForce;
         this.nextForce = false;
-        const cached2 = this.cached;
-        if (force || cached2 == null) {
+        const cached3 = this.cached;
+        if (force || cached3 == null) {
           const token2 = await this.refresh(force);
           return token2.token;
         }
-        if (cached2.expiresAt == null) {
-          return cached2.token;
+        if (cached3.expiresAt == null) {
+          return cached3.token;
         }
-        const remaining = cached2.expiresAt - nowAsSeconds();
+        const remaining = cached3.expiresAt - nowAsSeconds();
         if (remaining > ADVISORY_REFRESH_THRESHOLD_IN_SECONDS) {
-          return cached2.token;
+          return cached3.token;
         }
         if (remaining > MANDATORY_REFRESH_THRESHOLD_IN_SECONDS) {
           this.backgroundRefresh();
-          return cached2.token;
+          return cached3.token;
         }
         const token = await this.refresh();
         return token.token;
@@ -67991,9 +67991,9 @@ var NONE = 0;
 var ASSUMED = 1;
 var PROVEN = 2;
 function isRecursive(inst, stack, resolve2) {
-  const cached2 = recursive.get(inst);
-  if (cached2 !== void 0)
-    return cached2 ? PROVEN : NONE;
+  const cached3 = recursive.get(inst);
+  if (cached3 !== void 0)
+    return cached3 ? PROVEN : NONE;
   if (stack.has(inst))
     return PROVEN;
   stack.add(inst);
@@ -76435,49 +76435,62 @@ async function watcherStates() {
   }
   return map;
 }
+var enrichCache = /* @__PURE__ */ new Map();
+async function cached2(key, ms, build) {
+  const hit = enrichCache.get(key);
+  if (hit && Date.now() - hit.at < ms) return hit.value;
+  const value = await build();
+  enrichCache.set(key, { at: Date.now(), value });
+  return value;
+}
 router4.get("/buddy/sessions", async (_req, res) => {
   try {
-    let accounts;
-    let notes;
-    try {
-      accounts = await accountsReady();
-    } catch (err) {
-      console.warn("Inspect Buddy: account directory unavailable", err);
-    }
-    let buddyFull;
-    try {
-      const buddy = await buddyReady();
-      notes = buddy.sessionsIndex();
-      buddyFull = (id) => buddy.session(id);
-    } catch (err) {
-      console.warn("Inspect Buddy: AI Buddy records unavailable", err);
-    }
-    const watchers = await watcherStates();
-    const byRa = new Map((accounts?.list() ?? []).map((u) => [u.raId, u.displayName]));
-    const rows = store.overview().live.filter((s) => s.state === "live").map((s) => {
-      const b = notes?.get(s.id);
-      let lastText = "";
-      if (b?.captureCount) {
-        try {
-          const full = buddyFull?.(s.id);
-          const caps = full && Array.isArray(full.captures) ? full.captures : [];
-          lastText = String(caps[caps.length - 1]?.text ?? "");
-        } catch {
-        }
+    const { live } = store.overview();
+    const sessions = live.filter((s) => s.state === "live");
+    const accounts = await cached2("accounts", 5e3, async () => {
+      try {
+        return await accountsReady();
+      } catch (err) {
+        console.warn("Inspect Buddy: account directory unavailable", err);
+        return void 0;
       }
-      return {
-        sessionId: s.id,
-        pcName: s.name || "",
-        mode: s.mode,
-        company: s.ra && byRa.get(s.ra) || "",
-        operator: s.operator ?? "",
-        startedAt: s.liveAt ?? s.createdAt,
-        viewers: s.viewers,
-        captureCount: b?.captureCount ?? 0,
-        lastSeenText: lastText.slice(0, 300),
-        watcher: watchers.get(s.id) ?? null
-      };
     });
+    const notes = await cached2("buddy-notes", 2e3, async () => {
+      try {
+        return (await buddyReady()).sessionsIndex();
+      } catch (err) {
+        console.warn("Inspect Buddy: AI Buddy records unavailable", err);
+        return void 0;
+      }
+    });
+    const lastTexts = await cached2("buddy-last-texts", 2e3, async () => {
+      const map = /* @__PURE__ */ new Map();
+      try {
+        const buddy = await buddyReady();
+        for (const s of sessions) {
+          const full = buddy.session(s.id);
+          const caps = full && Array.isArray(full.captures) ? full.captures : [];
+          const t = String(caps[caps.length - 1]?.text ?? "");
+          if (t) map.set(s.id, t);
+        }
+      } catch {
+      }
+      return map;
+    });
+    const watchers = await cached2("watcher-states", 2e3, () => watcherStates());
+    const byRa = new Map((accounts?.list() ?? []).map((u) => [u.raId, u.displayName]));
+    const rows = sessions.map((s) => ({
+      sessionId: s.id,
+      pcName: s.name || "",
+      mode: s.mode,
+      company: s.ra && byRa.get(s.ra) || "",
+      operator: s.operator ?? "",
+      startedAt: s.liveAt ?? s.createdAt,
+      viewers: s.viewers,
+      captureCount: notes?.get(s.id)?.captureCount ?? 0,
+      lastSeenText: (lastTexts.get(s.id) ?? "").slice(0, 300),
+      watcher: watchers.get(s.id) ?? null
+    }));
     res.json({ sessions: rows });
   } catch (err) {
     sendError(res, err);
