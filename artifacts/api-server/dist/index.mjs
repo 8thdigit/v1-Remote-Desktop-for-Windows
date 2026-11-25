@@ -28360,7 +28360,7 @@ var require_pino = __commonJS({
     function pinoBundlerAbsolutePath(p) {
       try {
         const path12 = __require("path");
-        const outputDir = "/workspace/artifacts/api-server/dist";
+        const outputDir = "/tmp/syncwt/artifacts/api-server/dist";
         return path12.resolve(outputDir, p.replace(/^\.\//, ""));
       } catch (e) {
         const f = new Function("p", "return new URL(p, import.meta.url).pathname");
@@ -73195,8 +73195,8 @@ var DEFAULT_SETTINGS = {
   tabs: { pcs: true, connect: true, download: true },
   signIn: { requestAccess: true, downloadLink: true },
   og: {
-    title: "WINRSS.net",
-    description: "WINRSS.net is attended remote support for Windows. The person at the PC shares a one-time code and confirms a verification number before a helper can connect."
+    title: "Connect.AI",
+    description: "Connect.AI is attended remote support for Windows. The person at the PC shares a one-time code and confirms a verification number before a helper can connect."
   },
   pages: {
     disclaimer: { enabled: false, title: "Disclaimer", body: "" },
@@ -75031,15 +75031,15 @@ function siteReady() {
 function subBlockMessage(reason) {
   switch (reason) {
     case "expired":
-      return "This company's WINRSS.net subscription has expired. Contact your provider to renew it.";
+      return "This company's Connect.AI subscription has expired. Contact your provider to renew it.";
     case "suspended":
-      return "This company's WINRSS.net subscription is suspended. Contact your provider.";
+      return "This company's Connect.AI subscription is suspended. Contact your provider.";
     case "quota":
       return "This company has reached its usage limit (remote access URLs and extra sessions) for the current billing period. Ask your provider to renew or extend it.";
     case "license":
       return "This client's license is missing, invalid or revoked. Reconfigure it from the admin console.";
     default:
-      return "This company's WINRSS.net subscription is not active.";
+      return "This company's Connect.AI subscription is not active.";
   }
 }
 async function gateForRa(raId, license) {
@@ -76383,12 +76383,33 @@ router4.delete("/buddy/kb/:id", async (req, res) => {
 });
 router4.get("/buddy/sessions", async (_req, res) => {
   try {
-    const [accounts, buddy] = await Promise.all([accountsReady(), buddyReady()]);
-    const byRa = new Map(accounts.list().map((u) => [u.raId, u.displayName]));
-    const notes = buddy.sessionsIndex();
+    let accounts;
+    let notes;
+    try {
+      accounts = await accountsReady();
+    } catch (err) {
+      console.warn("Inspect Buddy: account directory unavailable", err);
+    }
+    let buddyFull;
+    try {
+      const buddy = await buddyReady();
+      notes = buddy.sessionsIndex();
+      buddyFull = (id) => buddy.session(id);
+    } catch (err) {
+      console.warn("Inspect Buddy: AI Buddy records unavailable", err);
+    }
+    const byRa = new Map((accounts?.list() ?? []).map((u) => [u.raId, u.displayName]));
     const rows = store.overview().live.filter((s) => s.state === "live").map((s) => {
-      const b = notes.get(s.id);
-      const lastText = b && Array.isArray(b.captures) && b.captures.length ? String(b.captures[b.captures.length - 1]?.text ?? "") : "";
+      const b = notes?.get(s.id);
+      let lastText = "";
+      if (b?.captureCount) {
+        try {
+          const full = buddyFull?.(s.id);
+          const caps = full && Array.isArray(full.captures) ? full.captures : [];
+          lastText = String(caps[caps.length - 1]?.text ?? "");
+        } catch {
+        }
+      }
       return {
         sessionId: s.id,
         pcName: s.name || "",
