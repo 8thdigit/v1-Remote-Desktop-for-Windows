@@ -360,12 +360,29 @@ router.delete("/buddy/kb/:id", async (req, res) => {
 // viewers, uptime, plus what AI Buddy last read off the screen.
 router.get("/buddy/sessions", async (_req, res) => {
   try {
-    const [accounts, buddy] = await Promise.all([accountsReady(), buddyReady()]);
-    const byRa = new Map(accounts.list().map((u) => [u.raId, u.displayName]));
-    const notes = buddy.sessionsIndex();
+    // The page must still list sessions even if AI Buddy's records or the
+    // account directory fail to open — those only enrich each row.
+    let accounts: Awaited<ReturnType<typeof accountsReady>> | undefined;
+    let notes: Map<string, unknown> | undefined;
+    try { accounts = await accountsReady(); } catch (err) { console.warn("Inspect Buddy: account directory unavailable", err); }
+    let buddyFull: ((id: string) => { captures?: { text?: string }[] } | null | undefined) | undefined;
+    try {
+      const buddy = await buddyReady();
+      notes = buddy.sessionsIndex();
+      buddyFull = (id: string) => buddy.session(id) as { captures?: { text?: string }[] } | null | undefined;
+    } catch (err) { console.warn("Inspect Buddy: AI Buddy records unavailable", err); }
+    const byRa = new Map((accounts?.list() ?? []).map((u) => [u.raId, u.displayName]));
     const rows = store.overview().live.filter((s) => s.state === "live").map((s) => {
-      const b = notes.get(s.id);
-      const lastText = b && Array.isArray(b.captures) && b.captures.length ? String((b.captures as { text?: string }[])[b.captures.length - 1]?.text ?? "") : "";
+      const b = notes?.get(s.id) as { captureCount?: number; lastCaptureAt?: number } | undefined;
+      // The index view has no capture bodies; fetch the full record only when needed.
+      let lastText = "";
+      if (b?.captureCount) {
+        try {
+          const full = buddyFull?.(s.id);
+          const caps = full && Array.isArray(full.captures) ? full.captures : [];
+          lastText = String(caps[caps.length - 1]?.text ?? "");
+        } catch { /* enrichment only */ }
+      }
       return {
         sessionId: s.id,
         pcName: s.name || "",
