@@ -9,7 +9,7 @@ import { useQuery } from '@tanstack/react-query';
 export type AssetInfo = { url: string; type: string; bytes: number; updatedAt: number } | null;
 export type PageContent = { enabled: boolean; title: string; body: string };
 export type SiteSettings = {
-  tabs: { pcs: boolean; connect: boolean; download: boolean };
+  tabs: { pcs: boolean; connect: boolean; download: boolean; test: boolean };
   signIn: { requestAccess: boolean; downloadLink: boolean };
   og: { title: string; description: string };
   pages: { disclaimer: PageContent; privacy: PageContent };
@@ -20,7 +20,7 @@ export type SiteSettings = {
 };
 
 export const DEFAULT_SITE: SiteSettings = {
-  tabs: { pcs: true, connect: true, download: true },
+  tabs: { pcs: true, connect: true, download: true, test: false },
   signIn: { requestAccess: true, downloadLink: true },
   og: { title: 'Connect.AI', description: '' },
   pages: {

@@ -20,7 +20,7 @@ import {
 
 type Session = { token: string; verification: string; preapproved: boolean; code: string };
 type Presence = 'online' | 'busy' | 'offline' | 'unknown';
-type Tab = 'dashboard' | 'connect' | 'pcs' | 'download';
+type Tab = 'dashboard' | 'connect' | 'pcs' | 'download' | 'test';
 
 const CALL_TTL = 2 * 60_000;
 const TAB_KEY = 'Msfwr.tab.v2';
@@ -96,7 +96,7 @@ export default function Home() {
   const [chosenTab, setTabState] = useState<Tab>(() => {
     if (peekLanding()) return 'dashboard';
     const h = typeof window !== 'undefined' ? window.location.hash.slice(1) : '';
-    return h === 'connect' || h === 'pcs' || h === 'download' ? h : 'dashboard';
+    return h === 'connect' || h === 'pcs' || h === 'download' || h === 'test' ? h : 'dashboard';
   });
   const [sound, setSound] = useState(() => readPref(SOUND_KEY, 'on') === 'on');
   const [alerts, setAlerts] = useState<NotificationPermission | 'unsupported'>(
@@ -113,7 +113,7 @@ export default function Home() {
   soundRef.current = sound;
 
   // An admin can hide sections in Site settings; fall back to the first visible one.
-  const visibleTabs: Tab[] = ['dashboard', ...(['pcs', 'connect', 'download'] as const).filter((t) => site.tabs[t])];
+  const visibleTabs: Tab[] = ['dashboard', ...(['pcs', 'connect', 'download', 'test'] as const).filter((t) => site.tabs[t])];
   const tab: Tab = visibleTabs.includes(chosenTab) ? chosenTab : 'dashboard';
 
   function setTab(next: Tab) {
@@ -387,6 +387,7 @@ export default function Home() {
             </TabButton>}
             {site.tabs.connect && <TabButton active={tab === 'connect'} onClick={() => setTab('connect')} testId="tab-connect">Connect with a code</TabButton>}
             {site.tabs.download && <TabButton active={tab === 'download'} onClick={() => setTab('download')} testId="tab-download">Get the app</TabButton>}
+            {site.tabs.test && <TabButton active={tab === 'test'} onClick={() => setTab('test')} testId="tab-test">Test</TabButton>}
           </nav>
           )}
           <RelayDot reachable={relay ? relayReachable : false} watching={pcs.length > 0 && !relayOutdated} />
@@ -584,6 +585,15 @@ export default function Home() {
         )}
 
         {tab === 'download' && <DownloadView installer={installer} relay={relay} />}
+
+        {tab === 'test' && (
+          <section aria-labelledby="test-heading" data-testid="panel-test" className="dl-rise space-y-4">
+            <div>
+              <h2 id="test-heading" className="text-lg font-bold">Test</h2>
+              <p className="text-sm text-muted-foreground">This section is shown only while the admin turns on “Test” under Site settings → Portal sections.</p>
+            </div>
+          </section>
+        )}
       </main>
 
       <footer className="border-t border-foreground/10">

@@ -557,6 +557,8 @@ export function SiteSettingsPanel({ onError }: { onError: (m: string | null) => 
             onChange={(v) => { if (v || !onlyOne) set((d) => { d.tabs.connect = v; return d; }); }} testId="toggle-tab-connect" />
           <Toggle label="Get the app" hint="Installer download and setup steps." checked={draft.tabs.download}
             onChange={(v) => { if (v || !onlyOne) set((d) => { d.tabs.download = v; return d; }); }} testId="toggle-tab-download" />
+          <Toggle label="Test" hint="Test section of the portal. Off by default; turn it on to show the Test tab to signed-in companies." checked={!!draft.tabs.test}
+            onChange={(v) => set((d) => { d.tabs.test = v; return d; })} testId="toggle-tab-test" />
           <p className="mt-3 border-t pt-3 text-xs font-semibold text-muted-foreground">Sign-in page</p>
           <Toggle label="Request access form" hint="Lets visitors send their email, mobile and a message to buy the system." checked={draft.signIn.requestAccess}
             onChange={(v) => set((d) => { d.signIn.requestAccess = v; return d; })} testId="toggle-request-access" />
