@@ -104,28 +104,60 @@ const QSTATE_META: Record<QuestionState, { label: string; cls: string }> = {
 
 const SOURCE_LABEL: Record<SourceKind, string> = { repo: 'Document repository', online: 'Online research', ai: 'AI knowledge' };
 
-// --- Master switch banner: Inspect Buddy ships disabled in settings ---
-// The engine refuses to enable watchers while `enabled` is false. Instead of
-// only showing the raw 403, the panel loads the settings and offers a one-click
-// "Turn on" button that PATCHes /buddy/inspect/settings.
+// --- Master toggle: rendered at the TOP of the control room page itself ---
+// The engine refuses to enable watchers while `enabled` is false, so this
+// always-visible switch (with AI + online-research sub-toggles) PATCHes
+// /buddy/inspect/settings directly from the control room header. It never
+// hides itself behind a successful load — even if settings are already on,
+// the admin can turn Inspect Buddy off again from here.
 
 type InspectSettings = { enabled: boolean; ai: boolean; webSearch: boolean; model: string; maxQuestions: number; apiKeySet?: boolean; envKeySet?: boolean; aiReady?: boolean };
 
-function MasterSwitch({ onChanged }: { onChanged: () => void }) {
+function Toggle({ checked, onChange, disabled, label }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; label: string }) {
+  return (
+    <button type="button" role="switch" aria-checked={checked} aria-label={label} disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${checked ? 'bg-primary' : 'bg-muted-foreground/35'} ${disabled ? 'opacity-50' : ''}`}
+      data-testid={`toggle-${label.toLowerCase().replace(/[^a-z]+/g, '-')}`}>
+      <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${checked ? 'left-[22px]' : 'left-0.5'}`} />
+    </button>
+  );
+}
+
+function MasterSwitch({ onChanged, onError }: { onChanged: () => void; onError: (msg: string | null) => void }) {
   const [busy, setBusy] = useState(false);
   const s = useQuery<InspectSettings>({ queryKey: ['inspect-settings'], queryFn: () => api<InspectSettings>('/buddy/inspect/settings'), refetchInterval: 30_000 });
-  if (!s.data || s.data.enabled) return null;
-  async function turnOn() {
+  const on = !!s.data?.enabled;
+  async function patch(body: Partial<InspectSettings>) {
     setBusy(true);
-    try { await send('/buddy/inspect/settings', 'PATCH', { enabled: true }); onChanged(); } finally { setBusy(false); }
+    try { await send('/buddy/inspect/settings', 'PATCH', body); onChanged(); }
+    catch (e) { onError(errorText(e, 'Could not change the Inspect Buddy settings.')); }
+    finally { setBusy(false); }
   }
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3" data-testid="inspect-master-switch">
-      <p className="text-sm font-semibold text-amber-800"><TriangleAlert className="mr-1.5 inline h-4 w-4" /> Inspect Buddy is turned off in settings — question watchers cannot be enabled yet.</p>
-      <button type="button" disabled={busy} onClick={() => void turnOn()} data-testid="button-enable-inspect-buddy"
-        className="rounded-xl bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-700 disabled:opacity-50">
-        {busy ? 'Turning on…' : 'Turn on Inspect Buddy'}
-      </button>
+    <div className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3 ${on ? 'border-emerald-500/40 bg-emerald-500/10' : 'border-amber-500/40 bg-amber-500/10'}`} data-testid="inspect-master-switch">
+      <div className="flex items-center gap-3">
+        <Toggle label="Inspect Buddy" checked={on} disabled={busy || !s.data} onChange={(v) => void patch({ enabled: v })} />
+        <div>
+          <p className={`text-sm font-bold ${on ? 'text-emerald-800' : 'text-amber-800'}`}>
+            {s.data ? (on ? 'Inspect Buddy is ON — question watchers can be enabled per session.' : 'Inspect Buddy is OFF — enable it to start watching sessions.') : 'Loading Inspect Buddy settings…'}
+          </p>
+          {!on && <p className="mt-0.5 text-xs text-amber-700"><TriangleAlert className="mr-1 inline h-3.5 w-3.5" /> Question watchers cannot be enabled until this switch is on.</p>}
+        </div>
+      </div>
+      {on && s.data && (
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+          <label className="flex items-center gap-2 text-xs font-semibold text-foreground/80">
+            <Toggle label="Claude AI" checked={!!s.data.ai} disabled={busy} onChange={(v) => void patch({ ai: v })} /> Claude AI engine
+          </label>
+          <label className="flex items-center gap-2 text-xs font-semibold text-foreground/80">
+            <Toggle label="Online research" checked={!!s.data.webSearch} disabled={busy} onChange={(v) => void patch({ webSearch: v })} /> Online research fallback
+          </label>
+          {!s.data.apiKeySet && !s.data.envKeySet && s.data.ai && (
+            <span className="text-[11px] font-semibold text-amber-700">No Anthropic API key set — add one in settings or set ANTHROPIC_API_KEY on the relay.</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -167,7 +199,7 @@ export function InspectBuddyPanel({ onError }: { onError: (msg: string | null) =
 
   return (
     <div className="space-y-4">
-      <MasterSwitch onChanged={() => { void qc.invalidateQueries({ queryKey: ['buddy-sessions'] }); void qc.invalidateQueries({ queryKey: ['inspect-settings'] }); }} />
+      <MasterSwitch onError={onError} onChanged={() => { void qc.invalidateQueries({ queryKey: ['buddy-sessions'] }); void qc.invalidateQueries({ queryKey: ['inspect-settings'] }); }} />
       <div className="rounded-2xl border bg-card/90 p-4 shadow-[0_10px_30px_-24px_hsl(200_32%_13%/0.5)] md:p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="flex items-center gap-2 text-base font-bold"><Radio className="h-4.5 w-4.5 text-primary" /> Control room — ongoing sessions</h2>
