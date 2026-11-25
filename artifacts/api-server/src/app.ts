@@ -1,9 +1,22 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { securityHeaders } from "./lib/security";
+
+// The built frontend (artifacts/msfwr/dist/public) is shipped alongside the
+// relay so links like https://<relay>/r/<code>#<id> work when opened directly.
+const appDir = path.dirname(fileURLToPath(import.meta.url));
+const frontendCandidates = [
+  process.env.FRONTEND_DIST_DIR,
+  path.resolve(appDir, "../../msfwr/dist/public"), // deployed layout
+  path.resolve(appDir, "../../../artifacts/msfwr/dist/public"), // bundled dist/index.mjs layout
+].filter((p): p is string => Boolean(p));
+const frontendDist = frontendCandidates.find((p) => fs.existsSync(path.join(p, "index.html")));
 
 const app: Express = express();
 // Render (and Vercel in front of it) terminate TLS in proxies, so trust the
@@ -45,5 +58,17 @@ app.use(express.urlencoded({ extended: true }));
 app.use(securityHeaders());
 
 app.use("/api", router);
+
+// Serve the built frontend so relay links (e.g. /r/<code>#<id>) open the app
+// directly on this host instead of returning "Cannot GET". Static assets are
+// served from disk; any other non-API GET falls back to index.html, which lets
+// the client-side router handle paths like /admin and /r/:code.
+if (frontendDist) {
+  const indexHtml = path.join(frontendDist, "index.html");
+  app.use(express.static(frontendDist, { index: false, maxAge: "1h" }));
+  app.get(/^(?!\/api\/).*/, (_req, res) => {
+    res.sendFile(indexHtml);
+  });
+}
 
 export default app;
