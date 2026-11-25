@@ -1,0 +1,1 @@
+{"version":3,"file":"msfwrLinkCreate.d.ts","sourceRoot":"","sources":["../../../src/generated/types/msfwrLinkCreate.ts"],"names":[],"mappings":"AAAA;;;;;;GAMG;AACH,OAAO,KAAK,EAAE,uBAAuB,EAAE,MAAM,2BAA2B,CAAC;AAEzE,MAAM,WAAW,eAAe;IAC9B,mCAAmC;IACnC,GAAG,EAAE,MAAM,CAAC;IACZ,oBAAoB;IACpB,IAAI,CAAC,EAAE,MAAM,CAAC;IACd,QAAQ,CAAC,EAAE,uBAAuB,CAAC;CACpC"}

@@ -1,0 +1,743 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /msfwr/invite:
+    post:
+      operationId: createMsfwrInvite
+      responses:
+        "201":
+          description: One-time host invite
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MsfwrInvite"}
+  /msfwr/standing:
+    post:
+      operationId: registerMsfwrStanding
+      description: >-
+        Unattended host registration. The access code is derived from the
+        host's saved key; a viewer that joins it is live without approval.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/MsfwrStandingKey"}
+      responses:
+        "201":
+          description: Pre-approved host invite for the derived code
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MsfwrInvite"}
+  /msfwr/call:
+    post:
+      operationId: callMsfwr
+      security: [{sessionToken: []}]
+      description: >-
+        An unattended host presses Initiate. Viewers that already know its
+        access code see the request for two minutes and accept it by joining.
+      requestBody:
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/MsfwrCall"}
+      responses:
+        "204": {description: Request is visible to viewers that know the code}
+  /msfwr/calls:
+    post:
+      operationId: listMsfwrCalls
+      description: >-
+        Which of the viewer's saved access codes have a pending Initiate
+        request, and which of them are online (waiting) or in a session.
+        Codes that are not listed are offline.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/MsfwrCallQuery"}
+      responses:
+        "200":
+          description: Pending requests among the given codes
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MsfwrCallList"}
+  /msfwr/link/create:
+    post:
+      operationId: createMsfwrLink
+      description: >-
+        Create a shareable remote access URL from the client app, with a
+        six-digit access code. Whoever opens the URL and enters the code
+        connects to the PC without a prompt, until the link expires (24 hours
+        by default) or is cleared on the PC. Requires the PC's unattended
+        access key.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/MsfwrLinkCreate"}
+      responses:
+        "201":
+          description: The created link
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MsfwrLink"}
+  /msfwr/link/register:
+    post:
+      operationId: registerMsfwrLink
+      description: >-
+        The PC sends its saved link again each time it registers, so the link
+        is restored if the relay restarted. Only the PC that owns the link
+        can restore it, because the link's code is derived from its key.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/MsfwrLinkRegister"}
+      responses:
+        "201":
+          description: The link as the relay now has it
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MsfwrLink"}
+        "410": {description: The link expired or was revoked}
+  /msfwr/link/status:
+    get:
+      operationId: getMsfwrLinkStatus
+      description: >-
+        Current state of a link for the client app: validity, whether the
+        host is registered and online, and how many sessions were opened.
+      parameters:
+        - {in: query, name: id, required: true, schema: {type: string}}
+        - {in: query, name: key, required: true, schema: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}}
+      responses:
+        "200":
+          description: Link status
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MsfwrLinkStatus"}
+  /msfwr/link/revoke:
+    post:
+      operationId: revokeMsfwrLink
+      description: Revoke a link at once; any live session under it is ended.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/MsfwrLinkRegister"}
+      responses:
+        "204": {description: Link revoked}
+  /msfwr/link/info:
+    get:
+      operationId: getMsfwrLinkInfo
+      description: >-
+        Public facts about a shared remote access URL, for the page it opens:
+        the PC name, whether the PC is online, and when the link expires.
+      parameters:
+        - {in: query, name: code, required: true, schema: {type: string, pattern: '^L[0-9A-F]{11}$'}}
+      responses:
+        "200":
+          description: Link facts
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MsfwrLinkInfo"}
+        "404": {description: "The link does not exist, expired, or was cleared"}
+  /msfwr/link/join:
+    post:
+      operationId: joinMsfwrLink
+      description: >-
+        Open a session through a shared remote access URL. The viewer gives
+        the link's access code; the PC connects without a prompt.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/MsfwrLinkJoin"}
+      responses:
+        "200":
+          description: Viewer capability
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MsfwrViewer"}
+  /msfwr/inbox:
+    get:
+      operationId: getMsfwrInbox
+      description: >-
+        For the signed-in company: Initiate requests sent to its RA ID and the
+        PCs whose remote access points to its RA ID.
+      responses:
+        "200":
+          description: Requests and PCs for the company's RA ID
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MsfwrInbox"}
+  /msfwr/accept:
+    post:
+      operationId: acceptMsfwrRequest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/MsfwrAccept"}
+      responses:
+        "200":
+          description: Viewer capability
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MsfwrViewer"}
+  /msfwr/connect:
+    post:
+      operationId: connectMsfwrPc
+      description: Connect to an online PC whose remote access points to the company's RA ID.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/MsfwrConnectPc"}
+      responses:
+        "200":
+          description: Viewer capability
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MsfwrViewer"}
+  /auth/status:
+    get:
+      operationId: getAuthStatus
+      responses:
+        "200":
+          description: Who is signed in
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/AuthStatus"}
+  /auth/login:
+    post:
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/AuthLogin"}
+      responses:
+        "200":
+          description: Signed in
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Account"}
+  /auth/logout:
+    post:
+      operationId: logout
+      responses:
+        "204": {description: Signed out}
+  /auth/password:
+    post:
+      operationId: changePassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/PasswordChange"}
+      responses:
+        "204": {description: Password changed}
+  /admin/users:
+    get:
+      operationId: listUsers
+      responses:
+        "200":
+          description: All accounts
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/AccountList"}
+    post:
+      operationId: createUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/AccountCreate"}
+      responses:
+        "201":
+          description: Created account
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Account"}
+  /admin/users/{id}:
+    patch:
+      operationId: updateUser
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/AccountUpdate"}
+      responses:
+        "200":
+          description: Updated account
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Account"}
+    delete:
+      operationId: deleteUser
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+      responses:
+        "204": {description: Deleted}
+  /admin/overview:
+    get:
+      operationId: getAdminOverview
+      responses:
+        "200":
+          description: Live sessions, PCs, requests and activity on this relay
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/AdminOverview"}
+  /msfwr/join:
+    post:
+      operationId: joinMsfwr
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/MsfwrCode"}
+      responses:
+        "200":
+          description: Viewer capability and verification number
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MsfwrViewer"}
+  /msfwr/end:
+    post:
+      operationId: endMsfwr
+      security: [{sessionToken: []}]
+      responses:
+        "204": {description: Session ended}
+  /msfwr/input:
+    post:
+      operationId: sendMsfwrInput
+      security: [{sessionToken: []}]
+      description: One input action, or (on relays whose frame replies carry X-Msfwr-Batch) a JSON array of up to 32.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/MsfwrInput"}
+      responses:
+        "204": {description: Accepted}
+  /msfwr/approve:
+    post:
+      operationId: approveMsfwr
+      security: [{sessionToken: []}]
+      responses:
+        "204": {description: Host approved the session}
+  /msfwr/tick:
+    post:
+      operationId: tickMsfwr
+      security: [{sessionToken: []}]
+      description: >-
+        Host heartbeat; optional screen update once approved. image/jpeg is a whole-screen keyframe.
+        application/x-msfwr-frames is a list of updates, each a kind byte (0 keyframe, 1 patch), x and y (uint16),
+        a uint32 length and a JPEG, big-endian. With X-Msfwr-Events 1 the host reads input from /msfwr/events,
+        so the reply leaves it out. The reply's patches flag says the relay takes patches; key asks for a keyframe.
+      requestBody:
+        content:
+          image/jpeg:
+            schema: {type: string, format: binary}
+          application/x-msfwr-frames:
+            schema: {type: string, format: binary}
+      responses:
+        "200":
+          description: Host status and pending input
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MsfwrTick"}
+  /msfwr/events:
+    get:
+      operationId: getMsfwrEvents
+      security: [{sessionToken: []}]
+      description: The host's input channel. Waits up to wait ms (at most 8000) for viewer input.
+      parameters:
+        - {in: query, name: wait, schema: {type: integer, minimum: 0, maximum: 8000}}
+      responses:
+        "200":
+          description: Host status and pending input
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MsfwrTick"}
+  /msfwr/frame:
+    get:
+      operationId: getMsfwrFrame
+      security: [{sessionToken: []}]
+      description: >-
+        Without v, the latest keyframe as a JPEG. With v=2, waits up to wait ms (at most 8000) for an update newer
+        than after, and answers application/x-msfwr-frames: for each update the viewer is missing, a uint32
+        sequence, a kind byte (0 keyframe, 1 patch), x and y (uint16), a uint32 length and a JPEG, big-endian.
+      parameters:
+        - {in: query, name: after, schema: {type: integer, minimum: 0}}
+        - {in: query, name: v, schema: {type: integer, minimum: 2, maximum: 2}}
+        - {in: query, name: wait, schema: {type: integer, minimum: 0, maximum: 8000}}
+      responses:
+        "200":
+          description: New JPEG frame; X-Msfwr-Frame is its sequence number.
+          content:
+            image/jpeg:
+              schema: {type: string, format: binary}
+        "204":
+          description: No new frame. X-Msfwr-State is pending or live.
+components:
+  securitySchemes:
+    sessionToken: { type: http, scheme: bearer }
+  schemas:
+    MsfwrTick:
+      type: object
+      required: [state, input]
+      properties:
+        state: {type: string, enum: [waiting, pending, live]}
+        verification: {type: string}
+        input:
+          type: array
+          items: {$ref: "#/components/schemas/MsfwrInput"}
+    MsfwrCode:
+      type: object
+      required: [code]
+      properties:
+        code: {type: string, pattern: '^[A-F0-9]{12}$'}
+    MsfwrStandingKey:
+      type: object
+      required: [key]
+      properties:
+        key: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
+        name: {type: string, maxLength: 64}
+        ra: {type: string, maxLength: 16, description: "RA ID this PC's remote access points to (RA-123456 or 123456); empty for none"}
+    MsfwrCall:
+      type: object
+      properties:
+        name: {type: string, maxLength: 64}
+        ra: {type: string, maxLength: 16}
+    MsfwrCallQuery:
+      type: object
+      required: [codes]
+      properties:
+        codes:
+          type: array
+          maxItems: 50
+          items: {type: string, pattern: '^[A-F0-9]{12}$'}
+    MsfwrCallList:
+      type: object
+      required: [calls]
+      properties:
+        calls:
+          type: array
+          items:
+            type: object
+            required: [code, name]
+            properties:
+              code: {type: string}
+              name: {type: string}
+        presence:
+          type: array
+          items:
+            type: object
+            required: [code, name, state]
+            properties:
+              code: {type: string}
+              name: {type: string}
+              state: {type: string, enum: [online, busy]}
+    MsfwrInvite:
+      type: object
+      required: [code, token]
+      properties:
+        code: {type: string}
+        token: {type: string}
+        raStatus: {type: string, enum: [none, ok, unknown], description: "Unattended hosts: whether the RA ID they named belongs to an active company"}
+        raName: {type: string, description: "The company name behind the RA ID"}
+    MsfwrLinkCreate:
+      type: object
+      required: [key]
+      properties:
+        key: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
+        name: {type: string, maxLength: 64}
+        ttlHours: {type: integer, enum: [1, 2, 4, 5, 8, 12, 24, 48, 72, 120], default: 24}
+    MsfwrLinkRegister:
+      type: object
+      required: [id, key]
+      properties:
+        id: {type: string, maxLength: 64}
+        key: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
+        pin: {type: string, pattern: '^[0-9]{6}$', description: Restores a link the relay lost on restart}
+        name: {type: string, maxLength: 64}
+        createdAt: {type: number}
+        expiresAt: {type: number}
+    MsfwrLink:
+      type: object
+      required: [id, code, name, createdAt, expiresAt, sessions]
+      properties:
+        id: {type: string}
+        code: {type: string, pattern: '^L[0-9A-F]{11}$'}
+        pin: {type: string, pattern: '^[0-9]{6}$', description: The access code viewers enter on the link page}
+        name: {type: string}
+        createdAt: {type: number}
+        expiresAt: {type: number}
+        ttlHours: {type: integer}
+        sessions: {type: integer, minimum: 0}
+    MsfwrLinkInfo:
+      type: object
+      required: [code, name, online, busy, expiresAt]
+      properties:
+        code: {type: string}
+        name: {type: string}
+        online: {type: boolean}
+        busy: {type: boolean}
+        viewers: {type: integer, minimum: 0, description: People connected through this URL right now}
+        expiresAt: {type: number}
+        accessPinRequired: {type: boolean, description: Viewers must also enter a company's 4-digit Access PIN}
+        blocked: {type: boolean, description: Too many wrong Access PINs; the link no longer works}
+        claimed: {type: boolean, description: A company has already authorized this URL with its PIN}
+    MsfwrLinkJoin:
+      type: object
+      required: [code, pin]
+      properties:
+        code: {type: string, pattern: '^L[0-9A-F]{11}$'}
+        pin: {type: string, maxLength: 12}
+        accessPin: {type: string, maxLength: 12, description: The 4-digit Access PIN from the company that authorizes the session}
+    MsfwrRequest:
+      type: object
+      required: [id, name, at, until, status]
+      properties:
+        id: {type: string}
+        ra: {type: string}
+        name: {type: string}
+        at: {type: number}
+        until: {type: number}
+        status: {type: string, enum: [waiting, accepted, missed]}
+        closedAt: {type: number}
+        acceptedBy: {type: string}
+    MsfwrRaPc:
+      type: object
+      required: [id, name, state]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        state: {type: string, enum: [online, busy]}
+    MsfwrInbox:
+      type: object
+      required: [raId, company, requests, pcs]
+      properties:
+        raId: {type: string}
+        company: {type: string}
+        requests:
+          type: array
+          items: {$ref: "#/components/schemas/MsfwrRequest"}
+        pcs:
+          type: array
+          items: {$ref: "#/components/schemas/MsfwrRaPc"}
+        accessPin: {$ref: "#/components/schemas/MsfwrCompanyPin"}
+        links:
+          type: array
+          description: Remote access URLs this company authorized with its PIN
+          items: {$ref: "#/components/schemas/MsfwrLinkRecord"}
+    MsfwrCompanyPin:
+      type: object
+      required: [pin, issuedAt, expiresAt]
+      properties:
+        pin: {type: string, pattern: '^[0-9]{4}$'}
+        issuedAt: {type: number}
+        expiresAt: {type: number, description: A new PIN is issued after this unless this one is used first}
+    MsfwrLinkClaim:
+      type: object
+      required: [accountId, company, raId, pin, at]
+      properties:
+        accountId: {type: string}
+        company: {type: string}
+        raId: {type: string}
+        pin: {type: string}
+        at: {type: number}
+        clientIp: {type: string, description: Address of the browser that entered the PIN}
+        clientAgent: {type: string, description: Browser that entered the PIN}
+    MsfwrLinkRecord:
+      type: object
+      required: [code, pcName, createdAt, expiresAt, ttlHours, sessions, status, online, viewers, locked, blocked]
+      properties:
+        code: {type: string, description: The URL is /r/<code>}
+        pcName: {type: string}
+        pcRa: {type: string}
+        createdAt: {type: number}
+        expiresAt: {type: number}
+        ttlHours: {type: number}
+        revokedAt: {type: number}
+        claim: {$ref: "#/components/schemas/MsfwrLinkClaim"}
+        sessions:
+          type: array
+          items:
+            type: object
+            required: [startedAt, endedAt, durationMs, viewers]
+            properties:
+              startedAt: {type: number}
+              endedAt: {type: number}
+              durationMs: {type: number}
+              viewers: {type: integer}
+        status: {type: string, enum: [active, expired, cleared]}
+        online: {type: boolean}
+        viewers: {type: integer}
+        locked: {type: boolean}
+        blocked: {type: boolean}
+    MsfwrAccept:
+      type: object
+      required: [id]
+      properties:
+        id: {type: string, maxLength: 64}
+    MsfwrConnectPc:
+      type: object
+      required: [pc]
+      properties:
+        pc: {type: string, maxLength: 64}
+    Account:
+      type: object
+      required: [id, username, displayName, role, raId, disabled, createdAt]
+      properties:
+        id: {type: string}
+        username: {type: string}
+        displayName: {type: string}
+        role: {type: string, enum: [admin, company]}
+        raId: {type: string}
+        disabled: {type: boolean}
+        createdAt: {type: number}
+        lastLoginAt: {type: number}
+        mustChangePassword: {type: boolean}
+    AccountList:
+      type: object
+      required: [users]
+      properties:
+        users:
+          type: array
+          items: {$ref: "#/components/schemas/Account"}
+    AccountCreate:
+      type: object
+      required: [username, password, role]
+      properties:
+        username: {type: string, maxLength: 64}
+        displayName: {type: string, maxLength: 80}
+        password: {type: string, maxLength: 200}
+        role: {type: string, enum: [admin, company]}
+        raId: {type: string, maxLength: 16, description: Optional; six digits. A unique one is generated when empty.}
+        adminPin: {type: string, maxLength: 12, description: The six-digit admin creation PIN; required when role is admin}
+    AccountUpdate:
+      type: object
+      properties:
+        displayName: {type: string, maxLength: 80}
+        password: {type: string, maxLength: 200}
+        role: {type: string, enum: [admin, company]}
+        disabled: {type: boolean}
+        raId: {type: string, maxLength: 16}
+        adminPin: {type: string, maxLength: 12, description: The six-digit admin creation PIN; required to make an account an admin}
+    AuthStatus:
+      type: object
+      properties:
+        user: {$ref: "#/components/schemas/Account"}
+    AuthLogin:
+      type: object
+      required: [username, password]
+      properties:
+        username: {type: string, maxLength: 64}
+        password: {type: string, maxLength: 200}
+    PasswordChange:
+      type: object
+      required: [current, next]
+      properties:
+        current: {type: string, maxLength: 200}
+        next: {type: string, maxLength: 200}
+    AdminSession:
+      type: object
+      required: [id, name, mode, state, createdAt]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        mode: {type: string, enum: [unattended, attended, link]}
+        state: {type: string, enum: [waiting, pending, live]}
+        ra: {type: string}
+        operator: {type: string}
+        viewers: {type: integer, minimum: 0}
+        createdAt: {type: number}
+        liveAt: {type: number}
+    AdminOverview:
+      type: object
+      required: [live, pcs, requests, activity, storage]
+      properties:
+        live:
+          type: array
+          items: {$ref: "#/components/schemas/AdminSession"}
+        pcs:
+          type: array
+          items: {$ref: "#/components/schemas/AdminSession"}
+        requests:
+          type: array
+          items: {$ref: "#/components/schemas/MsfwrRequest"}
+        activity:
+          type: array
+          items:
+            type: object
+            required: [at, kind, text]
+            properties:
+              at: {type: number}
+              kind: {type: string}
+              actor: {type: string}
+              text: {type: string}
+        storage: {type: string}
+        links:
+          type: array
+          description: Every remote access URL created on this relay, with the company that authorized it
+          items: {$ref: "#/components/schemas/MsfwrLinkRecord"}
+    MsfwrLinkStatus:
+      type: object
+      required: [link, online, busy]
+      properties:
+        link: {$ref: "#/components/schemas/MsfwrLink"}
+        online: {type: boolean}
+        busy: {type: boolean}
+        viewers: {type: integer, minimum: 0}
+    MsfwrViewer:
+      type: object
+      required: [token, verification, preapproved]
+      properties:
+        token: {type: string}
+        verification: {type: string}
+        preapproved: {type: boolean}
+    MsfwrInput:
+      type: object
+      required: [kind]
+      properties:
+        kind: {type: string, enum: [key, wheel, down, up, move, release]}
+        x: {type: number, minimum: 0, maximum: 1}
+        y: {type: number, minimum: 0, maximum: 1}
+        button: {type: integer, minimum: 0, maximum: 2}
+        delta: {type: integer, enum: [-1, 1]}
+        key: {type: string, maxLength: 24}
+        ctrl: {type: boolean}
+        shift: {type: boolean}
+        alt: {type: boolean}
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+

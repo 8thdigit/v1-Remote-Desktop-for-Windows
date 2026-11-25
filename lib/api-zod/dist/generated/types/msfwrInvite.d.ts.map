@@ -1,0 +1,1 @@
+{"version":3,"file":"msfwrInvite.d.ts","sourceRoot":"","sources":["../../../src/generated/types/msfwrInvite.ts"],"names":[],"mappings":"AAAA;;;;;;GAMG;AACH,OAAO,KAAK,EAAE,mBAAmB,EAAE,MAAM,uBAAuB,CAAC;AAEjE,MAAM,WAAW,WAAW;IAC1B,IAAI,EAAE,MAAM,CAAC;IACb,KAAK,EAAE,MAAM,CAAC;IACd,kFAAkF;IAClF,QAAQ,CAAC,EAAE,mBAAmB,CAAC;IAC/B,wCAAwC;IACxC,MAAM,CAAC,EAAE,MAAM,CAAC;CACjB"}
