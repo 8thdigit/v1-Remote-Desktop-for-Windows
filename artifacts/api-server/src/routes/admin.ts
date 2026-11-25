@@ -418,6 +418,20 @@ function watcherView(w: WatcherWatch | undefined, imageUrl: ((name: string) => s
   };
 }
 
+const imageUrlFor = (n: string) => `/api/admin/buddy/img/${encodeURIComponent(n)}`;
+
+// Engine question record -> the shape the review buttons render.
+function reviewView(q: WatcherQuestion, imageUrl: (name: string) => string) {
+  return {
+    ...q,
+    index: q.n,
+    screenshotUrl: q.image ? imageUrl(q.image) : null,
+    state: q.status === "answered" ? "recommended" : q.status,
+    sources: q.refs,
+    correctedAnswer: q.status === "corrected" ? q.answer : "",
+  };
+}
+
 router.get("/buddy/watchers/:id", async (req, res) => {
   try {
     const engine = await watcherReady();
@@ -454,17 +468,30 @@ router.delete("/buddy/watchers/:id", async (req, res) => {
 });
 
 // Accept or correct one recommended answer. Body for "correct": { answer }.
-router.post("/buddy/watchers/:id/questions/:n/:action(accept|correct)", async (req, res) => {
+router.post("/buddy/watchers/:id/questions/:n/accept", async (req, res) => {
   try {
     const n = Number.parseInt(req.params.n, 10);
     if (!Number.isFinite(n)) { res.status(400).json({ error: "Which question number?" }); return; }
     const engine = await watcherReady();
     const q = await engine.review(req.params.id, n, {
-      action: req.params.action as "accept" | "correct",
+      action: "accept",
+      by: req.account!.displayName,
+    });
+    res.json(reviewView(q, imageUrlFor));
+  } catch (err) { sendError(res, err); }
+});
+
+router.post("/buddy/watchers/:id/questions/:n/correct", async (req, res) => {
+  try {
+    const n = Number.parseInt(req.params.n, 10);
+    if (!Number.isFinite(n)) { res.status(400).json({ error: "Which question number?" }); return; }
+    const engine = await watcherReady();
+    const q = await engine.review(req.params.id, n, {
+      action: "correct",
       answer: (req.body as { answer?: unknown } | undefined)?.answer,
       by: req.account!.displayName,
     });
-    res.json({ ...q, index: q.n, screenshotUrl: q.image ? `/api/admin/buddy/img/${encodeURIComponent(q.image)}` : null, state: q.status === "answered" ? "recommended" : q.status, sources: q.refs, correctedAnswer: q.status === "corrected" ? q.answer : "" });
+    res.json(reviewView(q, imageUrlFor));
   } catch (err) { sendError(res, err); }
 });
 

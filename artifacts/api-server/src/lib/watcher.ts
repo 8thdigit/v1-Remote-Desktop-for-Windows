@@ -207,7 +207,7 @@ export function parseQuestion(text: string): { num: number | null; stem: string;
   for (const l of lines) {
     const om = l.match(OPTION_LINE);
     if (om) { options.push(`${om[1].toUpperCase()}. ${om[2]}`); continue; }
-    const nm = stem.length === 0 && !num ? l.match(QUESTION_NUM) : null;
+    const nm: RegExpMatchArray | null = stem.length === 0 && !num ? l.match(QUESTION_NUM) : null;
     if (nm) { num = Number(nm[1]); const rest = l.replace(QUESTION_NUM, "").trim(); if (rest) stem.push(rest); continue; }
     stem.push(l);
   }
@@ -378,7 +378,7 @@ export function createWatcherEngine(backend: WatcherBackend, options: { clock?: 
       .slice(0, 3);
     const repoEvidence = ranked.map(({ d, s }) => `REPO[${d.category}] ${d.title} (score ${s.toFixed(2)}): ${snippet(d, q.text)}`).join("\n");
     let refs = ranked.map(({ d }) => `repo:${d.title}`);
-    let source: QuestionSource = ranked.length ? "repo" : "";
+    let source: QuestionSource | "" = ranked.length ? "repo" : "";
     let onlineEvidence = "";
 
     // 2) Online research when the repository has nothing good.
@@ -429,7 +429,44 @@ export function createWatcherEngine(backend: WatcherBackend, options: { clock?: 
     }
     q.status = "pending";
     q.explanation = "No answer found in the repository or online. An admin should answer this manually.";
-    w.notes = q.notes ?? "";
+  }
+
+  // End of exam/session for one watch: mark completed and store the two
+  // documents (reading material + questions & answers) in the repository.
+  async function finalize(w: WatcherWatch, reason: string) {
+    w.phase = "completed";
+    const qs = w.questions;
+    if (!qs.length) return;
+    const stamp = new Date(w.startedAt).toISOString().slice(0, 16).replace(/[:T]/g, "-");
+    const titleBase = (w.examTitle || `Exam from ${w.pcName || "PC"}`).slice(0, 80);
+    const questionsDoc = [
+      `# ${titleBase} — Questions`,
+      `Captured by Inspect Buddy question watcher (session ${w.sessionId}, ${reason}), ${new Date().toLocaleString()}.`,
+      "",
+      ...qs.map((q) => `**Q${q.n}.** ${q.text}${q.options?.length ? `\n${q.options.map((o) => `- ${o}`).join("\n")}` : ""}`),
+    ].join("\n\n");
+    const answersDoc = [
+      `# ${titleBase} — Questions with Answers (reading material)`,
+      `Prepared by the Inspect Buddy AI engine; reviewed by the remote admin. Session ${w.sessionId}.`,
+      "",
+      ...qs.map((q) => [
+        `**Q${q.n}.** ${q.text}`,
+        ...(q.options?.length ? q.options.map((o) => `- ${o}`) : []),
+        `**Answer:** ${q.answer || "(unanswered — needs manual review)"}`,
+        `_${q.explanation}${q.refs.length ? ` Sources: ${q.refs.join("; ")}` : ""}_ (status: ${q.status}, confidence ${(q.confidence * 100) | 0}%)`,
+      ].join("\n")),
+    ].join("\n\n");
+    const stored: string[] = [];
+    const addDoc = (title: string, text: string) => {
+      const now = clock();
+      docs.unshift({ id: newId(), title, category: "exam-captures", text, mime: "text/markdown", bytes: Buffer.byteLength(text), uploadedBy: "inspect-buddy", uploadedAt: now });
+      if (docs.length > MAX_DOCS) docs.length = MAX_DOCS;
+      stored.push(title);
+    };
+    addDoc(`${titleBase} — Questions (${stamp})`, questionsDoc);
+    addDoc(`${titleBase} — Questions & Answers (${stamp})`, answersDoc);
+    w.storedDocs = stored;
+    w.notes = `${w.notes ? w.notes + "\n" : ""}Completed (${reason}): ${qs.length} question(s), ${qs.filter((q) => q.status === "pending").length} unanswered. Documents stored in repository category “exam-captures”.`;
   }
 
   const api = {
@@ -582,42 +619,6 @@ export function createWatcherEngine(backend: WatcherBackend, options: { clock?: 
       w.endedAt = clock();
       w.updatedAt = clock();
       await persistNow();
-    },
-
-    async finalize(w: WatcherWatch, reason: string) {
-      w.phase = "completed";
-      const qs = w.questions;
-      if (!qs.length) return;
-      const stamp = new Date(w.startedAt).toISOString().slice(0, 16).replace(/[:T]/g, "-");
-      const titleBase = (w.examTitle || `Exam from ${w.pcName || "PC"}`).slice(0, 80);
-      const questionsDoc = [
-        `# ${titleBase} — Questions`,
-        `Captured by Inspect Buddy question watcher (session ${w.sessionId}, ${reason}), ${new Date().toLocaleString()}.`,
-        "",
-        ...qs.map((q) => `**Q${q.n}.** ${q.text}${q.options?.length ? `\n${q.options.map((o) => `- ${o}`).join("\n")}` : ""}`),
-      ].join("\n\n");
-      const answersDoc = [
-        `# ${titleBase} — Questions with Answers (reading material)`,
-        `Prepared by the Inspect Buddy AI engine; reviewed by the remote admin. Session ${w.sessionId}.`,
-        "",
-        ...qs.map((q) => [
-          `**Q${q.n}.** ${q.text}`,
-          ...(q.options?.length ? q.options.map((o) => `- ${o}`) : []),
-          `**Answer:** ${q.answer || "(unanswered — needs manual review)"}`,
-          `_${q.explanation}${q.refs.length ? ` Sources: ${q.refs.join("; ")}` : ""}_ (status: ${q.status}, confidence ${(q.confidence * 100) | 0}%)`,
-        ].join("\n")),
-      ].join("\n\n");
-      const stored: string[] = [];
-      const addDoc = (title: string, text: string) => {
-        const now = clock();
-        docs.unshift({ id: newId(), title, category: "exam-captures", text, mime: "text/markdown", bytes: Buffer.byteLength(text), uploadedBy: "inspect-buddy", uploadedAt: now });
-        if (docs.length > MAX_DOCS) docs.length = MAX_DOCS;
-        stored.push(title);
-      };
-      addDoc(`${titleBase} — Questions (${stamp})`, questionsDoc);
-      addDoc(`${titleBase} — Questions & Answers (${stamp})`, answersDoc);
-      w.storedDocs = stored;
-      w.notes = `${w.notes ? w.notes + "\n" : ""}Completed (${reason}): ${qs.length} question(s), ${qs.filter((q) => q.status === "pending").length} unanswered. Documents stored in repository category “exam-captures”.`;
     },
 
     // --- Document repository ---
