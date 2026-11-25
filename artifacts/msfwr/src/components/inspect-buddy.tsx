@@ -104,6 +104,32 @@ const QSTATE_META: Record<QuestionState, { label: string; cls: string }> = {
 
 const SOURCE_LABEL: Record<SourceKind, string> = { repo: 'Document repository', online: 'Online research', ai: 'AI knowledge' };
 
+// --- Master switch banner: Inspect Buddy ships disabled in settings ---
+// The engine refuses to enable watchers while `enabled` is false. Instead of
+// only showing the raw 403, the panel loads the settings and offers a one-click
+// "Turn on" button that PATCHes /buddy/inspect/settings.
+
+type InspectSettings = { enabled: boolean; ai: boolean; webSearch: boolean; model: string; maxQuestions: number; apiKeySet?: boolean; envKeySet?: boolean; aiReady?: boolean };
+
+function MasterSwitch({ onChanged }: { onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const s = useQuery<InspectSettings>({ queryKey: ['inspect-settings'], queryFn: () => api<InspectSettings>('/buddy/inspect/settings'), refetchInterval: 30_000 });
+  if (!s.data || s.data.enabled) return null;
+  async function turnOn() {
+    setBusy(true);
+    try { await send('/buddy/inspect/settings', 'PATCH', { enabled: true }); onChanged(); } finally { setBusy(false); }
+  }
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3" data-testid="inspect-master-switch">
+      <p className="text-sm font-semibold text-amber-800"><TriangleAlert className="mr-1.5 inline h-4 w-4" /> Inspect Buddy is turned off in settings — question watchers cannot be enabled yet.</p>
+      <button type="button" disabled={busy} onClick={() => void turnOn()} data-testid="button-enable-inspect-buddy"
+        className="rounded-xl bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-700 disabled:opacity-50">
+        {busy ? 'Turning on…' : 'Turn on Inspect Buddy'}
+      </button>
+    </div>
+  );
+}
+
 // --- Control room: list of ongoing sessions with watcher controls ---
 
 export function InspectBuddyPanel({ onError }: { onError: (msg: string | null) => void }) {
@@ -141,6 +167,7 @@ export function InspectBuddyPanel({ onError }: { onError: (msg: string | null) =
 
   return (
     <div className="space-y-4">
+      <MasterSwitch onChanged={() => { void qc.invalidateQueries({ queryKey: ['buddy-sessions'] }); void qc.invalidateQueries({ queryKey: ['inspect-settings'] }); }} />
       <div className="rounded-2xl border bg-card/90 p-4 shadow-[0_10px_30px_-24px_hsl(200_32%_13%/0.5)] md:p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="flex items-center gap-2 text-base font-bold"><Radio className="h-4.5 w-4.5 text-primary" /> Control room — ongoing sessions</h2>
