@@ -7,7 +7,7 @@ import { formatRaId } from "../lib/msfwr";
 import { DAY } from "../lib/billing";
 import type { AssetKind } from "../lib/site";
 import type { WatcherWatch, WatcherQuestion } from "../lib/watcher";
-import { accountsReady, activity, billingReady, buddyReady, limiter, linkRegister, requireUser, sendError, siteReady, store, watcherImageDir, watcherReady } from "../lib/portal";
+import { accountsReady, activity, billingReady, buddyReady, limiter, linkRegister, logger, requireUser, sendError, siteReady, store, watcherImageDir, watcherReady } from "../lib/portal";
 
 // The admin console: accounts, live sessions, requests and activity.
 const router = Router();
@@ -360,12 +360,25 @@ router.delete("/buddy/kb/:id", async (req, res) => {
 // viewers, uptime, plus what AI Buddy last read off the screen.
 router.get("/buddy/sessions", async (_req, res) => {
   try {
-    const [accounts, buddy] = await Promise.all([accountsReady(), buddyReady()]);
-    const byRa = new Map(accounts.list().map((u) => [u.raId, u.displayName]));
-    const notes = buddy.sessionsIndex();
+    // The page must still list sessions even if AI Buddy's records or the
+    // account directory fail to open — those only enrich each row.
+    let accounts: Awaited<ReturnType<typeof accountsReady>> | undefined;
+    let buddy: Awaited<ReturnType<typeof buddyReady>> | undefined;
+    try { accounts = await accountsReady(); } catch (err) { logger.warn({ err }, "Inspect Buddy: account directory unavailable"); }
+    try { buddy = await buddyReady(); } catch (err) { logger.warn({ err }, "Inspect Buddy: AI Buddy records unavailable"); }
+    const notes = buddy?.sessionsIndex();
+    const byRa = new Map((accounts?.list() ?? []).map((u) => [u.raId, u.displayName]));
     const rows = store.overview().live.filter((s) => s.state === "live").map((s) => {
-      const b = notes.get(s.id);
-      const lastText = b && Array.isArray(b.captures) && b.captures.length ? String((b.captures as { text?: string }[])[b.captures.length - 1]?.text ?? "") : "";
+      const b = notes?.get(s.id);
+      // sessionsIndex() omits the captures array, so ask for the full record
+      // of just this session when we need the last line read off the screen.
+      let lastText = "";
+      if (b && buddy) {
+        try {
+          const full = buddy.session(s.id) as { captures?: { text?: string }[] } | undefined;
+          if (full && Array.isArray(full.captures) && full.captures.length) lastText = String(full.captures.at(-1)?.text ?? "");
+        } catch { /* enrichment only */ }
+      }
       return {
         sessionId: s.id,
         pcName: s.name || "",
