@@ -179,11 +179,15 @@ export async function createAccounts(backend: Backend, options: { secret?: strin
     },
 
     // Creates the built-in admin when there are no accounts at all, with a
-    // default password the admin must change at first sign-in.
+    // default password the admin must change at first sign-in. A six-digit
+    // PIN is allowed here even though checkPassword needs 8+ characters.
     async ensureDefaultAdmin(input: { username: string; password: string; mustChangePassword: boolean }) {
       if (users.length) return undefined;
       const username = String(input.username).trim().toLowerCase();
       if (!USERNAME.test(username)) throw new AccountError(400, "ADMIN_USERNAME is not a valid login ID.");
+      if (typeof input.password !== "string" || input.password.length < 6 || input.password.length > 200) {
+        throw new AccountError(400, "The admin password needs at least 6 characters (set ADMIN_PASSWORD to a longer one for better security).");
+      }
       const account: Account = {
         id: randomBytes(9).toString("base64url"),
         username,

@@ -13,7 +13,7 @@ const PNG = "data:image/png;base64," + Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d
 test("defaults show every section and the request form", async () => {
   const site = await makeSite();
   const s = site.publicSettings();
-  assert.deepEqual(s.tabs, { pcs: true, connect: true, download: true });
+  assert.deepEqual(s.tabs, { pcs: true, connect: true, download: true, test: false });
   assert.equal(s.signIn.requestAccess, true);
   assert.equal(s.logo, null);
 });
@@ -27,6 +27,20 @@ test("hiding a tab is saved, but one section always stays visible", async () => 
   await assert.rejects(site.updateSettings({ tabs: { pcs: false, download: false } }), /at least one/);
   const reloaded = await makeSite(backend);
   assert.equal(reloaded.publicSettings().tabs.connect, false);
+});
+
+test("the Test tab is off by default and can be toggled on", async () => {
+  const backend = memorySiteBackend();
+  const site = await makeSite(backend);
+  assert.equal(site.publicSettings().tabs.test, false);
+  // Turning it on does not count toward the "at least one visible" rule:
+  // hiding pcs + connect + download is rejected even with test on.
+  await assert.rejects(site.updateSettings({ tabs: { pcs: false, connect: false, download: false, test: true } }), /at least one/);
+  assert.equal(site.publicSettings().tabs.test, false);
+  await site.updateSettings({ tabs: { test: true } });
+  assert.equal(site.publicSettings().tabs.test, true);
+  const reloaded = await makeSite(backend);
+  assert.equal(reloaded.publicSettings().tabs.test, true);
 });
 
 test("page content keeps newlines and strips control characters", async () => {

@@ -109,10 +109,17 @@ async function open(): Promise<Accounts> {
   if (accounts.empty) {
     const username = (process.env["ADMIN_USERNAME"] || "admin").toLowerCase();
     const password = process.env["ADMIN_PASSWORD"];
-    await accounts.ensureDefaultAdmin({ username, password: password || DEFAULT_ADMIN_PIN, mustChangePassword: !password });
-    logger.warn({ username }, password
-      ? "Created the admin account from ADMIN_PASSWORD"
-      : "Created the default admin account. Sign in at /admin with the default PIN and choose a new password");
+    try {
+      await accounts.ensureDefaultAdmin({ username, password: password || DEFAULT_ADMIN_PIN, mustChangePassword: !password });
+      logger.warn({ username }, password
+        ? "Created the admin account from ADMIN_PASSWORD"
+        : "Created the default admin account. Sign in at /admin with the default PIN and choose a new password");
+    } catch (err) {
+      // A bad ADMIN_PASSWORD should not take the whole relay down: fall back
+      // to the default PIN so the admin can still sign in at /admin.
+      logger.error({ err }, "ADMIN_PASSWORD was rejected; creating the admin account with the default PIN instead");
+      await accounts.ensureDefaultAdmin({ username, password: DEFAULT_ADMIN_PIN, mustChangePassword: true });
+    }
   }
   return accounts;
 }
