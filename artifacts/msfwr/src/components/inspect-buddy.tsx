@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, BookOpen, Camera, ClipboardList, Eye, Loader2, Radio, Search, Sparkles, TriangleAlert, Upload, X,
 } from 'lucide-react';
+import { getAdminOverview } from '@workspace/api-client-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { errorText } from '@/lib/auth';
 
@@ -164,20 +165,60 @@ function MasterSwitch({ onChanged, onError }: { onChanged: () => void; onError: 
 
 // --- Control room: list of ongoing sessions with watcher controls ---
 
+type OverviewLive = {
+  id: string; name?: string; mode?: Mode; state?: string; ra?: string | null;
+  operator?: string; viewers?: number; liveAt?: number; createdAt?: number;
+};
+
+function fromOverview(live: OverviewLive[]): WatcherSession[] {
+  return (live ?? [])
+    .filter((s) => s && s.state !== 'waiting')
+    .map((s) => ({
+      sessionId: s.id,
+      pcName: s.name || '',
+      mode: (s.mode || 'attended') as Mode,
+      company: '',
+      operator: s.operator ?? '',
+      startedAt: s.liveAt ?? s.createdAt ?? Date.now(),
+      viewers: s.viewers ?? 0,
+      captureCount: 0,
+      lastSeenText: '',
+      watcher: null,
+    }));
+}
+
 export function InspectBuddyPanel({ onError }: { onError: (msg: string | null) => void }) {
   const qc = useQueryClient();
   const [view, setView] = useState<'list' | 'repo'>('list');
   const [openSession, setOpenSession] = useState<string | null>(null);
   const [q, setQ] = useState('');
 
-  // One request loads every ongoing session together with its watcher state
-  // (embedded server-side), so a slow or failing watcher fetch can never
-  // blank the control room.
-  const list = useQuery({ queryKey: ['buddy-sessions'], queryFn: () => api<{ sessions: WatcherSession[] }>('/buddy/sessions'), refetchInterval: 10_000 });
+  // Primary source: the dedicated endpoint, which embeds each session's
+  // watcher state in one payload. Fallback: /api/admin/overview — the exact
+  // table the Sessions tab counts — so even if this relay build predates the
+  // buddy routes, the control room still lists ongoing sessions instead of
+  // erroring out.
+  const list = useQuery<WatcherSession[]>({
+    queryKey: ['buddy-sessions'],
+    queryFn: async () => {
+      try {
+        const r = await api<{ sessions: WatcherSession[] }>('/buddy/sessions');
+        return r.sessions ?? [];
+      } catch (e) {
+        const status = (e as { status?: number }).status;
+        if (status === 404 || status === 405 || status === 502 || status === 503 || status === 504) {
+          const ov = await getAdminOverview();
+          return fromOverview((ov.live ?? []) as OverviewLive[]);
+        }
+        throw e;
+      }
+    },
+    refetchInterval: 10_000,
+  });
 
   useEffect(() => { if (list.error) onError(errorText(list.error, 'Could not load the ongoing sessions.')); }, [list.error, onError]);
 
-  const rows = list.data?.sessions ?? [];
+  const rows = list.data ?? [];
   const map: Record<string, WatcherView | null> = {};
   for (const r of rows) map[r.sessionId] = r.watcher ?? null;
   const needle = q.trim().toLowerCase();
