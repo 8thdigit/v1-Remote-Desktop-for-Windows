@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle, BadgeCheck, Building2, CalendarClock, Check, ClipboardList, ImageIcon, IndianRupee, Inbox, Laptop, Mail, MessageSquare, MonitorPlay,
-  Phone, RefreshCw, Save, Send, Settings2, Trash2, Upload, X,
+  Phone, Radio, RefreshCw, Save, Send, Settings2, Trash2, Upload, X,
 } from 'lucide-react';
 import { errorText, raLabel } from '@/lib/auth';
 import { relativeTime } from '@/lib/unattended';
@@ -491,6 +491,18 @@ export function SiteSettingsPanel({ onError }: { onError: (m: string | null) => 
   const [busy, setBusy] = useState(false);
   useEffect(() => { if (q.data && !draft) setDraft(q.data); }, [q.data, draft]);
 
+  // Inspect Buddy lives in its own store (the watcher engine), not the site
+  // document — it saves immediately when toggled here.
+  type InspectS = { enabled: boolean; ai: boolean; webSearch: boolean; model: string; maxQuestions: number };
+  const insp = useQuery<InspectS>({ queryKey: ['inspect-settings'], queryFn: () => api<InspectS>('/buddy/inspect/settings') });
+  async function saveInspect(patch: Partial<InspectS>) {
+    onError(null);
+    try {
+      const next = await api<InspectS>('/buddy/inspect/settings', { method: 'PATCH', body: JSON.stringify(patch) });
+      client.setQueryData(['inspect-settings'], next);
+    } catch (e) { onError(errorText(e, 'Could not save the Inspect Buddy settings.')); }
+  }
+
   const apply = (next: SiteSettings) => {
     client.setQueryData(['admin-site'], next);
     client.setQueryData(SITE_KEY, next);
@@ -562,6 +574,16 @@ export function SiteSettingsPanel({ onError }: { onError: (m: string | null) => 
           <p className="mt-3 text-xs text-muted-foreground">Remove an image to go back to the built-in Connect.AI mark.</p>
         </Card>
       </div>
+
+      <Card title="Inspect Buddy — question watcher" icon={Radio}>
+        <p className="-mt-1 text-xs text-muted-foreground">The admin control room that monitors ongoing remote sessions, detects exams on screen, captures questions and researches answers. Changes save immediately.</p>
+        <Toggle label="Enable Inspect Buddy" hint="Master switch. While off, the control room loads but watchers cannot be enabled." checked={!!insp.data?.enabled}
+          onChange={(v) => void saveInspect({ enabled: v })} testId="toggle-inspect-buddy" />
+        <Toggle label="Use Claude AI for detection & answers" hint="Needs an Anthropic API key (set in AI Buddy settings or ANTHROPIC_API_KEY)." checked={!!insp.data?.ai}
+          onChange={(v) => void saveInspect({ ai: v })} testId="toggle-inspect-ai" />
+        <Toggle label="Online research fallback" hint="When no answer is found in the document repository, search the web." checked={!!insp.data?.webSearch}
+          onChange={(v) => void saveInspect({ webSearch: v })} testId="toggle-inspect-web" />
+      </Card>
 
       <Card title="Social sharing (OG tags)" icon={Upload}>
         <p className="-mt-1 mb-3 text-xs text-muted-foreground">What WhatsApp, LinkedIn, Facebook, X and Slack show when someone shares a link to this site.</p>
