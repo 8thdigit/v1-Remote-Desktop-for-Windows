@@ -76,7 +76,7 @@ export default function Admin() {
   const overview = useQuery<AdminOverview>({ queryKey: getGetAdminOverviewQueryKey(), queryFn: () => getAdminOverview(), refetchInterval: 4000 });
 
   useEffect(() => {
-    document.title = 'Admin console — WINRSS.net';
+    document.title = 'Admin console — Connect.AI';
     const id = window.setInterval(() => setNow(Date.now()), 5000);
     return () => window.clearInterval(id);
   }, []);
@@ -120,7 +120,7 @@ export default function Admin() {
           <div className="flex gap-2">
             <button type="button" onClick={() => { setCreateKind('admin'); setCreating(true); }} data-testid="button-add-admin"
               className="flex items-center gap-2 rounded-xl border border-foreground/15 bg-card px-4 py-2.5 text-sm font-bold shadow-sm hover:bg-muted active:scale-[0.98]">
-              <ShieldCheck className="h-4 w-4" /> Add WINRSS admin
+              <ShieldCheck className="h-4 w-4" /> Add Connect.AI admin
             </button>
             <button type="button" onClick={() => { setCreateKind('company'); setCreating(true); }} data-testid="button-add-user"
               className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground shadow-sm active:scale-[0.98]">
@@ -398,7 +398,7 @@ function UsersPanel({ users, me, now, loading, onRole, onToggle, onRename, onRes
         </div>
       )}
       <p className="mt-3 text-xs text-muted-foreground">
-        Give each company its RA ID. On a PC, enter it in the WINRSS.net window (RA ID, Save): the PC then shows up for that company when it signs in, and
+        Give each company its RA ID. On a PC, enter it in the Connect.AI window (RA ID, Save): the PC then shows up for that company when it signs in, and
         Initiate: ask IT to connect goes to it.
       </p>
       <ResetPassword user={reset} onClose={() => setReset(null)} onReset={onReset} />
@@ -484,8 +484,8 @@ function CreateUser({ open, kind, onKind, prefill, onClose, onCreated }: {
     }
   }
   const summary = created && (created.user.role === 'admin'
-    ? `WINRSS.net admin console: ${window.location.origin}/admin\nLogin ID: ${created.user.username}\nPassword: ${created.password}`
-    : `WINRSS.net sign-in: ${window.location.origin}\nLogin ID: ${created.user.username}\nPassword: ${created.password}\nRA ID (enter it on your PCs): ${raLabel(created.user.raId)}`);
+    ? `Connect.AI admin console: ${window.location.origin}/admin\nLogin ID: ${created.user.username}\nPassword: ${created.password}`
+    : `Connect.AI sign-in: ${window.location.origin}\nLogin ID: ${created.user.username}\nPassword: ${created.password}\nRA ID (enter it on your PCs): ${raLabel(created.user.raId)}`);
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) close(); }}>
       <DialogContent className="sm:max-w-md">
@@ -493,13 +493,13 @@ function CreateUser({ open, kind, onKind, prefill, onClose, onCreated }: {
           <DialogTitle>{created ? (created.user.role === 'admin' ? 'Admin account created' : 'Company created') : 'Create an account'}</DialogTitle>
           <DialogDescription>
             {created ? 'Share these sign-in details privately. The password is not shown again.'
-              : isAdmin ? 'A WINRSS admin manages every company, subscription and setting in this console. It needs the admin creation PIN.'
+              : isAdmin ? 'A Connect.AI admin manages every company, subscription and setting in this console. It needs the admin creation PIN.'
               : 'A customer company signs in with its login ID. PCs pointed to its RA ID show up for it, with their requests.'}
           </DialogDescription>
         </DialogHeader>
         {!created && (
           <div role="tablist" aria-label="Account type" className="grid grid-cols-2 gap-1 rounded-xl bg-muted/80 p-1">
-            {([['company', 'Customer company creation', Building2], ['admin', 'WINRSS admin account creation', ShieldCheck]] as const).map(([value, label, Icon]) => (
+            {([['company', 'Customer company creation', Building2], ['admin', 'Connect.AI admin account creation', ShieldCheck]] as const).map(([value, label, Icon]) => (
               <button key={value} type="button" role="tab" aria-selected={kind === value} onClick={() => switchKind(value)} data-testid={`create-tab-${value}`}
                 className={`flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-bold transition-colors ${kind === value
                   ? value === 'admin' ? 'bg-foreground text-background shadow-sm' : 'bg-card text-foreground shadow-sm'
@@ -514,7 +514,7 @@ function CreateUser({ open, kind, onKind, prefill, onClose, onCreated }: {
             <div className="rounded-2xl bg-foreground p-4 text-background">
               {created.user.role === 'admin' ? (
                 <>
-                  <p className="font-mono text-[11px] uppercase tracking-widest text-background/60">WINRSS admin</p>
+                  <p className="font-mono text-[11px] uppercase tracking-widest text-background/60">Connect.AI admin</p>
                   <p className="font-mono text-2xl font-bold" data-testid="text-new-admin">{created.user.username}</p>
                 </>
               ) : (
@@ -531,7 +531,7 @@ function CreateUser({ open, kind, onKind, prefill, onClose, onCreated }: {
           <form id="create-user" onSubmit={submit} className="space-y-3" key={kind}>
             <label className="block text-xs font-semibold text-muted-foreground">{isAdmin ? 'Admin name' : 'Company name'}
               <input className={`${inputCls} mt-1`} value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={80}
-                placeholder={isAdmin ? 'e.g. Priya (WINRSS support)' : 'e.g. Acme Ltd'} autoFocus data-testid="input-new-name" />
+                placeholder={isAdmin ? 'e.g. Priya (Connect.AI support)' : 'e.g. Acme Ltd'} autoFocus data-testid="input-new-name" />
             </label>
             <label className="block text-xs font-semibold text-muted-foreground">Login ID
               <input className={`${inputCls} mt-1`} value={username} onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/\s/g, ''))} maxLength={32} required
@@ -549,7 +549,7 @@ function CreateUser({ open, kind, onKind, prefill, onClose, onCreated }: {
             {isAdmin && (
               <div className="rounded-xl border border-foreground/15 bg-muted/40 p-3">
                 <AdminPinField value={adminPin} onChange={setAdminPin} testId="input-admin-pin" />
-                <p className="mt-1.5 text-[11px] text-muted-foreground">Ask the WINRSS owner for this PIN. It is checked by the relay and never stored in the browser.</p>
+                <p className="mt-1.5 text-[11px] text-muted-foreground">Ask the Connect.AI owner for this PIN. It is checked by the relay and never stored in the browser.</p>
               </div>
             )}
             {error && <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
@@ -582,7 +582,7 @@ function PromoteAdmin({ user, onClose, onPromote }: { user: Account | null; onCl
     <Dialog open={!!user} onOpenChange={(o) => { if (!o) close(); }}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>Make {user?.displayName} a WINRSS admin?</DialogTitle>
+          <DialogTitle>Make {user?.displayName} a Connect.AI admin?</DialogTitle>
           <DialogDescription>Admins manage every company, subscription and setting. Enter the admin creation PIN to continue.</DialogDescription>
         </DialogHeader>
         <form id="promote-admin" onSubmit={async (e) => { e.preventDefault(); if (!user) return; setBusy(true); await onPromote(user, pin); setBusy(false); close(); }}>

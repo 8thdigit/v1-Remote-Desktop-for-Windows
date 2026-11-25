@@ -18,7 +18,7 @@ router.use((_req, res, next) => {
 });
 router.use(requireUser("admin"));
 
-// Creating a WINRSS admin account (or making an account an admin) needs the
+// Creating a Connect.AI admin account (or making an account an admin) needs the
 // six-digit admin creation PIN. It is a secret kept in the relay's
 // environment (ADMIN_CREATION_PIN), never in the code or the browser.
 const adminPinTries = limiter(5, 15 * 60_000);
@@ -358,25 +358,46 @@ router.delete("/buddy/kb/:id", async (req, res) => {
 
 // The live sessions as the control room lists them: PC, company, helper,
 // viewers, uptime, plus what AI Buddy last read off the screen.
+// One watcher state per session id, from the engine's own records. An engine
+// failure here must never blank the control room — every row just shows its
+// watcher as off instead.
+async function watcherStates(): Promise<Map<string, WatcherView>> {
+  const map = new Map<string, WatcherView>();
+  try {
+    const engine = await watcherReady();
+    for (const w of engine.list()) {
+      const v = watcherView(w, (n) => `/api/admin/buddy/img/${encodeURIComponent(n)}`);
+      if (v) map.set(w.sessionId, v);
+    }
+  } catch (err) { console.warn("Inspect Buddy: watcher states unavailable", err); }
+  return map;
+}
+
 router.get("/buddy/sessions", async (_req, res) => {
   try {
-    // The page must still list sessions even if AI Buddy's records or the
-    // account directory fail to open — those only enrich each row.
+    // The page must still list sessions even if AI Buddy's records, the
+    // account directory or the watcher engine fail to open — those only
+    // enrich each row.
     let accounts: Awaited<ReturnType<typeof accountsReady>> | undefined;
-    let buddy: Awaited<ReturnType<typeof buddyReady>> | undefined;
+    let notes: Map<string, unknown> | undefined;
     try { accounts = await accountsReady(); } catch (err) { console.warn("Inspect Buddy: account directory unavailable", err); }
-    try { buddy = await buddyReady(); } catch (err) { console.warn("Inspect Buddy: AI Buddy records unavailable", err); }
-    const notes = buddy?.sessionsIndex();
+    let buddyFull: ((id: string) => { captures?: { text?: string }[] } | null | undefined) | undefined;
+    try {
+      const buddy = await buddyReady();
+      notes = buddy.sessionsIndex();
+      buddyFull = (id: string) => buddy.session(id) as { captures?: { text?: string }[] } | null | undefined;
+    } catch (err) { console.warn("Inspect Buddy: AI Buddy records unavailable", err); }
+    const watchers = await watcherStates();
     const byRa = new Map((accounts?.list() ?? []).map((u) => [u.raId, u.displayName]));
     const rows = store.overview().live.filter((s) => s.state === "live").map((s) => {
-      const b = notes?.get(s.id);
-      // sessionsIndex() omits the captures array, so ask for the full record
-      // of just this session when we need the last line read off the screen.
+      const b = notes?.get(s.id) as { captureCount?: number; lastCaptureAt?: number } | undefined;
+      // The index view has no capture bodies; fetch the full record only when needed.
       let lastText = "";
-      if (b && buddy) {
+      if (b?.captureCount) {
         try {
-          const full = buddy.session(s.id) as { captures?: { text?: string }[] } | undefined;
-          if (full && Array.isArray(full.captures) && full.captures.length) lastText = String(full.captures.at(-1)?.text ?? "");
+          const full = buddyFull?.(s.id);
+          const caps = full && Array.isArray(full.captures) ? full.captures : [];
+          lastText = String(caps[caps.length - 1]?.text ?? "");
         } catch { /* enrichment only */ }
       }
       return {
@@ -389,6 +410,7 @@ router.get("/buddy/sessions", async (_req, res) => {
         viewers: s.viewers,
         captureCount: b?.captureCount ?? 0,
         lastSeenText: lastText.slice(0, 300),
+        watcher: watchers.get(s.id) ?? null,
       };
     });
     res.json({ sessions: rows });
