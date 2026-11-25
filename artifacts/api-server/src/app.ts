@@ -34,6 +34,10 @@ app.use(cors());
 // Site settings carry uploaded images (logo, favicon, share image) as data
 // URLs, so that one admin route takes larger bodies than the rest.
 app.use("/api/admin/site", express.json({ limit: "3mb" }));
+// Inspect Buddy: document uploads (data URLs) and watcher screen captures
+// (JPEG frames) travel as JSON bodies, so these routes need more headroom.
+app.use("/api/admin/buddy/repo/documents", express.json({ limit: "12mb" }));
+app.use("/api/buddy/capture", express.json({ limit: "6mb" }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

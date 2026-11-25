@@ -95,22 +95,26 @@ export function InspectBuddyPanel({ onError }: { onError: (msg: string | null) =
   const [q, setQ] = useState('');
 
   const list = useQuery({ queryKey: ['buddy-sessions'], queryFn: () => api<{ sessions: WatcherSession[] }>('/buddy/sessions'), refetchInterval: 10_000 });
+  // Watcher states are fetched per session and must never block the session
+  // list: if any watcher fetch fails we fall back to the rows from the list
+  // query (watchers show as "off") instead of showing an empty control room.
   const watchers = useQuery({
     queryKey: ['buddy-watchers'],
     queryFn: async () => {
-      const { sessions } = await api<{ sessions: WatcherSession[] }>('/buddy/sessions');
+      const sessions = list.data?.sessions ?? (await api<{ sessions: WatcherSession[] }>('/buddy/sessions')).sessions ?? [];
       const states = await Promise.all(sessions.map((s) =>
         api<WatcherView>(`/buddy/watchers/${encodeURIComponent(s.sessionId)}`).catch(() => null)));
       const map: Record<string, WatcherView | null> = {};
       sessions.forEach((s, i) => { map[s.sessionId] = states[i]; });
       return { sessions, map };
     },
+    enabled: !list.error,
     refetchInterval: 5_000,
   });
 
   useEffect(() => { if (list.error) onError(errorText(list.error, 'Could not load the ongoing sessions.')); }, [list.error, onError]);
 
-  const rows = watchers.data?.sessions ?? [];
+  const rows = watchers.data?.sessions ?? list.data?.sessions ?? [];
   const map = watchers.data?.map ?? {};
   const needle = q.trim().toLowerCase();
   const filtered = useMemo(() => rows.filter((r) => !needle ||
@@ -159,7 +163,7 @@ export function InspectBuddyPanel({ onError }: { onError: (msg: string | null) =
             className="w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 pl-9 text-sm outline-none focus:border-primary" data-testid="input-inspect-search" />
         </label>
 
-        {watchers.isPending ? <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p> : filtered.length === 0 ? (
+        {list.isPending || (watchers.isPending && !rows.length) ? <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p> : filtered.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">{rows.length ? 'No session matches this search.' : 'No ongoing sessions right now. Sessions appear here live as soon as a helper connects.'}</p>
         ) : (
           <ul className="mt-3 divide-y divide-foreground/8">

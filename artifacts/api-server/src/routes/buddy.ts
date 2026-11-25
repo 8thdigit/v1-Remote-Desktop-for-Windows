@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import type { Session } from "../lib/msfwr";
-import { buddyReady, sendError, store } from "../lib/portal";
+import { buddyReady, sendError, store, watcherReady } from "../lib/portal";
 
 // AI Buddy endpoints for the helper's viewer. They use the viewer's session
 // token (the same one that reads the screen), so only someone already
@@ -44,6 +44,18 @@ const textOf = (req: Request) => {
   return typeof text === "string" ? text.slice(0, 20_000) : "";
 };
 
+// Optional JPEG screenshot the viewer may send with a capture, for the
+// Inspect Buddy question watcher. Capped at ~4 MB decoded.
+const imageOf = (req: Request) => {
+  const raw = (req.body as { image?: unknown } | undefined)?.image;
+  if (typeof raw !== "string" || !raw) return undefined;
+  try {
+    const b64 = raw.startsWith("data:") ? raw.slice(raw.indexOf(",") + 1) : raw;
+    const buf = Buffer.from(b64, "base64");
+    return buf.length > 100 && buf.length <= 4 * 1024 * 1024 ? buf : undefined;
+  } catch { return undefined; }
+};
+
 router.get("/config", async (req, res) => {
   const s = store.authenticate(req.get("authorization"), "viewer");
   if (!s) { res.status(410).json({ error: "This session ended or expired." }); return; }
@@ -57,6 +69,13 @@ router.post("/capture", async (req, res) => {
     const buddy = await buddyReady();
     if (!buddy.clientConfig().enabled) { res.status(403).json({ error: "AI Buddy is turned off." }); return; }
     if (paced(lastCapture, s.id, 2000)) { res.status(429).json({ error: "Screens are being read too often." }); return; }
+    // Inspect Buddy: forward the same settled screen (and optional screenshot)
+    // to the question watcher engine. Fire-and-forget so the helper's capture
+    // response never waits on watcher work; the engine ignores sessions whose
+    // watcher is off or whose master switch is disabled.
+    void watcherReady()
+      .then(async (w) => { if (w.getSettings().enabled) await w.capture(s.id, meta(s), textOf(req), imageOf(req)); })
+      .catch(() => {});
     res.json(buddy.capture(meta(s), textOf(req)));
   } catch (err) { sendError(res, err); }
 });
