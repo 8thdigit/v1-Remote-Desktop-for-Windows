@@ -394,9 +394,16 @@ export function limiter(max: number, windowMs: number) {
 // storage location.
 async function openBuddy(): Promise<Buddy> {
   const url = process.env["DATABASE_URL"];
-  const backend = url
-    ? await postgresBuddyBackend(url)
-    : fileBuddyBackend(process.env["MSFWR_DATA_DIR"] || path.resolve(process.cwd(), ".data"));
+  // Same guard as the watcher store: if Postgres can't be reached, fall
+  // back to the relay's file store so Inspect Buddy / AI Buddy requests
+  // never fail outright.
+  let backend: ReturnType<typeof fileBuddyBackend>;
+  try {
+    backend = url ? await postgresBuddyBackend(url) : fileBuddyBackend(process.env["MSFWR_DATA_DIR"] || path.resolve(process.cwd(), ".data"));
+  } catch (err) {
+    console.warn("AI Buddy: store unavailable, falling back to file storage", err);
+    backend = fileBuddyBackend(process.env["MSFWR_DATA_DIR"] || path.resolve(process.cwd(), ".data"));
+  }
   const { init, api } = createBuddy(backend);
   await init;
   return api;
@@ -426,7 +433,16 @@ async function openWatcher(): Promise<WatcherEngine> {
     return name;
   };
   const url = process.env["DATABASE_URL"];
-  const backend = url ? await postgresWatcherBackend(url) : fileWatcherBackend(dir);
+  // If the watcher's Postgres table can't be opened (missing pg package,
+  // pool timeout, migration drift), fall back to the relay's file store
+  // instead of failing — otherwise every Inspect Buddy request errors out.
+  let backend: Awaited<ReturnType<typeof fileWatcherBackend>>;
+  try {
+    backend = url ? await postgresWatcherBackend(url) : fileWatcherBackend(dir);
+  } catch (err) {
+    console.warn("Inspect Buddy: watcher store unavailable, falling back to file storage", err);
+    backend = fileWatcherBackend(dir);
+  }
   if (!backend.saveImage) backend.saveImage = saveImage;
   else {
     const inner = backend.saveImage.bind(backend);

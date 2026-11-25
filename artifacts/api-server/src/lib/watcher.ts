@@ -320,12 +320,25 @@ export function createWatcherEngine(backend: WatcherBackend, options: { clock?: 
     timer.unref?.();
   };
 
+  // A broken or unreachable store must never take the control room down:
+  // load failures are logged and the engine starts with empty state. The
+  // promise itself never rejects, so watcherReady() can't cache a failure.
   const init = (async () => {
-    const loaded = await backend.load();
-    if (loaded?.settings) settings = mergeSettings(loaded.settings);
-    apiKey = typeof loaded?.apiKey === "string" ? loaded.apiKey : "";
-    if (Array.isArray(loaded?.watches)) watches.push(...loaded.watches);
-    if (Array.isArray(loaded?.docs)) docs.push(...loaded.docs);
+    let loaded: Data | undefined;
+    try {
+      loaded = await backend.load();
+    } catch (err) {
+      console.warn("Inspect Buddy: could not load watcher state, starting empty", err);
+      return;
+    }
+    try {
+      if (loaded?.settings) settings = mergeSettings(loaded.settings);
+      apiKey = typeof loaded?.apiKey === "string" ? loaded.apiKey : "";
+      if (Array.isArray(loaded?.watches)) watches.push(...loaded.watches);
+      if (Array.isArray(loaded?.docs)) docs.push(...loaded.docs);
+    } catch (err) {
+      console.warn("Inspect Buddy: watcher state is malformed, starting empty", err);
+    }
   })();
 
   const key = () => apiKey || envKey() || "";
