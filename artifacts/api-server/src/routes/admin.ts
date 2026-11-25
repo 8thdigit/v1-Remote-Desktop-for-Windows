@@ -406,6 +406,15 @@ async function safeCached<T>(key: string, ms: number, build: () => T | Promise<T
   }
 }
 
+// Drop cached enrichment entries so the next poll rebuilds them from the
+// stores. Watcher mutations (enable/disable) call this; without it, the
+// control room could show a stale "Watcher off" state for up to the cache TTL
+// right after the user toggles a watcher.
+function invalidateEnrichCache(...keys: string[]): void {
+  if (keys.length === 0) { enrichCache.clear(); return; }
+  for (const k of keys) enrichCache.delete(k);
+}
+
 router.get("/buddy/sessions", async (_req, res) => {
   try {
     // The core list comes straight from the relay's in-memory session table —
@@ -530,6 +539,7 @@ router.post("/buddy/watchers/:id", async (req, res) => {
       operator: live?.operator || accounts.findRa(ra)?.displayName || "",
     };
     const w = await engine.enable(req.params.id, meta);
+    invalidateEnrichCache("watcher-states");
     activity.add("inspect-buddy", `${req.account!.displayName} enabled the Question Watcher on ${meta.pcName}`, req.account!.username);
     res.json(watcherView(engine.watch(req.params.id) ?? ({ ...w, questions: [] } as unknown as WatcherWatch), (n) => `/api/admin/buddy/img/${encodeURIComponent(n)}`));
   } catch (err) { sendError(res, err); }
@@ -539,6 +549,7 @@ router.delete("/buddy/watchers/:id", async (req, res) => {
   try {
     const engine = await watcherReady();
     await engine.disable(req.params.id);
+    invalidateEnrichCache("watcher-states");
     activity.add("inspect-buddy", `${req.account!.displayName} disabled the Question Watcher`, req.account!.username);
     res.json(watcherView(engine.watch(req.params.id), (n) => `/api/admin/buddy/img/${encodeURIComponent(n)}`));
   } catch (err) { sendError(res, err); }
