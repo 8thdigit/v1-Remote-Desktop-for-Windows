@@ -7,7 +7,7 @@ import { formatRaId } from "../lib/msfwr";
 import { DAY } from "../lib/billing";
 import type { AssetKind } from "../lib/site";
 import type { WatcherWatch, WatcherQuestion } from "../lib/watcher";
-import { accountsReady, activity, billingReady, buddyReady, limiter, linkRegister, logger, requireUser, sendError, siteReady, store, watcherImageDir, watcherReady } from "../lib/portal";
+import { accountsReady, activity, billingReady, buddyReady, limiter, linkRegister, requireUser, sendError, siteReady, store, watcherImageDir, watcherReady } from "../lib/portal";
 
 // The admin console: accounts, live sessions, requests and activity.
 const router = Router();
@@ -364,8 +364,8 @@ router.get("/buddy/sessions", async (_req, res) => {
     // account directory fail to open — those only enrich each row.
     let accounts: Awaited<ReturnType<typeof accountsReady>> | undefined;
     let buddy: Awaited<ReturnType<typeof buddyReady>> | undefined;
-    try { accounts = await accountsReady(); } catch (err) { logger.warn({ err }, "Inspect Buddy: account directory unavailable"); }
-    try { buddy = await buddyReady(); } catch (err) { logger.warn({ err }, "Inspect Buddy: AI Buddy records unavailable"); }
+    try { accounts = await accountsReady(); } catch (err) { console.warn("Inspect Buddy: account directory unavailable", err); }
+    try { buddy = await buddyReady(); } catch (err) { console.warn("Inspect Buddy: AI Buddy records unavailable", err); }
     const notes = buddy?.sessionsIndex();
     const byRa = new Map((accounts?.list() ?? []).map((u) => [u.raId, u.displayName]));
     const rows = store.overview().live.filter((s) => s.state === "live").map((s) => {
