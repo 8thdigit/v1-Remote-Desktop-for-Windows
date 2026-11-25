@@ -489,6 +489,9 @@ export function createWatcherEngine(backend: WatcherBackend, options: { clock?: 
     },
 
     // --- Control room: watches per live session ---
+    // Full clone of every watch record (used by the control-room route to
+    // attach watcher state to each ongoing session row).
+    list() { return structuredClone(watches); },
     listWatches() {
       return watches.map((w) => ({
         ...w,

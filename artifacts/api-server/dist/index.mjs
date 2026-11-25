@@ -28360,7 +28360,7 @@ var require_pino = __commonJS({
     function pinoBundlerAbsolutePath(p) {
       try {
         const path12 = __require("path");
-        const outputDir = "/tmp/syncwt/artifacts/api-server/dist";
+        const outputDir = "/workspace/artifacts/api-server/dist";
         return path12.resolve(outputDir, p.replace(/^\.\//, ""));
       } catch (e) {
         const f = new Function("p", "return new URL(p, import.meta.url).pathname");
@@ -74426,6 +74426,11 @@ ${q.options.map((o) => `- ${o}`).join("\n")}` : ""}`)
       return api.settings();
     },
     // --- Control room: watches per live session ---
+    // Full clone of every watch record (used by the control-room route to
+    // attach watcher state to each ongoing session row).
+    list() {
+      return structuredClone(watches);
+    },
     listWatches() {
       return watches.map((w) => ({
         ...w,
@@ -76381,6 +76386,19 @@ router4.delete("/buddy/kb/:id", async (req, res) => {
     sendError(res, err);
   }
 });
+async function watcherStates() {
+  const map = /* @__PURE__ */ new Map();
+  try {
+    const engine = await watcherReady();
+    for (const w of engine.list()) {
+      const v = watcherView(w, (n) => `/api/admin/buddy/img/${encodeURIComponent(n)}`);
+      if (v) map.set(w.sessionId, v);
+    }
+  } catch (err) {
+    console.warn("Inspect Buddy: watcher states unavailable", err);
+  }
+  return map;
+}
 router4.get("/buddy/sessions", async (_req, res) => {
   try {
     let accounts;
@@ -76398,6 +76416,7 @@ router4.get("/buddy/sessions", async (_req, res) => {
     } catch (err) {
       console.warn("Inspect Buddy: AI Buddy records unavailable", err);
     }
+    const watchers = await watcherStates();
     const byRa = new Map((accounts?.list() ?? []).map((u) => [u.raId, u.displayName]));
     const rows = store.overview().live.filter((s) => s.state === "live").map((s) => {
       const b = notes?.get(s.id);
@@ -76419,7 +76438,8 @@ router4.get("/buddy/sessions", async (_req, res) => {
         startedAt: s.liveAt ?? s.createdAt,
         viewers: s.viewers,
         captureCount: b?.captureCount ?? 0,
-        lastSeenText: lastText.slice(0, 300)
+        lastSeenText: lastText.slice(0, 300),
+        watcher: watchers.get(s.id) ?? null
       };
     });
     res.json({ sessions: rows });
