@@ -15,7 +15,7 @@ export type PageContent = { enabled: boolean; title: string; body: string };
 
 export type SiteSettings = {
   // Sections of the company portal. At least one stays visible.
-  tabs: { pcs: boolean; connect: boolean; download: boolean };
+  tabs: { pcs: boolean; connect: boolean; download: boolean; test: boolean };
   signIn: {
     // The "Request access" form on the sign-in page.
     requestAccess: boolean;
@@ -105,7 +105,7 @@ export class SiteError extends Error {
 }
 
 export const DEFAULT_SETTINGS: SiteSettings = {
-  tabs: { pcs: true, connect: true, download: true },
+  tabs: { pcs: true, connect: true, download: true, test: false },
   signIn: { requestAccess: true, downloadLink: true },
   og: {
     title: "Connect.AI",
@@ -191,6 +191,7 @@ function mergeSettings(stored: Partial<SiteSettings> | undefined): SiteSettings 
       pcs: bool(s.tabs?.pcs, d.tabs.pcs),
       connect: bool(s.tabs?.connect, d.tabs.connect),
       download: bool(s.tabs?.download, d.tabs.download),
+      test: bool(s.tabs?.test, d.tabs.test),
     },
     signIn: {
       requestAccess: bool(s.signIn?.requestAccess, d.signIn.requestAccess),
