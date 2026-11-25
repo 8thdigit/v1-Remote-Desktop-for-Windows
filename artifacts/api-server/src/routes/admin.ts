@@ -375,46 +375,66 @@ async function watcherStates(): Promise<Map<string, WatcherRow>> {
   return map;
 }
 
+// A short cache for the session-list enrichment. The control room polls this
+// route every few seconds; opening/serializing the AI-Buddy and watcher stores
+// on every poll is pure waste, and any hiccup there used to surface as
+// "Could not load the ongoing sessions". Enrichment results are cached for a
+// couple of seconds and failures inside the cache builder are swallowed, so a
+// broken side-store can never make the request itself fail.
+const enrichCache = new Map<string, { at: number; value: unknown }>();
+async function cached<T>(key: string, ms: number, build: () => T | Promise<T>): Promise<T> {
+  const hit = enrichCache.get(key);
+  if (hit && Date.now() - hit.at < ms) return hit.value as T;
+  const value = await build();
+  enrichCache.set(key, { at: Date.now(), value });
+  return value;
+}
+
 router.get("/buddy/sessions", async (_req, res) => {
   try {
-    // The page must still list sessions even if AI Buddy's records, the
-    // account directory or the watcher engine fail to open — those only
-    // enrich each row.
-    let accounts: Awaited<ReturnType<typeof accountsReady>> | undefined;
-    let notes: Map<string, unknown> | undefined;
-    try { accounts = await accountsReady(); } catch (err) { console.warn("Inspect Buddy: account directory unavailable", err); }
-    let buddyFull: ((id: string) => { captures?: { text?: string }[] } | null | undefined) | undefined;
-    try {
-      const buddy = await buddyReady();
-      notes = buddy.sessionsIndex();
-      buddyFull = (id: string) => buddy.session(id) as { captures?: { text?: string }[] } | null | undefined;
-    } catch (err) { console.warn("Inspect Buddy: AI Buddy records unavailable", err); }
-    const watchers = await watcherStates();
-    const byRa = new Map((accounts?.list() ?? []).map((u) => [u.raId, u.displayName]));
-    const rows = store.overview().live.filter((s) => s.state === "live").map((s) => {
-      const b = notes?.get(s.id) as { captureCount?: number; lastCaptureAt?: number } | undefined;
-      // The index view has no capture bodies; fetch the full record only when needed.
-      let lastText = "";
-      if (b?.captureCount) {
-        try {
-          const full = buddyFull?.(s.id);
+    // The core list comes straight from the relay's in-memory session table —
+    // it cannot fail on any side-store. Everything else below only enriches
+    // each row and is individually guarded.
+    const { live } = store.overview();
+    const sessions = live.filter((s) => s.state === "live");
+
+    const accounts = await cached("accounts", 5_000, async () => {
+      try { return await accountsReady(); } catch (err) { console.warn("Inspect Buddy: account directory unavailable", err); return undefined; }
+    }) as Awaited<ReturnType<typeof accountsReady>> | undefined;
+
+    const notes = await cached("buddy-notes", 2_000, async () => {
+      try { return (await buddyReady()).sessionsIndex(); } catch (err) { console.warn("Inspect Buddy: AI Buddy records unavailable", err); return undefined; }
+    }) as Map<string, { captureCount?: number }> | undefined;
+
+    const lastTexts = await cached("buddy-last-texts", 2_000, async () => {
+      const map = new Map<string, string>();
+      try {
+        const buddy = await buddyReady();
+        for (const s of sessions) {
+          const full = buddy.session(s.id) as { captures?: { text?: string }[] } | null | undefined;
           const caps = full && Array.isArray(full.captures) ? full.captures : [];
-          lastText = String(caps[caps.length - 1]?.text ?? "");
-        } catch { /* enrichment only */ }
-      }
-      return {
-        sessionId: s.id,
-        pcName: s.name || "",
-        mode: s.mode,
-        company: (s.ra && byRa.get(s.ra)) || "",
-        operator: s.operator ?? "",
-        startedAt: s.liveAt ?? s.createdAt,
-        viewers: s.viewers,
-        captureCount: b?.captureCount ?? 0,
-        lastSeenText: lastText.slice(0, 300),
-        watcher: watchers.get(s.id) ?? null,
-      };
-    });
+          const t = String(caps[caps.length - 1]?.text ?? "");
+          if (t) map.set(s.id, t);
+        }
+      } catch { /* enrichment only */ }
+      return map;
+    }) as Map<string, string>;
+
+    const watchers = await cached("watcher-states", 2_000, () => watcherStates());
+
+    const byRa = new Map((accounts?.list() ?? []).map((u) => [u.raId, u.displayName]));
+    const rows = sessions.map((s) => ({
+      sessionId: s.id,
+      pcName: s.name || "",
+      mode: s.mode,
+      company: (s.ra && byRa.get(s.ra)) || "",
+      operator: s.operator ?? "",
+      startedAt: s.liveAt ?? s.createdAt,
+      viewers: s.viewers,
+      captureCount: notes?.get(s.id)?.captureCount ?? 0,
+      lastSeenText: (lastTexts.get(s.id) ?? "").slice(0, 300),
+      watcher: watchers.get(s.id) ?? null,
+    }));
     res.json({ sessions: rows });
   } catch (err) { sendError(res, err); }
 });
