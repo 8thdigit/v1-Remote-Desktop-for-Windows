@@ -309,17 +309,30 @@ export function createBuddy(backend: BuddyBackend, options: { clock?: () => numb
   };
 
   const init = (async () => {
-    const loaded = await backend.load();
-    if (loaded?.settings) settings = mergeSettings(loaded.settings);
-    apiKey = typeof loaded?.apiKey === "string" ? loaded.apiKey : "";
-    if (Array.isArray(loaded?.sessions)) sessions.push(...loaded.sessions);
-    if (Array.isArray(loaded?.kb)) kb.push(...loaded.kb);
-    seeded = !!loaded?.seeded;
+    // A broken or unreachable store must never take the control room down:
+    // load failures are logged and the engine starts with empty state. The
+    // promise itself never rejects, so buddyReady() can't cache a failure.
+    let loaded: Data | undefined;
+    try {
+      loaded = await backend.load();
+    } catch (err) {
+      console.warn("AI Buddy: could not load session records, starting empty", err);
+      return;
+    }
+    try {
+      if (loaded?.settings) settings = mergeSettings(loaded.settings);
+      apiKey = typeof loaded?.apiKey === "string" ? loaded.apiKey : "";
+      if (Array.isArray(loaded?.sessions)) sessions.push(...loaded.sessions);
+      if (Array.isArray(loaded?.kb)) kb.push(...loaded.kb);
+      seeded = !!loaded?.seeded;
+    } catch (err) {
+      console.warn("AI Buddy: session records are malformed, starting empty", err);
+    }
     if (!seeded) {
       const now = clock();
       for (const e of STARTER_KB) kb.push({ ...e, id: newId(), source: "builtin", createdBy: "", createdAt: now, updatedAt: now, uses: 0 });
       seeded = true;
-      await persistNow();
+      await persistNow().catch(() => {});
     }
   })();
 
