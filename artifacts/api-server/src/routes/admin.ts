@@ -555,6 +555,18 @@ router.delete("/buddy/watchers/:id", async (req, res) => {
   } catch (err) { sendError(res, err); }
 });
 
+// Admin override: jump straight into exam capturing even when the heuristics
+// never saw an exam start (e.g., a flashing question pager with sparse OCR).
+router.post("/buddy/watchers/:id/force-exam", async (req, res) => {
+  try {
+    const engine = await watcherReady();
+    await engine.forceExam(req.params.id);
+    invalidateEnrichCache("watcher-states");
+    activity.add("inspect-buddy", `${req.account!.displayName} started exam capture manually`, req.account!.username);
+    res.json(watcherView(engine.watch(req.params.id), (n) => `/api/admin/buddy/img/${encodeURIComponent(n)}`));
+  } catch (err) { sendError(res, err); }
+});
+
 // Accept or correct one recommended answer. Body for "correct": { answer }.
 router.post("/buddy/watchers/:id/questions/:n/accept", async (req, res) => {
   try {

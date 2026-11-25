@@ -58,6 +58,8 @@ export type WatcherWatch = {
   updatedAt: number;
   // titles of the documents stored in the repo when this watch completed
   storedDocs?: string[];
+  // throttle for per-screen AI exam detection (in-memory, not persisted)
+  lastDetect?: number;
 };
 
 export type RepoDoc = {
@@ -180,22 +182,65 @@ export function cleanScreenText(v: unknown) {
     .slice(0, MAX_TEXT);
 }
 
-// Exam-start signals on screen.
-const EXAM_START = new RegExp([
-  "\\bexam\\b", "\\bfinal exam\\b", "\\bmidterm\\b", "\\bquiz\\b", "\\bassessment\\b",
-  "start (the )?exam", "begin (the )?exam", "time remaining", "time left", "countdown",
-  "question \\d+", "q\\.?\\s*\\d+", "multiple choice", "select the correct",
-  "total marks", "maximum marks", "marks:\\s*\\d", "attempt (all|any) questions",
-  "proctor", "timed test", "test instructions", "submission (is|will) (be|auto)",
-].join("|"), "i");
+// Exam-start signals on screen. Each pattern carries a weight so a single
+// strong signal (an explicit "start exam" button, a countdown timer, an
+// "attempt all questions" instruction line) is enough to enter the exam phase —
+// previously two simultaneous keyword hits were required, which meant a real
+// exam pager could stay stuck in "watching" forever.
+const EXAM_START: { re: RegExp; w: number }[] = [
+  { re: /\b(final exam|midterm|mock test|online test)\b/i, w: 3 },
+  { re: /\b(exam|quiz|assessment)\b/i, w: 2 },
+  { re: /\b(start|begin|resume|enter) (the )?exam\b/i, w: 3 },
+  { re: /\btime (remaining|left)\b/i, w: 3 },
+  { re: /\b(countdown|timer)\b/i, w: 2 },
+  { re: /\b(attempt (all|any)|sections? and questions)\b/i, w: 2 },
+  { re: /\b(total|maximum|passing) marks?\b/i, w: 2 },
+  { re: /\bmarks:\s*\d/i, w: 2 },
+  { re: /\b(proctor(ed)?|anticheat|full screen mode)\b/i, w: 2 },
+  { re: /\b(test|exam) instructions?\b/i, w: 2 },
+  { re: /\bsubmission (is|will) (be|auto)/i, w: 2 },
+  { re: /\bmultiple[- ]choice\b/i, w: 1 },
+  { re: /\b(select|choose) the (correct|best)\b/i, w: 1 },
+];
 
-const QUESTION_NUM = /^\s*(?:q(?:uestion)?\.?\s*)?(\d{1,3})[\).:\s]/i;
+// A question-shaped line: leading number or Q-number, ending with "?" or a
+// colon, or carrying MCQ-style options right after it.
+const QUESTION_NUM = /^\s*(?:q(?:uestion)?\.?\s*)?(\d{1,3})[).:\s]/i;
 const OPTION_LINE = /^\s*\(?([a-dA-D])[\).]\s+(.{2,})$/;
 
-export function detectExamStart(text: string) {
+export function questionShape(text: string) {
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  let shaped = false;
+  let opts = 0;
+  for (const l of lines) {
+    if (OPTION_LINE.test(l)) { opts++; continue; }
+    if (QUESTION_NUM.test(l) && (l.includes("?") || lines.some((o) => OPTION_LINE.test(o)))) shaped = true;
+    else if (/\?\s*$/.test(l) && l.length >= 20) shaped = true;
+  }
+  return shaped || opts >= 2;
+}
+
+// Weighted exam-start score over one screen capture. Returns the hit lines
+// (for display) and whether the total weight crosses the start threshold.
+export function detectExamStart2(text: string): { hits: string[]; score: number; exam: boolean } {
   const hits: string[] = [];
-  for (const l of text.split("\n")) if (EXAM_START.test(l) && hits.length < 6) { const h = l.slice(0, 160); if (!hits.includes(h)) hits.push(h); }
-  return hits;
+  let score = 0;
+  for (const l of text.split("\n")) {
+    for (const { re, w } of EXAM_START) {
+      if (re.test(l)) {
+        score += w;
+        const h = l.slice(0, 160);
+        if (!hits.includes(h) && hits.length < 6) hits.push(h);
+        break; // one signal per line is enough
+      }
+    }
+  }
+  return { hits, score, exam: score >= 3 || (score >= 2 && questionShape(text)) };
+}
+
+// Back-compatible wrapper used by older callers/tests.
+export function detectExamStart(text: string) {
+  return detectExamStart2(text).hits;
 }
 
 // Parse a question block: leading number, body, A–D options.
@@ -342,7 +387,11 @@ export function createWatcherEngine(backend: WatcherBackend, options: { clock?: 
   })();
 
   const key = () => apiKey || envKey() || "";
-  const aiReady = () => settings.enabled && settings.ai && !!key();
+  // An OpenAI-compatible gateway (WATCHER_LLM_URL + WATCHER_LLM_KEY) counts
+  // as an AI provider too, so the engine stays fully AI-guided without a
+  // direct Anthropic key.
+  const llmEnv = () => !!(process.env["WATCHER_LLM_URL"] && process.env["WATCHER_LLM_KEY"]);
+  const aiReady = () => settings.enabled && settings.ai && (!!key() || llmEnv());
   let client: { key: string; client: Anthropic } | undefined;
   const anthropic = () => {
     const k = key();
@@ -351,7 +400,30 @@ export function createWatcherEngine(backend: WatcherBackend, options: { clock?: 
     return client.client;
   };
 
+  // Optional OpenAI-compatible fallback provider (any gateway): set
+  // WATCHER_LLM_URL + WATCHER_LLM_KEY on the relay to use it when no
+  // Anthropic key is configured — keeps the engine fully AI-guided.
+  async function askOpenCompatible(system: string, user: string, maxTokens: number) {
+    const url = process.env["WATCHER_LLM_URL"];
+    const k = process.env["WATCHER_LLM_KEY"];
+    if (!url || !k) throw new WatcherError(400, "No AI provider configured.");
+    const res = await fetch(url.replace(/\/$/, "") + "/chat/completions", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${k}` },
+      body: JSON.stringify({
+        model: settings.model && !settings.model.startsWith("claude-") ? settings.model : "gpt-4o-mini",
+        max_tokens: maxTokens, temperature: 0.2,
+        messages: [{ role: "system", content: system }, { role: "user", content: user }],
+      }),
+      signal: AbortSignal.timeout(45_000),
+    });
+    if (!res.ok) throw new WatcherError(502, `LLM provider responded ${res.status}`);
+    const j = await res.json() as { choices?: { message?: { content?: string } }[] };
+    return String(j.choices?.[0]?.message?.content ?? "").trim();
+  }
+
   async function ask(system: string, user: string, maxTokens: number) {
+    if (!key()) return askOpenCompatible(system, user, maxTokens);
     const response = await anthropic().beta.messages.create({
       model: settings.model || DEFAULT_MODEL,
       max_tokens: maxTokens,
@@ -487,7 +559,7 @@ export function createWatcherEngine(backend: WatcherBackend, options: { clock?: 
     // A session ended: mark its watcher completed and store the documents.
     async endSession(sessionId: string) { await api.complete(sessionId, "session ended"); },
     // --- Settings ---
-    settings() { return { ...settings, apiKeySet: !!apiKey, envKeySet: !!envKey(), aiReady: aiReady() }; },
+    settings() { return { ...settings, apiKeySet: !!apiKey || llmEnv(), envKeySet: !!envKey() || llmEnv(), aiReady: aiReady() }; },
     async updateSettings(input: unknown) {
       const body = (input ?? {}) as Record<string, unknown>;
       const next = mergeSettings({ ...settings, ...pick(body, ["enabled", "ai", "webSearch", "model", "maxQuestions"]) });
@@ -560,19 +632,30 @@ export function createWatcherEngine(backend: WatcherBackend, options: { clock?: 
         try { await backend.saveImage(imageName, image); } catch { imageName = undefined; }
       }
 
-      const signals = detectExamStart(text);
+      const det = detectExamStart2(text);
+      const signals = det.hits;
       if (w.phase === "watching" || w.phase === "idle") {
-        let exam = signals.length >= 2;
+        // Heuristic first: a strong weighted signal (or a medium signal plus
+        // an actual question shape on screen) starts the capture immediately.
+        let exam = det.exam;
         let title = "";
-        if (!exam && aiReady() && signals.length) {
-          try {
-            const j = extractJson(await ask(DETECT_SYSTEM, `<screen>\n${text.slice(0, 2500)}\n</screen>`, 200));
-            if (j) { exam = !!j.exam; title = line(j.title, 120); }
-          } catch { /* keep heuristic */ }
+        // AI decides whenever the heuristic is inconclusive — not only when it
+        // found some keywords. This is what keeps a flashing exam pager from
+        // being stuck in "watching": Claude classifies every settled screen
+        // while no exam has been detected yet (throttled per session).
+        if (!exam && aiReady() && (signals.length > 0 || questionShape(text))) {
+          // Throttle: at most one detection call per session every 6 s.
+          if (now - (w.lastDetect ?? 0) >= 6000) {
+            w.lastDetect = now;
+            try {
+              const j = extractJson(await ask(DETECT_SYSTEM, `<screen>\n${text.slice(0, 2500)}\n</screen>`, 200));
+              if (j) { exam = !!j.exam; title = line(j.title, 120); }
+            } catch { /* keep heuristic */ }
+          }
         }
         if (exam) {
           w.phase = "in-exam";
-          w.examTitle = title || signals[0].slice(0, 100);
+          w.examTitle = title || signals[0]?.slice(0, 100) || "Exam on screen";
         }
       }
 
@@ -580,7 +663,22 @@ export function createWatcherEngine(backend: WatcherBackend, options: { clock?: 
       if (w.phase === "in-exam") {
         const pq = parseQuestion(text);
         const body = (pq.stem || text).slice(0, MAX_TEXT);
-        const isNew = body !== w.lastSeen && !w.questions.some((q) => q.text === body);
+        // Sliding-window duplicate detection: OCR of the same question across
+        // frames differs by words (scroll position, partial reads), so exact
+        // equality missed re-captures, while comparing against ALL questions
+        // would drop genuinely repeated stems late in an exam. Compare with
+        // similarity against the last few captures instead.
+        const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+        const sim = (a: string, b: string) => {
+          const A = new Set(norm(a).split(" "));
+          const B = norm(b).split(" ");
+          if (!A.size || !B.length) return 0;
+          let shared = 0;
+          for (const t of B) if (A.has(t)) shared++;
+          return shared / Math.max(A.size, B.length);
+        };
+        const recent = w.questions.slice(-4);
+        const isNew = !recent.some((q) => sim(q.text, body) >= 0.85) && sim(w.lastSeen, body) < 0.85;
         if (isNew && (body.length >= 12 || pq.num !== null)) {
           w.lastSeen = body;
           if (w.questions.length < Math.min(MAX_QUESTIONS, settings.maxQuestions)) {
@@ -605,6 +703,21 @@ export function createWatcherEngine(backend: WatcherBackend, options: { clock?: 
         void researchOne(w, q).then(() => persistSoon()).catch(() => { q.status = "pending"; });
       }
       return { watching: true, phase: w.phase, examTitle: w.examTitle, newQuestion: added?.n, issues: signals.slice(0, 3) };
+    },
+
+    // Admin override: start capturing now even if no exam signal was seen
+    // (e.g., an exam pager whose OCR text never matches the heuristics).
+    async forceExam(sessionId: string) {
+      const w = find(sessionId);
+      if (!w) throw new WatcherError(404, "No question watcher for that session.");
+      if (!w.enabled) throw new WatcherError(409, "Enable the Question Watcher first.");
+      if (w.phase === "completed") throw new WatcherError(409, "This watch is already completed.");
+      w.phase = "in-exam";
+      if (!w.examTitle) w.examTitle = "Exam (started manually)";
+      w.lastSeen = "";
+      w.updatedAt = clock();
+      await persistNow();
+      return { ...w, questions: undefined };
     },
 
     // Admin accepts or corrects a recommended answer.

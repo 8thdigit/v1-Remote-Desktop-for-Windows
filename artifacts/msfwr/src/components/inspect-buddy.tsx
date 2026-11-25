@@ -358,9 +358,19 @@ function WatcherDetail({ sessionId, onClose, onError }: { sessionId: string; onC
   const data = w.data;
   const questions = [...(data?.questions ?? [])].sort((a, b) => a.index - b.index);
 
+  async function forceExam() {
+    setBusy(-1); setMsg(null);
+    try {
+      await send(`/buddy/watchers/${encodeURIComponent(sessionId)}/force-exam`, 'POST');
+      setMsg('Capturing started — every new screen is now read as a question.');
+      await qc.invalidateQueries({ queryKey: ['buddy-watcher', sessionId] });
+      await qc.invalidateQueries({ queryKey: ['buddy-sessions'] });
+    } catch (e) { onError(errorText(e, 'Could not start the capture.')); } finally { setBusy(null); }
+  }
+
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-h-[92dvh] max-w-3xl overflow-y-auto">
+      <DialogContent className="max-h-[92dvh] max-w-5xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><Camera className="h-4.5 w-4.5 text-primary" /> Question Watcher</DialogTitle>
           <DialogDescription>
@@ -377,44 +387,65 @@ function WatcherDetail({ sessionId, onClose, onError }: { sessionId: string; onC
             {data.error && <p className="rounded-xl bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-700">{data.error}</p>}
 
             {data.questions.length === 0 ? (
-              <p className="py-4 text-center text-sm text-muted-foreground">
-                {data.status === 'watching' ? 'Watching the screen… waiting for an exam to start.' : 'No question captured yet.'}
-              </p>
+              <div className="py-4 text-center">
+                <p className="text-sm text-muted-foreground">
+                  {data.status === 'watching' ? 'Watching the screen… waiting for an exam to start.' : 'No question captured yet.'}
+                </p>
+                {data.status === 'watching' && (
+                  <>
+                    <p className="mx-auto mt-1 max-w-md text-xs text-muted-foreground">
+                      The AI engine classifies every settled screen and starts capturing automatically when it recognises an exam.
+                      If the exam pager is already on screen, you can start the capture right now.
+                    </p>
+                    <button type="button" disabled={busy === -1} onClick={() => void forceExam()} data-testid="button-force-exam"
+                      className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2 text-xs font-semibold text-white hover:bg-violet-700 disabled:opacity-50">
+                      {busy === -1 ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} Exam is on screen — start capturing now
+                    </button>
+                  </>
+                )}
+              </div>
             ) : (
-              <ol className="space-y-3">
+              // Split view: captured question on the left, AI analysis + answer on the right.
+              <ol className="grid gap-3 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
                 {questions.map((x) => (
-                  <li key={x.index} className="rounded-xl border border-foreground/12 bg-background/60 p-3" data-testid={`question-${x.index}`}>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full bg-foreground/8 px-2 py-0.5 text-[11px] font-bold">Q{x.index}</span>
-                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${QSTATE_META[x.state].cls}`}>{QSTATE_META[x.state].label}</span>
-                      <span className="text-[11px] text-muted-foreground">{timeOnly(x.at)}</span>
-                      {x.screenshotUrl && <a href={x.screenshotUrl} target="_blank" rel="noreferrer" className="ml-auto inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"><Camera className="h-3 w-3" /> Screenshot</a>}
+                  <li key={x.index} className="contents" data-testid={`question-${x.index}`}>
+                    {/* Left pane: the question */}
+                    <div className="rounded-xl border border-foreground/12 bg-background/60 p-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full bg-foreground/8 px-2 py-0.5 text-[11px] font-bold">Q{x.index}</span>
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${QSTATE_META[x.state].cls}`}>{QSTATE_META[x.state].label}</span>
+                        <span className="text-[11px] text-muted-foreground">{timeOnly(x.at)}</span>
+                        {x.screenshotUrl && <a href={x.screenshotUrl} target="_blank" rel="noreferrer" className="ml-auto inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"><Camera className="h-3 w-3" /> Screenshot</a>}
+                      </div>
+                      <p className="mt-2 whitespace-pre-wrap text-sm font-medium">{x.text}</p>
                     </div>
-                    <p className="mt-2 whitespace-pre-wrap text-sm font-medium">{x.text}</p>
+                    {/* Right pane: AI analysis and answer */}
+                    <div className="rounded-xl border border-foreground/12 bg-card p-3">
+                      {(x.state === 'recommended' || x.state === 'accepted' || x.state === 'corrected') && (
+                        <>
+                          <p className="flex flex-wrap items-center gap-2">
+                            <Sparkles className="h-3.5 w-3.5 text-primary" />
+                            <span className="font-bold">{x.state === 'corrected' ? x.correctedAnswer : x.answer}</span>
+                            <span className="ml-auto text-[11px] font-semibold text-muted-foreground">{SOURCE_LABEL[x.source]} · {Math.round(x.confidence * 100)}%</span>
+                          </p>
+                          {x.explanation && <p className="mt-1 text-xs text-muted-foreground">{x.explanation}</p>}
+                          {x.sources.length > 0 && <p className="mt-1 text-[11px] text-muted-foreground">Sources: {x.sources.join(' · ')}</p>}
+                        </>
+                      )}
+                      {x.state === 'researching' && <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Searching the repository, then online…</p>}
+                      {x.state === 'pending' && <p className="text-xs text-muted-foreground">Waiting for research…</p>}
 
-                    {(x.state === 'recommended' || x.state === 'accepted' || x.state === 'corrected') && (
-                      <div className="mt-2 rounded-lg border border-foreground/10 bg-card px-3 py-2 text-sm">
-                        <p className="flex flex-wrap items-center gap-2">
-                          <Sparkles className="h-3.5 w-3.5 text-primary" />
-                          <span className="font-bold">{x.state === 'corrected' ? x.correctedAnswer : x.answer}</span>
-                          <span className="ml-auto text-[11px] font-semibold text-muted-foreground">{SOURCE_LABEL[x.source]} · {Math.round(x.confidence * 100)}%</span>
-                        </p>
-                        {x.explanation && <p className="mt-1 text-xs text-muted-foreground">{x.explanation}</p>}
-                        {x.sources.length > 0 && <p className="mt-1 text-[11px] text-muted-foreground">Sources: {x.sources.join(' · ')}</p>}
-                      </div>
-                    )}
-
-                    {x.state === 'recommended' && (
-                      <div className="mt-2 flex gap-2">
-                        <button type="button" disabled={busy === x.index} data-testid={`button-accept-${x.index}`}
-                          onClick={() => void decide(x.index, 'accept')}
-                          className="rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">Accept answer</button>
-                        <button type="button" disabled={busy === x.index} data-testid={`button-correct-${x.index}`}
-                          onClick={() => setCorrecting(x)}
-                          className="inline-flex items-center gap-1 rounded-xl border border-foreground/15 px-3 py-1.5 text-xs font-semibold hover:bg-muted disabled:opacity-50"><X className="h-3 w-3" /> Correct it</button>
-                      </div>
-                    )}
-                    {x.state === 'researching' && <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Searching the repository, then online…</p>}
+                      {x.state === 'recommended' && (
+                        <div className="mt-2 flex gap-2">
+                          <button type="button" disabled={busy === x.index} data-testid={`button-accept-${x.index}`}
+                            onClick={() => void decide(x.index, 'accept')}
+                            className="rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">Accept &amp; continue</button>
+                          <button type="button" disabled={busy === x.index} data-testid={`button-correct-${x.index}`}
+                            onClick={() => setCorrecting(x)}
+                            className="inline-flex items-center gap-1 rounded-xl border border-foreground/15 px-3 py-1.5 text-xs font-semibold hover:bg-muted disabled:opacity-50"><X className="h-3 w-3" /> Correct it</button>
+                        </div>
+                      )}
+                    </div>
                   </li>
                 ))}
               </ol>
