@@ -1,1 +1,0 @@
-{"version":3,"file":"msfwrTick.d.ts","sourceRoot":"","sources":["../../../src/generated/types/msfwrTick.ts"],"names":[],"mappings":"AAAA;;;;;;GAMG;AACH,OAAO,KAAK,EAAE,UAAU,EAAE,MAAM,cAAc,CAAC;AAC/C,OAAO,KAAK,EAAE,cAAc,EAAE,MAAM,kBAAkB,CAAC;AAEvD,MAAM,WAAW,SAAS;IACxB,KAAK,EAAE,cAAc,CAAC;IACtB,YAAY,CAAC,EAAE,MAAM,CAAC;IACtB,KAAK,EAAE,UAAU,EAAE,CAAC;CACrB"}

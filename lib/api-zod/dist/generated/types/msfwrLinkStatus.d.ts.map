@@ -1,1 +1,0 @@
-{"version":3,"file":"msfwrLinkStatus.d.ts","sourceRoot":"","sources":["../../../src/generated/types/msfwrLinkStatus.ts"],"names":[],"mappings":"AAAA;;;;;;GAMG;AACH,OAAO,KAAK,EAAE,SAAS,EAAE,MAAM,aAAa,CAAC;AAE7C,MAAM,WAAW,eAAe;IAC9B,IAAI,EAAE,SAAS,CAAC;IAChB,MAAM,EAAE,OAAO,CAAC;IAChB,IAAI,EAAE,OAAO,CAAC;IACd,iBAAiB;IACjB,OAAO,CAAC,EAAE,MAAM,CAAC;CAClB"}
