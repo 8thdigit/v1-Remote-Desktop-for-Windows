@@ -101,7 +101,7 @@ export function InspectBuddyPanel({ onError }: { onError: (msg: string | null) =
   const watchers = useQuery({
     queryKey: ['buddy-watchers'],
     queryFn: async () => {
-      const sessions = list.data?.sessions ?? await api<{ sessions: WatcherSession[] }>('/buddy/sessions').then((r) => r.sessions);
+      const sessions = list.data?.sessions ?? (await api<{ sessions: WatcherSession[] }>('/buddy/sessions')).sessions ?? [];
       const states = await Promise.all(sessions.map((s) =>
         api<WatcherView>(`/buddy/watchers/${encodeURIComponent(s.sessionId)}`).catch(() => null)));
       const map: Record<string, WatcherView | null> = {};

@@ -74,7 +74,7 @@ router.post("/capture", async (req, res) => {
     // response never waits on watcher work; the engine ignores sessions whose
     // watcher is off or whose master switch is disabled.
     void watcherReady()
-      .then((w) => w.getSettings().enabled && w.capture(s.id, meta(s), textOf(req), imageOf(req)))
+      .then(async (w) => { if (w.getSettings().enabled) await w.capture(s.id, meta(s), textOf(req), imageOf(req)); })
       .catch(() => {});
     res.json(buddy.capture(meta(s), textOf(req)));
   } catch (err) { sendError(res, err); }

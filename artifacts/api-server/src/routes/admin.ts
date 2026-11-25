@@ -488,7 +488,9 @@ router.post("/buddy/watchers/:id/questions/:n/correct", async (req, res) => {
     const engine = await watcherReady();
     const q = await engine.review(req.params.id, n, {
       action: "correct",
-      answer: (req.body as { answer?: unknown } | undefined)?.answer,
+      answer: typeof (req.body as { answer?: unknown } | undefined)?.answer === "string"
+        ? (req.body as { answer: string }).answer
+        : undefined,
       by: req.account!.displayName,
     });
     res.json(reviewView(q, imageUrlFor));
