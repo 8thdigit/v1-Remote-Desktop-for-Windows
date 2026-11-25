@@ -361,8 +361,10 @@ router.delete("/buddy/kb/:id", async (req, res) => {
 // One watcher state per session id, from the engine's own records. An engine
 // failure here must never blank the control room — every row just shows its
 // watcher as off instead.
-async function watcherStates(): Promise<Map<string, WatcherView>> {
-  const map = new Map<string, WatcherView>();
+type WatcherRow = NonNullable<ReturnType<typeof watcherView>>;
+
+async function watcherStates(): Promise<Map<string, WatcherRow>> {
+  const map = new Map<string, WatcherRow>();
   try {
     const engine = await watcherReady();
     for (const w of engine.list()) {

@@ -74426,6 +74426,11 @@ ${q.options.map((o) => `- ${o}`).join("\n")}` : ""}`)
       return api.settings();
     },
     // --- Control room: watches per live session ---
+    // Full clone of every watch record (used by the control-room route to
+    // attach watcher state to each ongoing session row).
+    list() {
+      return structuredClone(watches);
+    },
     listWatches() {
       return watches.map((w) => ({
         ...w,
@@ -75031,15 +75036,15 @@ function siteReady() {
 function subBlockMessage(reason) {
   switch (reason) {
     case "expired":
-      return "This company's WINRSS.net subscription has expired. Contact your provider to renew it.";
+      return "This company's Connect.AI subscription has expired. Contact your provider to renew it.";
     case "suspended":
-      return "This company's WINRSS.net subscription is suspended. Contact your provider.";
+      return "This company's Connect.AI subscription is suspended. Contact your provider.";
     case "quota":
       return "This company has reached its usage limit (remote access URLs and extra sessions) for the current billing period. Ask your provider to renew or extend it.";
     case "license":
       return "This client's license is missing, invalid or revoked. Reconfigure it from the admin console.";
     default:
-      return "This company's WINRSS.net subscription is not active.";
+      return "This company's Connect.AI subscription is not active.";
   }
 }
 async function gateForRa(raId, license) {
@@ -76381,29 +76386,46 @@ router4.delete("/buddy/kb/:id", async (req, res) => {
     sendError(res, err);
   }
 });
+async function watcherStates() {
+  const map = /* @__PURE__ */ new Map();
+  try {
+    const engine = await watcherReady();
+    for (const w of engine.list()) {
+      const v = watcherView(w, (n) => `/api/admin/buddy/img/${encodeURIComponent(n)}`);
+      if (v) map.set(w.sessionId, v);
+    }
+  } catch (err) {
+    console.warn("Inspect Buddy: watcher states unavailable", err);
+  }
+  return map;
+}
 router4.get("/buddy/sessions", async (_req, res) => {
   try {
     let accounts;
-    let buddy;
+    let notes;
     try {
       accounts = await accountsReady();
     } catch (err) {
       console.warn("Inspect Buddy: account directory unavailable", err);
     }
+    let buddyFull;
     try {
-      buddy = await buddyReady();
+      const buddy = await buddyReady();
+      notes = buddy.sessionsIndex();
+      buddyFull = (id) => buddy.session(id);
     } catch (err) {
       console.warn("Inspect Buddy: AI Buddy records unavailable", err);
     }
-    const notes = buddy?.sessionsIndex();
+    const watchers = await watcherStates();
     const byRa = new Map((accounts?.list() ?? []).map((u) => [u.raId, u.displayName]));
     const rows = store.overview().live.filter((s) => s.state === "live").map((s) => {
       const b = notes?.get(s.id);
       let lastText = "";
-      if (b && buddy) {
+      if (b?.captureCount) {
         try {
-          const full = buddy.session(s.id);
-          if (full && Array.isArray(full.captures) && full.captures.length) lastText = String(full.captures.at(-1)?.text ?? "");
+          const full = buddyFull?.(s.id);
+          const caps = full && Array.isArray(full.captures) ? full.captures : [];
+          lastText = String(caps[caps.length - 1]?.text ?? "");
         } catch {
         }
       }
@@ -76416,7 +76438,8 @@ router4.get("/buddy/sessions", async (_req, res) => {
         startedAt: s.liveAt ?? s.createdAt,
         viewers: s.viewers,
         captureCount: b?.captureCount ?? 0,
-        lastSeenText: lastText.slice(0, 300)
+        lastSeenText: lastText.slice(0, 300),
+        watcher: watchers.get(s.id) ?? null
       };
     });
     res.json({ sessions: rows });
