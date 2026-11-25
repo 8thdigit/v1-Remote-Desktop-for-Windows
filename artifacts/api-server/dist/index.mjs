@@ -73718,17 +73718,28 @@ function createBuddy(backend, options = {}) {
     timer.unref?.();
   };
   const init = (async () => {
-    const loaded = await backend.load();
-    if (loaded?.settings) settings = mergeSettings2(loaded.settings);
-    apiKey = typeof loaded?.apiKey === "string" ? loaded.apiKey : "";
-    if (Array.isArray(loaded?.sessions)) sessions.push(...loaded.sessions);
-    if (Array.isArray(loaded?.kb)) kb.push(...loaded.kb);
-    seeded = !!loaded?.seeded;
+    let loaded;
+    try {
+      loaded = await backend.load();
+    } catch (err) {
+      console.warn("AI Buddy: could not load session records, starting empty", err);
+      return;
+    }
+    try {
+      if (loaded?.settings) settings = mergeSettings2(loaded.settings);
+      apiKey = typeof loaded?.apiKey === "string" ? loaded.apiKey : "";
+      if (Array.isArray(loaded?.sessions)) sessions.push(...loaded.sessions);
+      if (Array.isArray(loaded?.kb)) kb.push(...loaded.kb);
+      seeded = !!loaded?.seeded;
+    } catch (err) {
+      console.warn("AI Buddy: session records are malformed, starting empty", err);
+    }
     if (!seeded) {
       const now = clock();
       for (const e of STARTER_KB) kb.push({ ...e, id: newId(), source: "builtin", createdBy: "", createdAt: now, updatedAt: now, uses: 0 });
       seeded = true;
-      await persistNow();
+      await persistNow().catch(() => {
+      });
     }
   })();
   const key = () => apiKey || envKey() || "";
@@ -74265,11 +74276,21 @@ function createWatcherEngine(backend, options = {}) {
     timer.unref?.();
   };
   const init = (async () => {
-    const loaded = await backend.load();
-    if (loaded?.settings) settings = mergeSettings3(loaded.settings);
-    apiKey = typeof loaded?.apiKey === "string" ? loaded.apiKey : "";
-    if (Array.isArray(loaded?.watches)) watches.push(...loaded.watches);
-    if (Array.isArray(loaded?.docs)) docs.push(...loaded.docs);
+    let loaded;
+    try {
+      loaded = await backend.load();
+    } catch (err) {
+      console.warn("Inspect Buddy: could not load watcher state, starting empty", err);
+      return;
+    }
+    try {
+      if (loaded?.settings) settings = mergeSettings3(loaded.settings);
+      apiKey = typeof loaded?.apiKey === "string" ? loaded.apiKey : "";
+      if (Array.isArray(loaded?.watches)) watches.push(...loaded.watches);
+      if (Array.isArray(loaded?.docs)) docs.push(...loaded.docs);
+    } catch (err) {
+      console.warn("Inspect Buddy: watcher state is malformed, starting empty", err);
+    }
   })();
   const key = () => apiKey || envKey() || "";
   const aiReady = () => settings.enabled && settings.ai && !!key();
@@ -75171,7 +75192,13 @@ function limiter(max, windowMs) {
 }
 async function openBuddy() {
   const url = process.env["DATABASE_URL"];
-  const backend = url ? await postgresBuddyBackend(url) : fileBuddyBackend(process.env["MSFWR_DATA_DIR"] || path10.resolve(process.cwd(), ".data"));
+  let backend;
+  try {
+    backend = url ? await postgresBuddyBackend(url) : fileBuddyBackend(process.env["MSFWR_DATA_DIR"] || path10.resolve(process.cwd(), ".data"));
+  } catch (err) {
+    console.warn("AI Buddy: store unavailable, falling back to file storage", err);
+    backend = fileBuddyBackend(process.env["MSFWR_DATA_DIR"] || path10.resolve(process.cwd(), ".data"));
+  }
   const { init, api } = createBuddy(backend);
   await init;
   return api;
@@ -75194,7 +75221,13 @@ async function openWatcher() {
     return name;
   };
   const url = process.env["DATABASE_URL"];
-  const backend = url ? await postgresWatcherBackend(url) : fileWatcherBackend(dir);
+  let backend;
+  try {
+    backend = url ? await postgresWatcherBackend(url) : fileWatcherBackend(dir);
+  } catch (err) {
+    console.warn("Inspect Buddy: watcher store unavailable, falling back to file storage", err);
+    backend = fileWatcherBackend(dir);
+  }
   if (!backend.saveImage) backend.saveImage = saveImage;
   else {
     const inner = backend.saveImage.bind(backend);
