@@ -39,10 +39,18 @@ export type WatcherQuestion = {
 
 export type WatcherStatus = 'off' | 'watching' | 'exam-detected' | 'completed';
 
+// One settled screenshot forwarded by the AI Buddy panel (left pane of the
+// watcher detail). questionIndex is set once it has been analysed into a
+// numbered question (or merged into an existing one — duplicates are
+// prevented server-side by text similarity).
+export type WatcherShot = {
+  id: string; at: number; imageUrl: string | null; text: string; questionIndex: number | null;
+};
+
 export type WatcherView = {
   sessionId: string; enabled: boolean; status: WatcherStatus; startedAt: number | null;
   completedAt: number | null; questions: WatcherQuestion[]; documentsStored: string[]; error: string | null;
-  lastSeenText?: string;
+  lastSeenText?: string; shots?: WatcherShot[]; examTitle?: string; notes?: string;
 };
 
 export type RepoDoc = {
@@ -342,6 +350,8 @@ function WatcherDetail({ sessionId, onClose, onError }: { sessionId: string; onC
     refetchInterval: 4_000,
   });
   const [busy, setBusy] = useState<number | null>(null);
+  const [busyShot, setBusyShot] = useState<string | null>(null);
+  const [selectedShot, setSelectedShot] = useState<string | null>(null);
   const [correcting, setCorrecting] = useState<WatcherQuestion | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -357,6 +367,9 @@ function WatcherDetail({ sessionId, onClose, onError }: { sessionId: string; onC
 
   const data = w.data;
   const questions = [...(data?.questions ?? [])].sort((a, b) => a.index - b.index);
+  // Newest screenshot first in the left strip: while no exam is detected yet
+  // this is exactly what the operator wants to see — the live screen flow.
+  const shots = [...(data?.shots ?? [])].sort((a, b) => b.at - a.at);
 
   async function forceExam() {
     setBusy(-1); setMsg(null);
@@ -368,9 +381,22 @@ function WatcherDetail({ sessionId, onClose, onError }: { sessionId: string; onC
     } catch (e) { onError(errorText(e, 'Could not start the capture.')); } finally { setBusy(null); }
   }
 
+  // Analyse one screenshot right now: it becomes (or merges into) a numbered
+  // question and AI research for the answer starts immediately.
+  async function analyseShot(shotId: string) {
+    setBusyShot(shotId); setMsg(null);
+    try {
+      const q = await send<{ index?: number }>(`/buddy/watchers/${encodeURIComponent(sessionId)}/shots/${encodeURIComponent(shotId)}/analyse`, 'POST');
+      setMsg(q?.index ? `Screen analysed — question Q${q.index} is being researched.` : 'Screen analysed.');
+      await qc.invalidateQueries({ queryKey: ['buddy-watcher', sessionId] });
+      await qc.invalidateQueries({ queryKey: ['buddy-sessions'] });
+    } catch (e) { onError(errorText(e, 'Could not analyse that screenshot.')); } finally { setBusyShot(null); }
+  }
+
+
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-h-[92dvh] max-w-5xl overflow-y-auto">
+      <DialogContent className="max-h-[92dvh] max-w-6xl overflow-y-auto" data-testid="dialog-watcher-detail">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><Camera className="h-4.5 w-4.5 text-primary" /> Question Watcher</DialogTitle>
           <DialogDescription>
@@ -386,70 +412,125 @@ function WatcherDetail({ sessionId, onClose, onError }: { sessionId: string; onC
           <div className="space-y-4">
             {data.error && <p className="rounded-xl bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-700">{data.error}</p>}
 
-            {data.questions.length === 0 ? (
-              <div className="py-4 text-center">
-                <p className="text-sm text-muted-foreground">
-                  {data.status === 'watching' ? 'Watching the screen… waiting for an exam to start.' : 'No question captured yet.'}
-                </p>
-                {data.status === 'watching' && (
-                  <>
-                    <p className="mx-auto mt-1 max-w-md text-xs text-muted-foreground">
-                      The AI engine classifies every settled screen and starts capturing automatically when it recognises an exam.
-                      If the exam pager is already on screen, you can start the capture right now.
-                    </p>
-                    <button type="button" disabled={busy === -1} onClick={() => void forceExam()} data-testid="button-force-exam"
-                      className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2 text-xs font-semibold text-white hover:bg-violet-700 disabled:opacity-50">
-                      {busy === -1 ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} Exam is on screen — start capturing now
-                    </button>
-                  </>
+            {/* Split view: screenshots under the session on the left,
+                numbered questions + AI analysis and answers on the right. */}
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,4fr)_minmax(0,8fr)]">
+              {/* --- Left pane: screenshot strip (newest first) --- */}
+              <section className="lg:max-h-[70dvh] lg:overflow-y-auto lg:pr-1" aria-label="Screenshots" data-testid="watcher-shots-pane">
+                <h3 className="sticky top-0 z-10 -mx-1 mb-2 bg-background/95 px-1 py-1 text-xs font-bold uppercase tracking-wide text-muted-foreground backdrop-blur">
+                  Screenshots ({shots.length})
+                </h3>
+                {shots.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-foreground/15 p-4 text-center text-xs text-muted-foreground">
+                    No screens have arrived from this session yet. The AI Buddy panel on the remote desktop sends a screenshot with every settled screen it reads.
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {shots.map((s, i) => (
+                      <li key={s.id} data-testid={`shot-${s.id}`}>
+                        <button type="button" onClick={() => setSelectedShot(selectedShot === s.id ? null : s.id)}
+                          className={`w-full rounded-xl border p-2 text-left transition-colors ${selectedShot === s.id ? 'border-primary bg-primary/5' : 'border-foreground/12 hover:bg-muted/40'}`}>
+                          <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                            <span className="font-bold text-foreground">#{shots.length - i}</span>
+                            <span>{timeOnly(s.at)}</span>
+                            {s.questionIndex != null && (
+                              <span className="ml-auto rounded-full bg-violet-500/15 px-2 py-0.5 font-semibold text-violet-700">Q{s.questionIndex}</span>
+                            )}
+                          </div>
+                          {s.imageUrl ? (
+                            <img src={s.imageUrl} alt={`Screen at ${timeOnly(s.at)}`} loading="lazy"
+                              className="mt-1.5 w-full rounded-lg border border-foreground/10 object-cover" />
+                          ) : (
+                            <p className="mt-1.5 line-clamp-3 rounded-lg bg-muted/50 p-2 text-[11px] whitespace-pre-wrap">{s.text || '(no readable text)'}</p>
+                          )}
+                          {selectedShot === s.id && (
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              {s.imageUrl && <a href={s.imageUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
+                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"><Camera className="h-3 w-3" /> Open full size</a>}
+                              <button type="button" disabled={busyShot === s.id || data.status === 'completed'} data-testid={`button-analyse-${s.id}`}
+                                onClick={(e) => { e.stopPropagation(); void analyseShot(s.id); }}
+                                className="ml-auto inline-flex items-center gap-1.5 rounded-xl bg-violet-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-violet-700 disabled:opacity-50">
+                                {busyShot === s.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                                {s.questionIndex != null ? 'Re-analyse' : 'Analyse question'}
+                              </button>
+                            </div>
+                          )}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
                 )}
-              </div>
-            ) : (
-              // Split view: captured question on the left, AI analysis + answer on the right.
-              <ol className="grid gap-3 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
-                {questions.map((x) => (
-                  <li key={x.index} className="contents" data-testid={`question-${x.index}`}>
-                    {/* Left pane: the question */}
-                    <div className="rounded-xl border border-foreground/12 bg-background/60 p-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded-full bg-foreground/8 px-2 py-0.5 text-[11px] font-bold">Q{x.index}</span>
-                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${QSTATE_META[x.state].cls}`}>{QSTATE_META[x.state].label}</span>
-                        <span className="text-[11px] text-muted-foreground">{timeOnly(x.at)}</span>
-                        {x.screenshotUrl && <a href={x.screenshotUrl} target="_blank" rel="noreferrer" className="ml-auto inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"><Camera className="h-3 w-3" /> Screenshot</a>}
-                      </div>
-                      <p className="mt-2 whitespace-pre-wrap text-sm font-medium">{x.text}</p>
-                    </div>
-                    {/* Right pane: AI analysis and answer */}
-                    <div className="rounded-xl border border-foreground/12 bg-card p-3">
-                      {(x.state === 'recommended' || x.state === 'accepted' || x.state === 'corrected') && (
-                        <>
-                          <p className="flex flex-wrap items-center gap-2">
-                            <Sparkles className="h-3.5 w-3.5 text-primary" />
-                            <span className="font-bold">{x.state === 'corrected' ? x.correctedAnswer : x.answer}</span>
-                            <span className="ml-auto text-[11px] font-semibold text-muted-foreground">{SOURCE_LABEL[x.source]} · {Math.round(x.confidence * 100)}%</span>
-                          </p>
-                          {x.explanation && <p className="mt-1 text-xs text-muted-foreground">{x.explanation}</p>}
-                          {x.sources.length > 0 && <p className="mt-1 text-[11px] text-muted-foreground">Sources: {x.sources.join(' · ')}</p>}
-                        </>
-                      )}
-                      {x.state === 'researching' && <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Searching the repository, then online…</p>}
-                      {x.state === 'pending' && <p className="text-xs text-muted-foreground">Waiting for research…</p>}
+              </section>
 
-                      {x.state === 'recommended' && (
-                        <div className="mt-2 flex gap-2">
-                          <button type="button" disabled={busy === x.index} data-testid={`button-accept-${x.index}`}
-                            onClick={() => void decide(x.index, 'accept')}
-                            className="rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">Accept &amp; continue</button>
-                          <button type="button" disabled={busy === x.index} data-testid={`button-correct-${x.index}`}
-                            onClick={() => setCorrecting(x)}
-                            className="inline-flex items-center gap-1 rounded-xl border border-foreground/15 px-3 py-1.5 text-xs font-semibold hover:bg-muted disabled:opacity-50"><X className="h-3 w-3" /> Correct it</button>
+              {/* --- Right pane: questions, analysis and answers --- */}
+              <section aria-label="Questions and answers" data-testid="watcher-questions-pane">
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Questions &amp; answers ({questions.length})</h3>
+                  {data.examTitle && <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[11px] font-semibold text-violet-700">{data.examTitle}</span>}
+                  {data.status === 'watching' && (
+                    <button type="button" disabled={busy === -1} onClick={() => void forceExam()} data-testid="button-force-exam"
+                      className="ml-auto inline-flex items-center gap-1.5 rounded-xl bg-violet-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-violet-700 disabled:opacity-50">
+                      {busy === -1 ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} Start capturing now
+                    </button>
+                  )}
+                </div>
+
+                {questions.length === 0 ? (
+                  <div className="py-6 text-center">
+                    <p className="text-sm text-muted-foreground">
+                      {data.status === 'watching'
+                        ? shots.length
+                          ? 'Screens are arriving — click “Analyse question” on any screenshot to start the answer research now, or press “Start capturing now” to treat every screen as a question.'
+                          : 'Watching the screen… waiting for screenshots from the remote desktop.'
+                        : data.status === 'off' ? 'The watcher is off. Turn on the Question Watcher for this session.' : 'No question captured yet.'}
+                    </p>
+                  </div>
+                ) : (
+                  // Each question: stem on the left of its card row, AI analysis + answer on the right.
+                  <ol className="grid gap-3 xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+                    {questions.map((x) => (
+                      <li key={x.index} className="contents" data-testid={`question-${x.index}`}>
+                        <div className="rounded-xl border border-foreground/12 bg-background/60 p-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-full bg-foreground/8 px-2 py-0.5 text-[11px] font-bold">Q{x.index}</span>
+                            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${QSTATE_META[x.state].cls}`}>{QSTATE_META[x.state].label}</span>
+                            <span className="text-[11px] text-muted-foreground">{timeOnly(x.at)}</span>
+                            {x.screenshotUrl && <a href={x.screenshotUrl} target="_blank" rel="noreferrer" className="ml-auto inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"><Camera className="h-3 w-3" /> Screenshot</a>}
+                          </div>
+                          <p className="mt-2 whitespace-pre-wrap text-sm font-medium">{x.text}</p>
                         </div>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            )}
+                        <div className="rounded-xl border border-foreground/12 bg-card p-3">
+                          {(x.state === 'recommended' || x.state === 'accepted' || x.state === 'corrected') && (
+                            <>
+                              <p className="flex flex-wrap items-center gap-2">
+                                <Sparkles className="h-3.5 w-3.5 text-primary" />
+                                <span className="font-bold">{x.state === 'corrected' ? x.correctedAnswer : x.answer}</span>
+                                <span className="ml-auto text-[11px] font-semibold text-muted-foreground">{SOURCE_LABEL[x.source]} · {Math.round(x.confidence * 100)}%</span>
+                              </p>
+                              {x.explanation && <p className="mt-1 text-xs text-muted-foreground">{x.explanation}</p>}
+                              {x.sources.length > 0 && <p className="mt-1 text-[11px] text-muted-foreground">Sources: {x.sources.join(' · ')}</p>}
+                            </>
+                          )}
+                          {x.state === 'researching' && <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Searching the repository, then online…</p>}
+                          {x.state === 'pending' && <p className="text-xs text-muted-foreground">Waiting for research…</p>}
+
+                          {x.state === 'recommended' && (
+                            <div className="mt-2 flex gap-2">
+                              <button type="button" disabled={busy === x.index} data-testid={`button-accept-${x.index}`}
+                                onClick={() => void decide(x.index, 'accept')}
+                                className="rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">Accept &amp; continue</button>
+                              <button type="button" disabled={busy === x.index} data-testid={`button-correct-${x.index}`}
+                                onClick={() => setCorrecting(x)}
+                                className="inline-flex items-center gap-1 rounded-xl border border-foreground/15 px-3 py-1.5 text-xs font-semibold hover:bg-muted disabled:opacity-50"><X className="h-3 w-3" /> Correct it</button>
+                            </div>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </section>
+            </div>
 
             {data.documentsStored.length > 0 && (
               <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm">

@@ -114,3 +114,44 @@ test("GET watchers/:id still 404s for a session that never existed", async () =>
   const got = await admin("GET", "/admin/buddy/watchers/nosuchsession");
   assert.equal(got.status, 404);
 });
+
+// --- Screenshot strip: the AI Buddy panel now sends a JPEG with every
+// settled capture. Screens must be listed under the session (left pane of
+// the watcher detail), duplicates merged, and each shot analysable into a
+// numbered question whose answer research starts immediately.
+test("captures with images build the screenshot strip without duplicates", async () => {
+  const jpeg = "data:image/jpeg;base64," + Buffer.from(Array.from({ length: 300 }, (_, i) => (i * 7) % 251)).toString("base64");
+  await client()("POST", "/buddy/capture", { text: "3. What does BIOS stand for?", image: jpeg }, viewer);
+  await new Promise((r) => setTimeout(r, 300));
+  // Same screen again (flashing pager re-shows it): must merge, not duplicate.
+  await client()("POST", "/buddy/capture", { text: "3. What does BIOS stand for?", image: jpeg }, viewer);
+  await new Promise((r) => setTimeout(r, 300));
+  const st = await admin("GET", `/admin/buddy/watchers/${sessionId}`);
+  assert.equal(st.status, 200);
+  const shots = st.json.shots ?? [];
+  assert.ok(shots.length >= 1, `expected screenshots, got ${shots.length}`);
+  const mine = shots.filter((s) => s.text.includes("BIOS"));
+  assert.equal(mine.length, 1, "duplicate screens must merge into one strip entry");
+  assert.ok(mine[0].imageUrl?.startsWith("/api/admin/buddy/img/"), "shot must expose its stored image URL");
+});
+
+test("analysing a screenshot turns it into a numbered question linked back", async () => {
+  const st0 = await admin("GET", `/admin/buddy/watchers/${sessionId}`);
+  const shot = (st0.json.shots ?? []).find((s) => s.text.includes("BIOS"));
+  assert.ok(shot, "strip entry exists");
+  const an = await admin("POST", `/admin/buddy/watchers/${sessionId}/shots/${shot.id}/analyse`, {});
+  assert.equal(an.status, 200, JSON.stringify(an.json));
+  assert.ok(an.json.index >= 1, "analysis produced a numbered question");
+  const st1 = await admin("GET", `/admin/buddy/watchers/${sessionId}`);
+  const q = st1.json.questions.find((x) => x.index === an.json.index);
+  assert.ok(q, "question appears in the right pane list");
+  assert.match(q.text, /BIOS/);
+  const linked = (st1.json.shots ?? []).find((s) => s.id === shot.id);
+  assert.equal(linked.questionIndex, an.json.index, "strip entry links to its question number");
+  // Re-analysing the same shot must NOT create a duplicate question.
+  const before = st1.json.questions.length;
+  const an2 = await admin("POST", `/admin/buddy/watchers/${sessionId}/shots/${shot.id}/analyse`, {});
+  assert.equal(an2.status, 200);
+  const st2 = await admin("GET", `/admin/buddy/watchers/${sessionId}`);
+  assert.equal(st2.json.questions.length, before, "re-analysis merges instead of duplicating");
+});

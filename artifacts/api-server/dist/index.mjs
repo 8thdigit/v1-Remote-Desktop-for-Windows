@@ -43040,7 +43040,7 @@ async function runWalkGrep(pattern, root, signal) {
     return true;
   };
   const stop = new AbortController();
-  const unlink = linkAbort(signal, stop);
+  const unlink2 = linkAbort(signal, stop);
   const timer = setTimeout(() => stop.abort(), GREP_TIMEOUT_MS);
   const match = lineMatcher(re, stop.signal);
   const grepPath = (rel) => grepFile(path6.join(root, rel), match, push, stop.signal);
@@ -43059,7 +43059,7 @@ async function runWalkGrep(pattern, root, signal) {
     }
   } finally {
     clearTimeout(timer);
-    unlink();
+    unlink2();
     stop.abort();
     grepSlots.push();
   }
@@ -74056,7 +74056,7 @@ function aiError(err) {
 // src/lib/watcher.ts
 init_sdk();
 import { randomBytes as randomBytes6 } from "node:crypto";
-import { mkdir as mkdir6, readFile as readFile6, rename as rename5, writeFile as writeFile5 } from "node:fs/promises";
+import { mkdir as mkdir6, readFile as readFile6, rename as rename5, unlink, writeFile as writeFile5 } from "node:fs/promises";
 import path8 from "node:path";
 var WatcherError = class extends Error {
   status;
@@ -74067,6 +74067,7 @@ var WatcherError = class extends Error {
 };
 var MAX_WATCHES = 200;
 var MAX_QUESTIONS = 200;
+var MAX_SHOTS = 40;
 var MAX_TEXT2 = 6e3;
 var MAX_DOCS = 500;
 var MAX_DOC_BYTES = 8 * 1024 * 1024;
@@ -74101,6 +74102,12 @@ function fileWatcherBackend(dir) {
       await mkdir6(imgDir, { recursive: true, mode: 448 });
       await writeFile5(path8.join(imgDir, name), buf, { mode: 384 });
       return name;
+    },
+    async removeImage(name) {
+      try {
+        await unlink(path8.join(imgDir, path8.basename(name)));
+      } catch {
+      }
     },
     imageUrl: (name) => `/api/watcher/img/${encodeURIComponent(name)}`
   };
@@ -74268,6 +74275,14 @@ async function webResearch(query, timeoutMs = 8e3) {
   return { excerpt: "", refs: [] };
 }
 var newId2 = () => randomBytes6(8).toString("hex");
+function simWords(a, b) {
+  const A = new Set(String(a).toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim().split(" ").filter(Boolean));
+  const B = String(b).toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  if (!A.size || !B.length) return 0;
+  let shared = 0;
+  for (const t of B) if (A.has(t)) shared++;
+  return shared / Math.max(A.size, B.length);
+}
 function createWatcherEngine(backend, options = {}) {
   const clock = options.clock ?? Date.now;
   const envKey = options.envKey ?? (() => process.env["ANTHROPIC_API_KEY"] || void 0);
@@ -74356,6 +74371,48 @@ function createWatcherEngine(backend, options = {}) {
     return response.content.flatMap((b) => b.type === "text" ? [b.text] : []).join("\n").trim();
   }
   const find = (sessionId) => watches.find((w) => w.sessionId === sessionId);
+  function addQuestion(w, body, options2, image, shotId) {
+    const recent = w.questions.slice(-4);
+    const dupRecent = recent.some((q) => simWords(q.text, body) >= 0.85);
+    if (!dupRecent && simWords(w.lastSeen, body) < 0.85 && w.questions.length < Math.min(MAX_QUESTIONS, settings.maxQuestions) && (body.length >= 12 || options2.length > 0)) {
+      const q = {
+        n: w.questions.length + 1,
+        at: clock(),
+        text: body.slice(0, MAX_TEXT2),
+        image,
+        options: options2.slice(0, 8),
+        status: "pending",
+        answer: "",
+        explanation: "",
+        source: "",
+        refs: [],
+        confidence: 0,
+        correctedBy: ""
+      };
+      w.questions.push(q);
+      w.lastSeen = body;
+      if (shotId) {
+        const s = w.shots.find((x) => x.id === shotId);
+        if (s) s.questionIndex = q.n;
+      }
+      void researchOne(w, q).then(() => persistSoon()).catch(() => {
+        q.status = "pending";
+      });
+      return q;
+    }
+    const cur = w.questions.at(-1);
+    if (cur && simWords(cur.text, body) >= 0.6) {
+      if (image) cur.image = image;
+      if (body.length > cur.text.length * 1.15) cur.text = body.slice(0, MAX_TEXT2);
+      if (options2.length > (cur.options?.length ?? 0)) cur.options = options2.slice(0, 8);
+      if (shotId) {
+        const s = w.shots.find((x) => x.id === shotId);
+        if (s) s.questionIndex = cur.n;
+      }
+      return null;
+    }
+    return null;
+  }
   const DETECT_SYSTEM = [
     "You watch OCR text captured from a remote Windows screen during an IT support session.",
     "Decide whether the screen shows the START of an exam, quiz, test or assessment (an exam interface, instructions, timer, or the first numbered question).",
@@ -74497,9 +74554,11 @@ ${q.options.map((o) => `- ${o}`).join("\n")}` : ""}`)
       return watches.map((w) => ({
         ...w,
         questionCount: w.questions.length,
+        shotCount: w.shots.length,
         answeredCount: w.questions.filter((q) => q.status !== "pending").length,
         pendingReview: w.questions.filter((q) => q.status === "answered").length,
-        questions: void 0
+        questions: void 0,
+        shots: void 0
       }));
     },
     watch(sessionId) {
@@ -74510,7 +74569,7 @@ ${q.options.map((o) => `- ${o}`).join("\n")}` : ""}`)
       let w = find(sessionId);
       const now = clock();
       if (!w) {
-        w = { sessionId, pcName: meta3.pcName, raId: meta3.raId, operator: meta3.operator, enabled: true, startedAt: now, phase: "watching", examTitle: "", questions: [], lastSeen: "", notes: "", updatedAt: now };
+        w = { sessionId, pcName: meta3.pcName, raId: meta3.raId, operator: meta3.operator, enabled: true, startedAt: now, phase: "watching", examTitle: "", questions: [], shots: [], lastSeen: "", notes: "", updatedAt: now };
         watches.unshift(w);
         if (watches.length > MAX_WATCHES) watches.length = MAX_WATCHES;
       } else {
@@ -74534,7 +74593,7 @@ ${q.options.map((o) => `- ${o}`).join("\n")}` : ""}`)
     async capture(sessionId, meta3 = {}, rawText, image) {
       let w = find(sessionId);
       if (!w && settings.enabled) {
-        w = { sessionId, pcName: meta3.pcName ?? "", raId: meta3.raId ?? "", operator: meta3.operator ?? "", enabled: false, startedAt: clock(), phase: "idle", examTitle: "", questions: [], lastSeen: "", notes: "", updatedAt: clock() };
+        w = { sessionId, pcName: meta3.pcName ?? "", raId: meta3.raId ?? "", operator: meta3.operator ?? "", enabled: false, startedAt: clock(), phase: "idle", examTitle: "", questions: [], shots: [], lastSeen: "", notes: "", updatedAt: clock() };
         watches.unshift(w);
         if (watches.length > MAX_WATCHES) watches.length = MAX_WATCHES;
       }
@@ -74551,6 +74610,26 @@ ${q.options.map((o) => `- ${o}`).join("\n")}` : ""}`)
           await backend.saveImage(imageName, image);
         } catch {
           imageName = void 0;
+        }
+      }
+      if (imageName || text) {
+        const last = w.shots.at(-1);
+        const sameScreen = !!last && !!imageName === !!last.image && (!text || !last.text || simWords(last.text, text) >= 0.9);
+        if (sameScreen && last) {
+          last.at = now;
+          if (imageName) {
+            if (last.image) void backend.removeImage?.(last.image).catch?.(() => {
+            });
+            last.image = imageName;
+          }
+          if (text) last.text = text;
+        } else {
+          w.shots.push({ id: newId2(), at: now, image: imageName, text: text.slice(0, MAX_TEXT2) });
+          if (w.shots.length > MAX_SHOTS) {
+            const dropped = w.shots.shift();
+            if (dropped.image) void backend.removeImage?.(dropped.image).catch?.(() => {
+            });
+          }
         }
       }
       const det = detectExamStart2(text);
@@ -74582,48 +74661,10 @@ ${text.slice(0, 2500)}
       if (w.phase === "in-exam") {
         const pq = parseQuestion(text);
         const body = (pq.stem || text).slice(0, MAX_TEXT2);
-        const norm = (s) => s.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
-        const sim = (a, b) => {
-          const A = new Set(norm(a).split(" "));
-          const B = norm(b).split(" ");
-          if (!A.size || !B.length) return 0;
-          let shared = 0;
-          for (const t of B) if (A.has(t)) shared++;
-          return shared / Math.max(A.size, B.length);
-        };
-        const recent = w.questions.slice(-4);
-        const isNew = !recent.some((q) => sim(q.text, body) >= 0.85) && sim(w.lastSeen, body) < 0.85;
-        if (isNew && (body.length >= 12 || pq.num !== null)) {
-          w.lastSeen = body;
-          if (w.questions.length < Math.min(MAX_QUESTIONS, settings.maxQuestions)) {
-            added = {
-              n: w.questions.length + 1,
-              at: now,
-              text: body,
-              image: imageName,
-              options: pq.options.slice(0, 8),
-              status: "pending",
-              answer: "",
-              explanation: "",
-              source: "",
-              refs: [],
-              confidence: 0,
-              correctedBy: ""
-            };
-            w.questions.push(added);
-          }
-        } else if (imageName) {
-          const cur = w.questions.at(-1);
-          if (cur && cur.text === body) cur.image = imageName;
-        }
+        const shot = w.shots.at(-1);
+        added = addQuestion(w, body, pq.options, imageName, shot?.id) ?? null;
       }
       persistSoon();
-      if (added) {
-        const q = added;
-        void researchOne(w, q).then(() => persistSoon()).catch(() => {
-          q.status = "pending";
-        });
-      }
       return { watching: true, phase: w.phase, examTitle: w.examTitle, newQuestion: added?.n, issues: signals.slice(0, 3) };
     },
     // Admin override: start capturing now even if no exam signal was seen
@@ -74637,8 +74678,41 @@ ${text.slice(0, 2500)}
       if (!w.examTitle) w.examTitle = "Exam (started manually)";
       w.lastSeen = "";
       w.updatedAt = clock();
+      const shots = [...w.shots];
+      for (const s of shots) {
+        const pq = parseQuestion(s.text || "");
+        addQuestion(w, (pq.stem || s.text || "").slice(0, MAX_TEXT2), pq.options, s.image, s.id);
+      }
       await persistNow();
-      return { ...w, questions: void 0 };
+      return { ...w, questions: void 0, shots: void 0 };
+    },
+    // Analyse one screenshot from the strip without waiting for automatic exam
+    // detection: it becomes a numbered question (or merges into the current
+    // one if it's the same text) and AI research starts immediately. The
+    // watch flips to in-exam so following screens keep being captured.
+    async analyseShot(sessionId, shotId) {
+      const w = find(sessionId);
+      if (!w) throw new WatcherError(404, "No question watcher for that session.");
+      if (w.phase === "completed") throw new WatcherError(409, "This watch is already completed.");
+      const shot = w.shots.find((s) => s.id === shotId);
+      if (!shot) throw new WatcherError(404, "That screenshot is no longer in the strip.");
+      if (shot.questionIndex && w.questions.some((q2) => q2.n === shot.questionIndex)) {
+        const q2 = w.questions.find((x) => x.n === shot.questionIndex);
+        await api.reResearch(sessionId, q2.n);
+        return { ...q2 };
+      }
+      const pq = parseQuestion(shot.text || "");
+      const body = (pq.stem || shot.text || "").slice(0, MAX_TEXT2);
+      if (!body.trim()) throw new WatcherError(409, "No readable text was found on that screen.");
+      w.phase = "in-exam";
+      if (!w.examTitle) w.examTitle = "Exam (from screenshot)";
+      w.updatedAt = clock();
+      addQuestion(w, body, pq.options, shot.image, shot.id);
+      await persistNow();
+      const linked = w.shots.find((s) => s.id === shotId)?.questionIndex;
+      const q = w.questions.find((x) => x.n === linked);
+      if (q) await api.reResearch(sessionId, q.n);
+      return { ...q ?? { n: 0 } };
     },
     // Admin accepts or corrects a recommended answer.
     async review(sessionId, n, input) {
@@ -76574,6 +76648,7 @@ function watcherView(w, imageUrl) {
     index: q.n,
     at: q.at,
     text: q.text,
+    options: q.options ?? [],
     screenshotUrl: q.image && imageUrl ? imageUrl(q.image) : null,
     // A pending question inside a live exam is still being researched.
     state: q.status === "pending" ? status === "exam-detected" ? "researching" : "pending" : q.status === "answered" ? "recommended" : q.status,
@@ -76591,6 +76666,16 @@ function watcherView(w, imageUrl) {
     startedAt: w.startedAt ?? null,
     completedAt: w.endedAt ?? null,
     questions,
+    // Screenshot strip (left pane of the control room): every settled screen
+    // forwarded by the AI Buddy panel, oldest first, with the question number
+    // it produced once analysed.
+    shots: (w.shots ?? []).map((s) => ({
+      id: s.id,
+      at: s.at,
+      imageUrl: s.image && imageUrl ? imageUrl(s.image) : null,
+      text: s.text.slice(0, 400),
+      questionIndex: s.questionIndex ?? null
+    })),
     documentsStored: w.phase === "completed" ? w.storedDocs ?? [] : [],
     error: null,
     lastSeenText: w.lastSeen.slice(0, 300),
@@ -76697,6 +76782,18 @@ router4.post("/buddy/watchers/:id/force-exam", async (req, res) => {
     invalidateEnrichCache("watcher-states");
     activity.add("inspect-buddy", `${req.account.displayName} started exam capture manually`, req.account.username);
     res.json(watcherView(engine.watch(req.params.id), (n) => `/api/admin/buddy/img/${encodeURIComponent(n)}`));
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+router4.post("/buddy/watchers/:id/shots/:shotId/analyse", async (req, res) => {
+  try {
+    const engine = await watcherReady();
+    if (!engine.watch(req.params.id)) await ensureWatch(req.params.id);
+    const q = await engine.analyseShot(req.params.id, req.params.shotId);
+    invalidateEnrichCache("watcher-states");
+    activity.add("inspect-buddy", `${req.account.displayName} analysed a screenshot`, req.account.username);
+    res.json(reviewView(q, imageUrlFor));
   } catch (err) {
     sendError(res, err);
   }
