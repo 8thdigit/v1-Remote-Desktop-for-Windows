@@ -157,7 +157,19 @@ export function BuddyPanel({ token, frame, config }: { token: string; frame?: st
       thumb.getContext('2d')?.drawImage(img, 0, 0, thumb.width, thumb.height);
       const text = (await ocr(canvas)).trim();
       lastText.current = text;
-      const res = await call<CaptureResult>(token, '/capture', { text });
+      // Send a compact JPEG of the settled screen along with the OCR text so
+      // the server-side Inspect Buddy question watcher can list screenshots
+      // under the session and analyse them even if this browser tab closes.
+      let imageDataUrl = '';
+      try {
+        const small = document.createElement('canvas');
+        const scale = Math.min(1, 1280 / Math.max(1, img.naturalWidth));
+        small.width = Math.max(1, Math.round(img.naturalWidth * scale));
+        small.height = Math.max(1, Math.round(img.naturalHeight * scale));
+        small.getContext('2d')?.drawImage(img, 0, 0, small.width, small.height);
+        imageDataUrl = small.toDataURL('image/jpeg', 0.6);
+      } catch { /* send text only */ }
+      const res = await call<CaptureResult>(token, '/capture', { text, image: imageDataUrl || undefined });
       setResult(res);
       const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9));
       const full = blob ? URL.createObjectURL(blob) : thumb.toDataURL('image/jpeg', 0.6);
