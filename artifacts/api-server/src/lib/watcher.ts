@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
 
@@ -52,6 +52,10 @@ export type WatcherWatch = {
   phase: "idle" | "watching" | "in-exam" | "completed";
   examTitle: string;
   questions: WatcherQuestion[];
+  // Screenshot strip: every settled screen the AI Buddy panel forwards, in
+  // capture order. The watcher detail view lists these on the left; when an
+  // admin analyses one, it becomes (or merges into) a numbered question.
+  shots: { id: string; at: number; image?: string; text: string; questionIndex?: number }[];
   // last question text seen, to detect a new question appearing
   lastSeen: string;
   notes: string;
@@ -94,6 +98,7 @@ export type WatcherBackend = {
   load(): Promise<Data | undefined>;
   save(data: Data): Promise<void>;
   saveImage?(name: string, buf: Buffer): Promise<string>;
+  removeImage?(name: string): Promise<void>;
   imageUrl?(name: string): string;
 };
 
@@ -104,6 +109,7 @@ export class WatcherError extends Error {
 
 const MAX_WATCHES = 200;
 const MAX_QUESTIONS = 200;
+const MAX_SHOTS = 40;
 const MAX_TEXT = 6000;
 const MAX_DOCS = 500;
 const MAX_DOC_BYTES = 8 * 1024 * 1024;
@@ -134,6 +140,9 @@ export function fileWatcherBackend(dir: string): WatcherBackend {
       await writeFile(path.join(imgDir, name), buf, { mode: 0o600 });
       return name;
     },
+    async removeImage(name) {
+      try { await unlink(path.join(imgDir, path.basename(name))); } catch { /* already gone */ }
+    },
     imageUrl: (name) => `/api/watcher/img/${encodeURIComponent(name)}`,
   };
 }
@@ -163,6 +172,7 @@ export function memoryWatcherBackend(): WatcherBackend {
     async load() { return data && structuredClone(data); },
     async save(next) { data = structuredClone(next); },
     async saveImage(name, buf) { imgs.set(name, buf); return name; },
+    async removeImage(name) { imgs.delete(name); },
     imageUrl: (name) => `/api/watcher/img/${encodeURIComponent(name)}`,
   };
 }
@@ -343,6 +353,17 @@ async function webResearch(query: string, timeoutMs = 8000) {
 
 const newId = () => randomBytes(8).toString("hex");
 
+// Word-overlap similarity 0..1 between two OCR texts, used to merge duplicate
+// frames of the same screen and to detect a repeated question.
+export function simWords(a: string, b: string) {
+  const A = new Set(String(a).toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim().split(" ").filter(Boolean));
+  const B = String(b).toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  if (!A.size || !B.length) return 0;
+  let shared = 0;
+  for (const t of B) if (A.has(t)) shared++;
+  return shared / Math.max(A.size, B.length);
+}
+
 export function createWatcherEngine(backend: WatcherBackend, options: { clock?: () => number; envKey?: () => string | undefined } = {}) {
   const clock = options.clock ?? Date.now;
   const envKey = options.envKey ?? (() => process.env["ANTHROPIC_API_KEY"] || undefined);
@@ -438,6 +459,39 @@ export function createWatcherEngine(backend: WatcherBackend, options: { clock?: 
   }
 
   const find = (sessionId: string) => watches.find((w) => w.sessionId === sessionId);
+
+  // Add (or merge) a question captured from one screen. Duplicate detection is
+  // similarity-based so a flashing/paging exam screen doesn't produce the same
+  // question twice; later frames of the current question update it in place.
+  function addQuestion(w: WatcherWatch, body: string, options: string[], image?: string, shotId?: string) {
+    const recent = w.questions.slice(-4);
+    const dupRecent = recent.some((q) => simWords(q.text, body) >= 0.85);
+    if (!dupRecent && simWords(w.lastSeen, body) < 0.85
+      && w.questions.length < Math.min(MAX_QUESTIONS, settings.maxQuestions)
+      && (body.length >= 12 || options.length > 0)) {
+      const q: WatcherQuestion = {
+        n: w.questions.length + 1, at: clock(), text: body.slice(0, MAX_TEXT), image,
+        options: options.slice(0, 8),
+        status: "pending", answer: "", explanation: "", source: "", refs: [], confidence: 0, correctedBy: "",
+      };
+      w.questions.push(q);
+      w.lastSeen = body;
+      if (shotId) { const s = w.shots.find((x) => x.id === shotId); if (s) s.questionIndex = q.n; }
+      void researchOne(w, q).then(() => persistSoon()).catch(() => { q.status = "pending"; });
+      return q;
+    }
+    // Same question seen again: refresh its screenshot and grow the text when
+    // the new frame reads more of it (scrolling / partial OCR).
+    const cur = w.questions.at(-1);
+    if (cur && simWords(cur.text, body) >= 0.6) {
+      if (image) cur.image = image;
+      if (body.length > cur.text.length * 1.15) cur.text = body.slice(0, MAX_TEXT);
+      if (options.length > (cur.options?.length ?? 0)) cur.options = options.slice(0, 8);
+      if (shotId) { const s = w.shots.find((x) => x.id === shotId); if (s) s.questionIndex = cur.n; }
+      return null;
+    }
+    return null;
+  }
 
   const DETECT_SYSTEM = [
     "You watch OCR text captured from a remote Windows screen during an IT support session.",
@@ -581,9 +635,11 @@ export function createWatcherEngine(backend: WatcherBackend, options: { clock?: 
       return watches.map((w) => ({
         ...w,
         questionCount: w.questions.length,
+        shotCount: w.shots.length,
         answeredCount: w.questions.filter((q) => q.status !== "pending").length,
         pendingReview: w.questions.filter((q) => q.status === "answered").length,
         questions: undefined,
+        shots: undefined,
       }));
     },
     watch(sessionId: string) { return find(sessionId) && structuredClone(find(sessionId)!); },
@@ -593,7 +649,7 @@ export function createWatcherEngine(backend: WatcherBackend, options: { clock?: 
       let w = find(sessionId);
       const now = clock();
       if (!w) {
-        w = { sessionId, pcName: meta.pcName, raId: meta.raId, operator: meta.operator, enabled: true, startedAt: now, phase: "watching", examTitle: "", questions: [], lastSeen: "", notes: "", updatedAt: now };
+        w = { sessionId, pcName: meta.pcName, raId: meta.raId, operator: meta.operator, enabled: true, startedAt: now, phase: "watching", examTitle: "", questions: [], shots: [], lastSeen: "", notes: "", updatedAt: now };
         watches.unshift(w);
         if (watches.length > MAX_WATCHES) watches.length = MAX_WATCHES;
       } else { w.enabled = true; w.phase = w.phase === "completed" ? "completed" : "watching"; w.updatedAt = now; }
@@ -614,7 +670,7 @@ export function createWatcherEngine(backend: WatcherBackend, options: { clock?: 
       let w = find(sessionId);
       if (!w && settings.enabled) {
         // The engine knows a live session that has no watcher record yet.
-        w = { sessionId, pcName: meta.pcName ?? "", raId: meta.raId ?? "", operator: meta.operator ?? "", enabled: false, startedAt: clock(), phase: "idle", examTitle: "", questions: [], lastSeen: "", notes: "", updatedAt: clock() };
+        w = { sessionId, pcName: meta.pcName ?? "", raId: meta.raId ?? "", operator: meta.operator ?? "", enabled: false, startedAt: clock(), phase: "idle", examTitle: "", questions: [], shots: [], lastSeen: "", notes: "", updatedAt: clock() };
         watches.unshift(w);
         if (watches.length > MAX_WATCHES) watches.length = MAX_WATCHES;
       }
@@ -630,6 +686,30 @@ export function createWatcherEngine(backend: WatcherBackend, options: { clock?: 
       if (image && image.length > 100 && image.length <= MAX_DOC_BYTES && backend.saveImage) {
         imageName = `${sessionId}-${now}.jpg`;
         try { await backend.saveImage(imageName, image); } catch { imageName = undefined; }
+      }
+
+      // Screenshot strip: keep every settled screen with readable text, in
+      // capture order, so the control room can show them under the session
+      // even before an exam is detected. Consecutive frames of the same
+      // static screen are merged into the newest one (no duplicates).
+      if (imageName || text) {
+        const last = w.shots.at(-1);
+        const sameScreen = !!last && !!imageName === !!last.image &&
+          (!text || !last.text || simWords(last.text, text) >= 0.9);
+        if (sameScreen && last) {
+          last.at = now;
+          if (imageName) {
+            if (last.image) void backend.removeImage?.(last.image).catch?.(() => {});
+            last.image = imageName;
+          }
+          if (text) last.text = text;
+        } else {
+          w.shots.push({ id: newId(), at: now, image: imageName, text: text.slice(0, MAX_TEXT) });
+          if (w.shots.length > MAX_SHOTS) {
+            const dropped = w.shots.shift()!;
+            if (dropped.image) void backend.removeImage?.(dropped.image).catch?.(() => {});
+          }
+        }
       }
 
       const det = detectExamStart2(text);
@@ -663,45 +743,11 @@ export function createWatcherEngine(backend: WatcherBackend, options: { clock?: 
       if (w.phase === "in-exam") {
         const pq = parseQuestion(text);
         const body = (pq.stem || text).slice(0, MAX_TEXT);
-        // Sliding-window duplicate detection: OCR of the same question across
-        // frames differs by words (scroll position, partial reads), so exact
-        // equality missed re-captures, while comparing against ALL questions
-        // would drop genuinely repeated stems late in an exam. Compare with
-        // similarity against the last few captures instead.
-        const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
-        const sim = (a: string, b: string) => {
-          const A = new Set(norm(a).split(" "));
-          const B = norm(b).split(" ");
-          if (!A.size || !B.length) return 0;
-          let shared = 0;
-          for (const t of B) if (A.has(t)) shared++;
-          return shared / Math.max(A.size, B.length);
-        };
-        const recent = w.questions.slice(-4);
-        const isNew = !recent.some((q) => sim(q.text, body) >= 0.85) && sim(w.lastSeen, body) < 0.85;
-        if (isNew && (body.length >= 12 || pq.num !== null)) {
-          w.lastSeen = body;
-          if (w.questions.length < Math.min(MAX_QUESTIONS, settings.maxQuestions)) {
-            added = {
-              n: w.questions.length + 1, at: now, text: body,
-              image: imageName, options: pq.options.slice(0, 8),
-              status: "pending", answer: "", explanation: "", source: "", refs: [], confidence: 0, correctedBy: "",
-            };
-            w.questions.push(added);
-          }
-        } else if (imageName) {
-          // Same question, later scroll: attach the newest screenshot.
-          const cur = w.questions.at(-1);
-          if (cur && cur.text === body) cur.image = imageName;
-        }
+        const shot = w.shots.at(-1);
+        added = addQuestion(w, body, pq.options, imageName, shot?.id) ?? null;
       }
 
       persistSoon();
-      // Research the new question in parallel (fire-and-forget per question).
-      if (added) {
-        const q = added;
-        void researchOne(w, q).then(() => persistSoon()).catch(() => { q.status = "pending"; });
-      }
       return { watching: true, phase: w.phase, examTitle: w.examTitle, newQuestion: added?.n, issues: signals.slice(0, 3) };
     },
 
@@ -716,8 +762,44 @@ export function createWatcherEngine(backend: WatcherBackend, options: { clock?: 
       if (!w.examTitle) w.examTitle = "Exam (started manually)";
       w.lastSeen = "";
       w.updatedAt = clock();
+      // Whatever screens already arrived become questions right away — the
+      // strip on the left of the control room turns into the numbered list.
+      const shots = [...w.shots];
+      for (const s of shots) {
+        const pq = parseQuestion(s.text || "");
+        addQuestion(w, (pq.stem || s.text || "").slice(0, MAX_TEXT), pq.options, s.image, s.id);
+      }
       await persistNow();
-      return { ...w, questions: undefined };
+      return { ...w, questions: undefined, shots: undefined };
+    },
+
+    // Analyse one screenshot from the strip without waiting for automatic exam
+    // detection: it becomes a numbered question (or merges into the current
+    // one if it's the same text) and AI research starts immediately. The
+    // watch flips to in-exam so following screens keep being captured.
+    async analyseShot(sessionId: string, shotId: string) {
+      const w = find(sessionId);
+      if (!w) throw new WatcherError(404, "No question watcher for that session.");
+      if (w.phase === "completed") throw new WatcherError(409, "This watch is already completed.");
+      const shot = w.shots.find((s) => s.id === shotId);
+      if (!shot) throw new WatcherError(404, "That screenshot is no longer in the strip.");
+      if (shot.questionIndex && w.questions.some((q) => q.n === shot.questionIndex)) {
+        const q = w.questions.find((x) => x.n === shot.questionIndex)!;
+        await api.reResearch(sessionId, q.n);
+        return { ...q };
+      }
+      const pq = parseQuestion(shot.text || "");
+      const body = (pq.stem || shot.text || "").slice(0, MAX_TEXT);
+      if (!body.trim()) throw new WatcherError(409, "No readable text was found on that screen.");
+      w.phase = "in-exam";
+      if (!w.examTitle) w.examTitle = "Exam (from screenshot)";
+      w.updatedAt = clock();
+      addQuestion(w, body, pq.options, shot.image, shot.id);
+      await persistNow();
+      const linked = w.shots.find((s) => s.id === shotId)?.questionIndex;
+      const q = w.questions.find((x) => x.n === linked);
+      if (q) await api.reResearch(sessionId, q.n);
+      return { ...(q ?? { n: 0 }) };
     },
 
     // Admin accepts or corrects a recommended answer.

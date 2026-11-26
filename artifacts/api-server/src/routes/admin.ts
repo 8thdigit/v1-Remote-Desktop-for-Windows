@@ -476,6 +476,7 @@ function watcherView(w: WatcherWatch | undefined, imageUrl: ((name: string) => s
     index: q.n,
     at: q.at,
     text: q.text,
+    options: q.options ?? [],
     screenshotUrl: q.image && imageUrl ? imageUrl(q.image) : null,
     // A pending question inside a live exam is still being researched.
     state: q.status === "pending" ? (status === "exam-detected" ? "researching" : "pending")
@@ -494,6 +495,16 @@ function watcherView(w: WatcherWatch | undefined, imageUrl: ((name: string) => s
     startedAt: w.startedAt ?? null,
     completedAt: w.endedAt ?? null,
     questions,
+    // Screenshot strip (left pane of the control room): every settled screen
+    // forwarded by the AI Buddy panel, oldest first, with the question number
+    // it produced once analysed.
+    shots: (w.shots ?? []).map((s) => ({
+      id: s.id,
+      at: s.at,
+      imageUrl: s.image && imageUrl ? imageUrl(s.image) : null,
+      text: s.text.slice(0, 400),
+      questionIndex: s.questionIndex ?? null,
+    })),
     documentsStored: w.phase === "completed" ? w.storedDocs ?? [] : [],
     error: null,
     lastSeenText: w.lastSeen.slice(0, 300),
@@ -603,6 +614,19 @@ router.post("/buddy/watchers/:id/force-exam", async (req, res) => {
     invalidateEnrichCache("watcher-states");
     activity.add("inspect-buddy", `${req.account!.displayName} started exam capture manually`, req.account!.username);
     res.json(watcherView(engine.watch(req.params.id), (n) => `/api/admin/buddy/img/${encodeURIComponent(n)}`));
+  } catch (err) { sendError(res, err); }
+});
+
+// Analyse one screenshot from the strip right now: it becomes a numbered
+// question (duplicates merge into the current one) and AI research starts.
+router.post("/buddy/watchers/:id/shots/:shotId/analyse", async (req, res) => {
+  try {
+    const engine = await watcherReady();
+    if (!engine.watch(req.params.id)) await ensureWatch(req.params.id);
+    const q = await engine.analyseShot(req.params.id, req.params.shotId);
+    invalidateEnrichCache("watcher-states");
+    activity.add("inspect-buddy", `${req.account!.displayName} analysed a screenshot`, req.account!.username);
+    res.json(reviewView(q as never, imageUrlFor));
   } catch (err) { sendError(res, err); }
 });
 
