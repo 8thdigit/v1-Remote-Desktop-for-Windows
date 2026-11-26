@@ -72438,11 +72438,15 @@ async function createAccounts(backend, options = {}) {
       return u && !u.disabled ? publicAccount(u) : void 0;
     },
     // Creates the built-in admin when there are no accounts at all, with a
-    // default password the admin must change at first sign-in.
+    // default password the admin must change at first sign-in. A six-digit
+    // PIN is allowed here even though checkPassword needs 8+ characters.
     async ensureDefaultAdmin(input) {
       if (users.length) return void 0;
       const username = String(input.username).trim().toLowerCase();
       if (!USERNAME.test(username)) throw new AccountError(400, "ADMIN_USERNAME is not a valid login ID.");
+      if (typeof input.password !== "string" || input.password.length < 6 || input.password.length > 200) {
+        throw new AccountError(400, "The admin password needs at least 6 characters (set ADMIN_PASSWORD to a longer one for better security).");
+      }
       const account = {
         id: randomBytes2(9).toString("base64url"),
         username,
@@ -73195,7 +73199,7 @@ var SiteError = class extends Error {
   }
 };
 var DEFAULT_SETTINGS = {
-  tabs: { pcs: true, connect: true, download: true },
+  tabs: { pcs: true, connect: true, download: true, test: false },
   signIn: { requestAccess: true, downloadLink: true },
   og: {
     title: "Connect.AI",
@@ -73263,7 +73267,8 @@ function mergeSettings(stored) {
     tabs: {
       pcs: bool(s.tabs?.pcs, d.tabs.pcs),
       connect: bool(s.tabs?.connect, d.tabs.connect),
-      download: bool(s.tabs?.download, d.tabs.download)
+      download: bool(s.tabs?.download, d.tabs.download),
+      test: bool(s.tabs?.test, d.tabs.test)
     },
     signIn: {
       requestAccess: bool(s.signIn?.requestAccess, d.signIn.requestAccess),
@@ -74122,39 +74127,51 @@ var multi3 = (v, max) => String(v ?? "").replace(/\r\n?/g, "\n").replace(/[\u000
 function cleanScreenText2(v) {
   return multi3(v, MAX_TEXT2 * 2).split("\n").map((l) => l.replace(/\s+/g, " ").trim()).filter((l) => /[A-Za-z0-9]{2}/.test(l)).join("\n").slice(0, MAX_TEXT2);
 }
-var EXAM_START = new RegExp([
-  "\\bexam\\b",
-  "\\bfinal exam\\b",
-  "\\bmidterm\\b",
-  "\\bquiz\\b",
-  "\\bassessment\\b",
-  "start (the )?exam",
-  "begin (the )?exam",
-  "time remaining",
-  "time left",
-  "countdown",
-  "question \\d+",
-  "q\\.?\\s*\\d+",
-  "multiple choice",
-  "select the correct",
-  "total marks",
-  "maximum marks",
-  "marks:\\s*\\d",
-  "attempt (all|any) questions",
-  "proctor",
-  "timed test",
-  "test instructions",
-  "submission (is|will) (be|auto)"
-].join("|"), "i");
-var QUESTION_NUM = /^\s*(?:q(?:uestion)?\.?\s*)?(\d{1,3})[\).:\s]/i;
+var EXAM_START = [
+  { re: /\b(final exam|midterm|mock test|online test)\b/i, w: 3 },
+  { re: /\b(exam|quiz|assessment)\b/i, w: 2 },
+  { re: /\b(start|begin|resume|enter) (the )?exam\b/i, w: 3 },
+  { re: /\btime (remaining|left)\b/i, w: 3 },
+  { re: /\b(countdown|timer)\b/i, w: 2 },
+  { re: /\b(attempt (all|any)|sections? and questions)\b/i, w: 2 },
+  { re: /\b(total|maximum|passing) marks?\b/i, w: 2 },
+  { re: /\bmarks:\s*\d/i, w: 2 },
+  { re: /\b(proctor(ed)?|anticheat|full screen mode)\b/i, w: 2 },
+  { re: /\b(test|exam) instructions?\b/i, w: 2 },
+  { re: /\bsubmission (is|will) (be|auto)/i, w: 2 },
+  { re: /\bmultiple[- ]choice\b/i, w: 1 },
+  { re: /\b(select|choose) the (correct|best)\b/i, w: 1 }
+];
+var QUESTION_NUM = /^\s*(?:q(?:uestion)?\.?\s*)?(\d{1,3})[).:\s]/i;
 var OPTION_LINE = /^\s*\(?([a-dA-D])[\).]\s+(.{2,})$/;
-function detectExamStart(text) {
-  const hits = [];
-  for (const l of text.split("\n")) if (EXAM_START.test(l) && hits.length < 6) {
-    const h = l.slice(0, 160);
-    if (!hits.includes(h)) hits.push(h);
+function questionShape(text) {
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  let shaped = false;
+  let opts = 0;
+  for (const l of lines) {
+    if (OPTION_LINE.test(l)) {
+      opts++;
+      continue;
+    }
+    if (QUESTION_NUM.test(l) && (l.includes("?") || lines.some((o) => OPTION_LINE.test(o)))) shaped = true;
+    else if (/\?\s*$/.test(l) && l.length >= 20) shaped = true;
   }
-  return hits;
+  return shaped || opts >= 2;
+}
+function detectExamStart2(text) {
+  const hits = [];
+  let score = 0;
+  for (const l of text.split("\n")) {
+    for (const { re, w } of EXAM_START) {
+      if (re.test(l)) {
+        score += w;
+        const h = l.slice(0, 160);
+        if (!hits.includes(h) && hits.length < 6) hits.push(h);
+        break;
+      }
+    }
+  }
+  return { hits, score, exam: score >= 3 || score >= 2 && questionShape(text) };
 }
 function parseQuestion(text) {
   const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
@@ -74296,7 +74313,8 @@ function createWatcherEngine(backend, options = {}) {
     }
   })();
   const key = () => apiKey || envKey() || "";
-  const aiReady = () => settings.enabled && settings.ai && !!key();
+  const llmEnv = () => !!(process.env["WATCHER_LLM_URL"] && process.env["WATCHER_LLM_KEY"]);
+  const aiReady = () => settings.enabled && settings.ai && (!!key() || llmEnv());
   let client;
   const anthropic = () => {
     const k = key();
@@ -74304,7 +74322,27 @@ function createWatcherEngine(backend, options = {}) {
     if (client?.key !== k) client = { key: k, client: new Anthropic({ apiKey: k, timeout: 6e4, maxRetries: 1 }) };
     return client.client;
   };
+  async function askOpenCompatible(system, user, maxTokens) {
+    const url = process.env["WATCHER_LLM_URL"];
+    const k = process.env["WATCHER_LLM_KEY"];
+    if (!url || !k) throw new WatcherError(400, "No AI provider configured.");
+    const res = await fetch(url.replace(/\/$/, "") + "/chat/completions", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${k}` },
+      body: JSON.stringify({
+        model: settings.model && !settings.model.startsWith("claude-") ? settings.model : "gpt-4o-mini",
+        max_tokens: maxTokens,
+        temperature: 0.2,
+        messages: [{ role: "system", content: system }, { role: "user", content: user }]
+      }),
+      signal: AbortSignal.timeout(45e3)
+    });
+    if (!res.ok) throw new WatcherError(502, `LLM provider responded ${res.status}`);
+    const j = await res.json();
+    return String(j.choices?.[0]?.message?.content ?? "").trim();
+  }
   async function ask(system, user, maxTokens) {
+    if (!key()) return askOpenCompatible(system, user, maxTokens);
     const response = await anthropic().beta.messages.create({
       model: settings.model || DEFAULT_MODEL2,
       max_tokens: maxTokens,
@@ -74434,7 +74472,7 @@ ${q.options.map((o) => `- ${o}`).join("\n")}` : ""}`)
     },
     // --- Settings ---
     settings() {
-      return { ...settings, apiKeySet: !!apiKey, envKeySet: !!envKey(), aiReady: aiReady() };
+      return { ...settings, apiKeySet: !!apiKey || llmEnv(), envKeySet: !!envKey() || llmEnv(), aiReady: aiReady() };
     },
     async updateSettings(input) {
       const body = input ?? {};
@@ -74515,32 +74553,46 @@ ${q.options.map((o) => `- ${o}`).join("\n")}` : ""}`)
           imageName = void 0;
         }
       }
-      const signals = detectExamStart(text);
+      const det = detectExamStart2(text);
+      const signals = det.hits;
       if (w.phase === "watching" || w.phase === "idle") {
-        let exam = signals.length >= 2;
+        let exam = det.exam;
         let title = "";
-        if (!exam && aiReady() && signals.length) {
-          try {
-            const j = extractJson(await ask(DETECT_SYSTEM, `<screen>
+        if (!exam && aiReady() && (signals.length > 0 || questionShape(text))) {
+          if (now - (w.lastDetect ?? 0) >= 6e3) {
+            w.lastDetect = now;
+            try {
+              const j = extractJson(await ask(DETECT_SYSTEM, `<screen>
 ${text.slice(0, 2500)}
 </screen>`, 200));
-            if (j) {
-              exam = !!j.exam;
-              title = line3(j.title, 120);
+              if (j) {
+                exam = !!j.exam;
+                title = line3(j.title, 120);
+              }
+            } catch {
             }
-          } catch {
           }
         }
         if (exam) {
           w.phase = "in-exam";
-          w.examTitle = title || signals[0].slice(0, 100);
+          w.examTitle = title || signals[0]?.slice(0, 100) || "Exam on screen";
         }
       }
       let added = null;
       if (w.phase === "in-exam") {
         const pq = parseQuestion(text);
         const body = (pq.stem || text).slice(0, MAX_TEXT2);
-        const isNew = body !== w.lastSeen && !w.questions.some((q) => q.text === body);
+        const norm = (s) => s.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+        const sim = (a, b) => {
+          const A = new Set(norm(a).split(" "));
+          const B = norm(b).split(" ");
+          if (!A.size || !B.length) return 0;
+          let shared = 0;
+          for (const t of B) if (A.has(t)) shared++;
+          return shared / Math.max(A.size, B.length);
+        };
+        const recent = w.questions.slice(-4);
+        const isNew = !recent.some((q) => sim(q.text, body) >= 0.85) && sim(w.lastSeen, body) < 0.85;
         if (isNew && (body.length >= 12 || pq.num !== null)) {
           w.lastSeen = body;
           if (w.questions.length < Math.min(MAX_QUESTIONS, settings.maxQuestions)) {
@@ -74573,6 +74625,20 @@ ${text.slice(0, 2500)}
         });
       }
       return { watching: true, phase: w.phase, examTitle: w.examTitle, newQuestion: added?.n, issues: signals.slice(0, 3) };
+    },
+    // Admin override: start capturing now even if no exam signal was seen
+    // (e.g., an exam pager whose OCR text never matches the heuristics).
+    async forceExam(sessionId) {
+      const w = find(sessionId);
+      if (!w) throw new WatcherError(404, "No question watcher for that session.");
+      if (!w.enabled) throw new WatcherError(409, "Enable the Question Watcher first.");
+      if (w.phase === "completed") throw new WatcherError(409, "This watch is already completed.");
+      w.phase = "in-exam";
+      if (!w.examTitle) w.examTitle = "Exam (started manually)";
+      w.lastSeen = "";
+      w.updatedAt = clock();
+      await persistNow();
+      return { ...w, questions: void 0 };
     },
     // Admin accepts or corrects a recommended answer.
     async review(sessionId, n, input) {
@@ -74979,8 +75045,13 @@ async function open2() {
   if (accounts.empty) {
     const username = (process.env["ADMIN_USERNAME"] || "admin").toLowerCase();
     const password = process.env["ADMIN_PASSWORD"];
-    await accounts.ensureDefaultAdmin({ username, password: password || DEFAULT_ADMIN_PIN, mustChangePassword: !password });
-    logger.warn({ username }, password ? "Created the admin account from ADMIN_PASSWORD" : "Created the default admin account. Sign in at /admin with the default PIN and choose a new password");
+    try {
+      await accounts.ensureDefaultAdmin({ username, password: password || DEFAULT_ADMIN_PIN, mustChangePassword: !password });
+      logger.warn({ username }, password ? "Created the admin account from ADMIN_PASSWORD" : "Created the default admin account. Sign in at /admin with the default PIN and choose a new password");
+    } catch (err) {
+      logger.error({ err }, "ADMIN_PASSWORD was rejected; creating the admin account with the default PIN instead");
+      await accounts.ensureDefaultAdmin({ username, password: DEFAULT_ADMIN_PIN, mustChangePassword: true });
+    }
   }
   return accounts;
 }
@@ -76448,6 +76519,13 @@ async function safeCached(key, ms, build, fallback) {
     return hit?.value ?? fallback;
   }
 }
+function invalidateEnrichCache(...keys) {
+  if (keys.length === 0) {
+    enrichCache.clear();
+    return;
+  }
+  for (const k of keys) enrichCache.delete(k);
+}
 router4.get("/buddy/sessions", async (_req, res) => {
   try {
     let sessions = [];
@@ -76531,12 +76609,49 @@ function reviewView(q, imageUrl) {
     correctedAnswer: q.status === "corrected" ? q.answer : ""
   };
 }
+async function ensureWatch(sessionId) {
+  const engine = await watcherReady();
+  const existing = engine.watch(sessionId);
+  if (existing) return existing;
+  const live = store.overview().live.find((s) => s.id === sessionId && s.state !== "waiting");
+  if (!live) return null;
+  const accounts = await accountsReady().catch(() => void 0);
+  const ra = live.ra ?? "";
+  const meta3 = {
+    pcName: live.name || "Windows PC",
+    raId: ra,
+    operator: live.operator || accounts?.findRa(ra)?.displayName || ""
+  };
+  try {
+    await engine.enable(sessionId, meta3);
+  } catch (err) {
+    console.warn("Inspect Buddy: could not auto-enable watcher for", sessionId, err);
+    const w = engine.watch(sessionId);
+    if (w) return w;
+    return {
+      sessionId,
+      pcName: meta3.pcName,
+      raId: meta3.raId,
+      operator: meta3.operator,
+      enabled: false,
+      startedAt: Date.now(),
+      phase: "idle",
+      examTitle: "",
+      questions: [],
+      lastSeen: "",
+      notes: "",
+      updatedAt: Date.now()
+    };
+  }
+  invalidateEnrichCache("watcher-states");
+  return engine.watch(sessionId) ?? null;
+}
 router4.get("/buddy/watchers/:id", async (req, res) => {
   try {
-    const engine = await watcherReady();
-    const view = watcherView(engine.watch(req.params.id), (n) => `/api/admin/buddy/img/${encodeURIComponent(n)}`);
+    const w = await ensureWatch(req.params.id);
+    const view = watcherView(w ?? void 0, (n) => `/api/admin/buddy/img/${encodeURIComponent(n)}`);
     if (!view) {
-      res.status(404).json({ error: "No question watcher has run on that session yet." });
+      res.status(404).json({ error: "That session is not running, so there is nothing to watch." });
       return;
     }
     res.json(view);
@@ -76556,6 +76671,7 @@ router4.post("/buddy/watchers/:id", async (req, res) => {
       operator: live?.operator || accounts.findRa(ra)?.displayName || ""
     };
     const w = await engine.enable(req.params.id, meta3);
+    invalidateEnrichCache("watcher-states");
     activity.add("inspect-buddy", `${req.account.displayName} enabled the Question Watcher on ${meta3.pcName}`, req.account.username);
     res.json(watcherView(engine.watch(req.params.id) ?? { ...w, questions: [] }, (n) => `/api/admin/buddy/img/${encodeURIComponent(n)}`));
   } catch (err) {
@@ -76566,7 +76682,20 @@ router4.delete("/buddy/watchers/:id", async (req, res) => {
   try {
     const engine = await watcherReady();
     await engine.disable(req.params.id);
+    invalidateEnrichCache("watcher-states");
     activity.add("inspect-buddy", `${req.account.displayName} disabled the Question Watcher`, req.account.username);
+    res.json(watcherView(engine.watch(req.params.id), (n) => `/api/admin/buddy/img/${encodeURIComponent(n)}`));
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+router4.post("/buddy/watchers/:id/force-exam", async (req, res) => {
+  try {
+    const engine = await watcherReady();
+    if (!engine.watch(req.params.id)) await ensureWatch(req.params.id);
+    await engine.forceExam(req.params.id);
+    invalidateEnrichCache("watcher-states");
+    activity.add("inspect-buddy", `${req.account.displayName} started exam capture manually`, req.account.username);
     res.json(watcherView(engine.watch(req.params.id), (n) => `/api/admin/buddy/img/${encodeURIComponent(n)}`));
   } catch (err) {
     sendError(res, err);
@@ -77207,8 +77336,9 @@ router7.post("/capture", async (req, res) => {
       return;
     }
     void watcherReady().then(async (w) => {
-      if (w.getSettings().enabled) await w.capture(s.id, meta2(s), textOf(req), imageOf(req));
-    }).catch(() => {
+      await w.capture(s.id, meta2(s), textOf(req), imageOf(req));
+    }).catch((err) => {
+      console.warn("Inspect Buddy: watcher capture failed", err);
     });
     res.json(buddy.capture(meta2(s), textOf(req)));
   } catch (err) {

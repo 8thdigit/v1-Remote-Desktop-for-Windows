@@ -71,11 +71,15 @@ router.post("/capture", async (req, res) => {
     if (paced(lastCapture, s.id, 2000)) { res.status(429).json({ error: "Screens are being read too often." }); return; }
     // Inspect Buddy: forward the same settled screen (and optional screenshot)
     // to the question watcher engine. Fire-and-forget so the helper's capture
-    // response never waits on watcher work; the engine ignores sessions whose
-    // watcher is off or whose master switch is disabled.
+    // response never waits on watcher work. Do NOT gate this on the buddy
+    // master settings switch here: a per-session watcher that an operator
+    // started must keep receiving screens even if the global toggle is later
+    // flipped off mid-session, and the engine already ignores sessions whose
+    // watcher is disabled. Errors are logged, not swallowed, so a broken
+    // watcher store can't silently freeze detection in "watching".
     void watcherReady()
-      .then(async (w) => { if (w.getSettings().enabled) await w.capture(s.id, meta(s), textOf(req), imageOf(req)); })
-      .catch(() => {});
+      .then(async (w) => { await w.capture(s.id, meta(s), textOf(req), imageOf(req)); })
+      .catch((err) => { console.warn("Inspect Buddy: watcher capture failed", err); });
     res.json(buddy.capture(meta(s), textOf(req)));
   } catch (err) { sendError(res, err); }
 });

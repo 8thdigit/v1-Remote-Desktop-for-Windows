@@ -516,11 +516,47 @@ function reviewView(q: WatcherQuestion, imageUrl: (name: string) => string) {
   };
 }
 
+// Ensure a watcher record exists for an ongoing session even when the enable
+// call raced with a store hiccup, the engine restarted from empty state, or
+// captures arrived before any admin toggle. Without this, GET returned 404
+// ("No question watcher has run") right after the user pressed Start, and the
+// control room looked dead while the helper was still streaming screens.
+async function ensureWatch(sessionId: string): Promise<WatcherWatch | null> {
+  const engine = await watcherReady();
+  const existing = engine.watch(sessionId);
+  if (existing) return existing;
+  const live = store.overview().live.find((s) => s.id === sessionId && s.state !== "waiting");
+  if (!live) return null; // ended/unknown session: nothing to watch
+  const accounts = await accountsReady().catch(() => undefined);
+  const ra = live.ra ?? "";
+  const meta = {
+    pcName: live.name || "Windows PC",
+    raId: ra,
+    operator: live.operator || accounts?.findRa(ra)?.displayName || "",
+  };
+  try {
+    await engine.enable(sessionId, meta);
+  } catch (err) {
+    // Master switch off (403) or similar: still show the row as "off" rather
+    // than 404 so the control room reflects reality and offers Start again.
+    console.warn("Inspect Buddy: could not auto-enable watcher for", sessionId, err);
+    const w = engine.watch(sessionId);
+    if (w) return w;
+    return {
+      sessionId, pcName: meta.pcName, raId: meta.raId, operator: meta.operator,
+      enabled: false, startedAt: Date.now(), phase: "idle", examTitle: "",
+      questions: [], lastSeen: "", notes: "", updatedAt: Date.now(),
+    } as unknown as WatcherWatch;
+  }
+  invalidateEnrichCache("watcher-states");
+  return engine.watch(sessionId) ?? null;
+}
+
 router.get("/buddy/watchers/:id", async (req, res) => {
   try {
-    const engine = await watcherReady();
-    const view = watcherView(engine.watch(req.params.id), (n) => `/api/admin/buddy/img/${encodeURIComponent(n)}`);
-    if (!view) { res.status(404).json({ error: "No question watcher has run on that session yet." }); return; }
+    const w = await ensureWatch(req.params.id);
+    const view = watcherView(w ?? undefined, (n) => `/api/admin/buddy/img/${encodeURIComponent(n)}`);
+    if (!view) { res.status(404).json({ error: "That session is not running, so there is nothing to watch." }); return; }
     res.json(view);
   } catch (err) { sendError(res, err); }
 });
@@ -560,6 +596,9 @@ router.delete("/buddy/watchers/:id", async (req, res) => {
 router.post("/buddy/watchers/:id/force-exam", async (req, res) => {
   try {
     const engine = await watcherReady();
+    // If the record vanished (engine restart / store hiccup), recreate it for
+    // a live session first so force-start never dead-ends in a 404.
+    if (!engine.watch(req.params.id)) await ensureWatch(req.params.id);
     await engine.forceExam(req.params.id);
     invalidateEnrichCache("watcher-states");
     activity.add("inspect-buddy", `${req.account!.displayName} started exam capture manually`, req.account!.username);
